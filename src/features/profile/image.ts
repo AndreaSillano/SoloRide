@@ -7,7 +7,7 @@ import { ProfileDataError } from './errors';
 
 export const AVATAR_BUCKET = 'avatars';
 export const AVATAR_MAX_LONG_EDGE = 512;
-export const AVATAR_JPEG_QUALITY = 0.82;
+export const AVATAR_JPEG_QUALITY = 0.85;
 
 export function buildAvatarPath(userId: string) {
   return `${userId}/avatar.jpg`;
