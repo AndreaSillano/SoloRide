@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
 import type { RideFormValues } from '@/features/rides';
+import { haptics } from '@/lib/haptics';
 import { colors, radius, spacing } from '@/theme';
 
 import { Body, Field, WeekdaySelector } from './ui';
@@ -145,6 +146,7 @@ export function RideForm({
         <Switch
           disabled={disabled}
           onValueChange={(neverEnds) => {
+            haptics.selection();
             set('neverEnds', neverEnds);
             if (neverEnds && picker === 'endDate') setPicker(null);
           }}
@@ -170,7 +172,10 @@ export function RideForm({
           </View>
           <Switch
             disabled={disabled}
-            onValueChange={(strictSchedule) => set('strictSchedule', strictSchedule)}
+            onValueChange={(strictSchedule) => {
+              haptics.selection();
+              set('strictSchedule', strictSchedule);
+            }}
             trackColor={{ true: colors.primary }}
             value={value.strictSchedule}
           />

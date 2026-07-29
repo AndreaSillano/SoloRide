@@ -6,83 +6,54 @@ export const POST_IMAGE_JPEG_QUALITY = 0.9;
 export const POST_IMAGE_URL_TTL_SECONDS = 60 * 60;
 export const POST_IMAGE_URL_EXPIRY_SAFETY_MS = 60_000;
 
-/**
- * Five quick-pick reactions (+ custom in the picker fills a 3×2 grid).
- * Edit this list to change what the picker offers.
- */
-export const REACTION_OPTIONS = ['🔥', '😂', '👎', '💩', '😤'] as const;
+/** Valid stored reaction scores: -3..-1 and +1..+3 (0 means cleared / no row). */
+export type ReactionScore = -3 | -2 | -1 | 1 | 2 | 3;
 
-export type ReactionEmoji = (typeof REACTION_OPTIONS)[number];
-
-export function isReactionEmoji(value: string): value is ReactionEmoji {
-  return (REACTION_OPTIONS as readonly string[]).includes(value);
+export function isValidReactionScore(value: number): value is ReactionScore {
+  return Number.isInteger(value) && value >= -3 && value <= 3 && value !== 0;
 }
 
-/** First user-perceived character (emoji-aware when Segmenter is available). */
-export function firstGrapheme(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
-    const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
-    const first = segmenter.segment(trimmed)[Symbol.iterator]().next().value as
-      | { segment: string }
-      | undefined;
-    const grapheme = first?.segment?.trim();
-    return grapheme || null;
-  }
-  return [...trimmed][0] ?? null;
+/** Icon pixel size for the feed stack — extremes are largest. */
+export function reactionScoreToSize(score: number) {
+  const magnitude = Math.min(3, Math.max(1, Math.abs(score)));
+  if (magnitude >= 3) return 36;
+  if (magnitude === 2) return 26;
+  return 18;
 }
 
-/** True when the string is a single emoji grapheme (not letters/digits). */
-export function isEmojiGrapheme(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.length > 16) return false;
-  if (/[A-Za-z0-9]/.test(trimmed)) return false;
-  try {
-    return /\p{Extended_Pictographic}/u.test(trimmed);
-  } catch {
-    // Older runtimes without Unicode property escapes.
-    return /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(trimmed);
-  }
-}
-
-/** Preset or any short custom emoji string stored on a reaction. */
-export function isValidReactionValue(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.length > 16) return false;
-  return isReactionEmoji(trimmed) || isEmojiGrapheme(trimmed);
-}
-
-/** Distinct emoji for the feed stack: newest first, capped; `hasMore` when truncated. */
+/** Last N reaction scores for the feed stack: newest first, capped; `hasMore` when truncated. */
 export function getReactionSummary(
   post: Pick<PostRecord, 'post_reactions'>,
   maximum = 3,
-): { emojis: string[]; hasMore: boolean } {
-  const seen = new Set<string>();
-  const newestFirst: string[] = [];
-  const reactions = post.post_reactions ?? [];
-  for (let index = reactions.length - 1; index >= 0; index -= 1) {
-    const emoji = reactions[index]?.emoji;
-    if (!emoji || seen.has(emoji)) continue;
-    seen.add(emoji);
-    newestFirst.push(emoji);
-  }
+): { scores: number[]; hasMore: boolean } {
+  const reactions = [...(post.post_reactions ?? [])].filter(
+    (reaction): reaction is { user_id: string; score: number; updated_at?: string } =>
+      typeof reaction?.score === 'number' && isValidReactionScore(reaction.score),
+  );
+  reactions.sort((a, b) => {
+    const aTime = a.updated_at ? Date.parse(a.updated_at) : 0;
+    const bTime = b.updated_at ? Date.parse(b.updated_at) : 0;
+    if (aTime !== bTime) return bTime - aTime;
+    return 0;
+  });
+  const newestFirst = reactions.map((reaction) => reaction.score);
   const hasMore = newestFirst.length > maximum;
   // Left = older of the shown set, right = newest (front of the stack).
-  const emojis = newestFirst.slice(0, maximum).reverse();
-  return { emojis, hasMore };
+  const scores = newestFirst.slice(0, maximum).reverse();
+  return { scores, hasMore };
 }
 
 export function getReactionCount(post: Pick<PostRecord, 'post_reactions'>) {
   return post.post_reactions?.length ?? 0;
 }
 
-export function getOwnReactionEmoji(
+export function getOwnReactionScore(
   post: Pick<PostRecord, 'post_reactions'>,
   userId: string | null | undefined,
 ) {
   if (!userId) return null;
-  return post.post_reactions?.find((reaction) => reaction.user_id === userId)?.emoji ?? null;
+  const score = post.post_reactions?.find((reaction) => reaction.user_id === userId)?.score;
+  return typeof score === 'number' && isValidReactionScore(score) ? score : null;
 }
 
 export function buildPostImagePath(rideId: string, userId: string, postId: string) {

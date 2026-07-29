@@ -25,6 +25,7 @@ import {
   type Ride,
   type RideFormValues,
 } from '@/features/rides';
+import { haptics } from '@/lib/haptics';
 
 const today = new Date();
 const INITIAL_VALUES: RideFormValues = {
@@ -54,9 +55,11 @@ export default function CreateRideScreen() {
     setError(null);
     try {
       setCreated(await createRide.mutateAsync(parsed.data));
+      haptics.success();
       await requestSoloRideNotificationPermission();
       requestNotificationRefresh();
     } catch (cause) {
+      haptics.error();
       setError(cause instanceof Error ? cause.message : 'The Ride could not be created.');
     }
   };

@@ -17,6 +17,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { useCurrentUser } from '@/auth/auth-context';
 import { useComments, useCreateComment, useDeleteComment, formatProfileName } from '@/features/posts';
+import { haptics } from '@/lib/haptics';
 import { colors, spacing } from '@/theme';
 
 import { Avatar, Body } from './ui';
@@ -81,7 +82,9 @@ export function CommentsModal({
     setContent('');
     try {
       await createComment.mutateAsync({ postId, rideId, content: text });
+      haptics.light();
     } catch {
+      haptics.error();
       setContent(text);
     }
   };
@@ -93,7 +96,16 @@ export function CommentsModal({
       {
         text: 'Delete',
         style: 'destructive',
-        onPress: () => void deleteComment.mutateAsync({ commentId, postId, rideId }),
+        onPress: () => {
+          void deleteComment
+            .mutateAsync({ commentId, postId, rideId })
+            .then(() => {
+              haptics.warning();
+            })
+            .catch(() => {
+              haptics.error();
+            });
+        },
       },
     ]);
   };

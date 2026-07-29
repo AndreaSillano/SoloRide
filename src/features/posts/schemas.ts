@@ -39,10 +39,11 @@ const embeddedProfileSchema = z.preprocess((value) => {
   return value;
 }, postProfileSchema.nullish());
 
-/** Compact embed used on feed rows (emoji + who, no nested profile). */
+/** Compact embed used on feed rows (score + who, no nested profile). */
 export const postReactionEmbedSchema = z.object({
   user_id: uuidSchema,
-  emoji: z.string().min(1).max(16),
+  score: z.number().int().min(-3).max(3),
+  updated_at: z.string().optional(),
 });
 
 export const postSchema = z.object({
@@ -78,7 +79,7 @@ export const reactionSchema = z.object({
   id: uuidSchema,
   post_id: uuidSchema,
   user_id: uuidSchema,
-  emoji: z.string().min(1).max(16),
+  score: z.number().int().min(-3).max(3),
   created_at: z.string(),
   updated_at: z.string(),
   profile: embeddedProfileSchema,
@@ -120,7 +121,12 @@ export const createCommentInputSchema = z.object({
 export const upsertReactionInputSchema = z.object({
   postId: uuidSchema,
   rideId: uuidSchema,
-  emoji: z.string().min(1, 'Pick a reaction.').max(16),
+  score: z
+    .number()
+    .int()
+    .min(-3, 'Pick a reaction.')
+    .max(3, 'Pick a reaction.')
+    .refine((value) => value !== 0, 'Pick a reaction.'),
 });
 
 export const removeReactionInputSchema = z.object({

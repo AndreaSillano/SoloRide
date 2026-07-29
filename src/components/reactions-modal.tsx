@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import {
   ActivityIndicator,
   Modal,
@@ -11,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { formatProfileName, useReactions } from '@/features/posts';
+import { formatProfileName, reactionScoreToSize, useReactions } from '@/features/posts';
 import { colors, spacing } from '@/theme';
 
 import { Avatar, Body } from './ui';
@@ -69,7 +70,11 @@ export function ReactionsModal({
                   <Text style={styles.author}>{formatProfileName(reaction.profile)}</Text>
                   <Text style={styles.time}>{formatReactionTime(reaction.created_at)}</Text>
                 </View>
-                <Text style={styles.emoji}>{reaction.emoji}</Text>
+                <MaterialIcons
+                  color={colors.text}
+                  name={reaction.score > 0 ? 'thumb-up' : 'thumb-down'}
+                  size={reactionScoreToSize(reaction.score)}
+                />
               </View>
             ))
           ) : (
@@ -100,5 +105,4 @@ const styles = StyleSheet.create({
   text: { flex: 1, gap: 2, minWidth: 0 },
   author: { color: colors.text, fontSize: 14, fontWeight: '700' },
   time: { color: colors.muted, fontSize: 12 },
-  emoji: { fontSize: 22 },
 });

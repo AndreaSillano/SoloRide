@@ -5,14 +5,11 @@ export * from './schemas';
 export * from './service';
 export {
   getCommentCount,
-  getOwnReactionEmoji,
+  getOwnReactionScore,
   getReactionCount,
   getReactionSummary,
   formatProfileName,
-  firstGrapheme,
-  isReactionEmoji,
-  isEmojiGrapheme,
-  isValidReactionValue,
-  REACTION_OPTIONS,
-  type ReactionEmoji,
+  isValidReactionScore,
+  reactionScoreToSize,
+  type ReactionScore,
 } from './utils';

@@ -34,6 +34,7 @@ import {
   type RideFormValues,
 } from '@/features/rides';
 import { formatProfileName } from '@/features/posts';
+import { haptics } from '@/lib/haptics';
 import { colors, spacing } from '@/theme';
 
 const EMPTY_FORM: RideFormValues = {
@@ -118,8 +119,10 @@ export default function RideSettingsScreen() {
     try {
       await updateRide.mutateAsync({ rideId, ...parsed.data });
       requestNotificationRefresh();
+      haptics.success();
       setSaved(true);
     } catch (cause) {
+      haptics.error();
       setError(cause instanceof Error ? cause.message : 'The Ride could not be updated.');
     }
   };
@@ -135,13 +138,15 @@ export default function RideSettingsScreen() {
           void archiveRide
             .mutateAsync(rideId)
             .then(async () => {
+              haptics.warning();
               await notifications.onRideLeftOrArchived(rideId).catch(() => []);
               setInitializedRideId(null);
               setSaved(false);
             })
-            .catch((cause: unknown) =>
-              setError(cause instanceof Error ? cause.message : 'The Ride could not be archived.'),
-            );
+            .catch((cause: unknown) => {
+              haptics.error();
+              setError(cause instanceof Error ? cause.message : 'The Ride could not be archived.');
+            });
         },
       },
     ]);
@@ -160,15 +165,17 @@ export default function RideSettingsScreen() {
             void unarchiveRide
               .mutateAsync(rideId)
               .then(() => {
+                haptics.success();
                 requestNotificationRefresh();
                 setInitializedRideId(null);
                 setSaved(false);
               })
-              .catch((cause: unknown) =>
+              .catch((cause: unknown) => {
+                haptics.error();
                 setError(
                   cause instanceof Error ? cause.message : 'The Ride could not be restored.',
-                ),
-              );
+                );
+              });
           },
         },
       ],
@@ -196,10 +203,14 @@ export default function RideSettingsScreen() {
             setError(null);
             void leaveRide
               .mutateAsync(rideId)
-              .then(() => exitRide())
-              .catch((cause: unknown) =>
-                setError(cause instanceof Error ? cause.message : 'You could not leave the Ride.'),
-              );
+              .then(() => {
+                haptics.warning();
+                return exitRide();
+              })
+              .catch((cause: unknown) => {
+                haptics.error();
+                setError(cause instanceof Error ? cause.message : 'You could not leave the Ride.');
+              });
           },
         },
       ],
@@ -219,12 +230,16 @@ export default function RideSettingsScreen() {
             setError(null);
             void deleteRide
               .mutateAsync(rideId)
-              .then(() => exitRide())
-              .catch((cause: unknown) =>
+              .then(() => {
+                haptics.warning();
+                return exitRide();
+              })
+              .catch((cause: unknown) => {
+                haptics.error();
                 setError(
                   cause instanceof Error ? cause.message : 'The Ride could not be deleted.',
-                ),
-              );
+                );
+              });
           },
         },
       ],

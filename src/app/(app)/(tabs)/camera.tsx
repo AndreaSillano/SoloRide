@@ -39,6 +39,7 @@ import {
   useCameraRides,
   type CameraRide,
 } from '@/features/rides';
+import { haptics } from '@/lib/haptics';
 import { colors, radius, shadows, spacing } from '@/theme';
 
 type Facing = 'back' | 'front';
@@ -180,10 +181,12 @@ export default function CameraScreen() {
     try {
       const photo = await camera.current.takePictureAsync({ quality: 0.9 });
       if (photo?.uri) {
+        haptics.medium();
         setDraftUri(photo.uri);
         setImageUri(null);
       }
     } catch {
+      haptics.error();
       setError('The camera could not take a photo. Please try again.');
     } finally {
       setBusy(null);
@@ -197,6 +200,7 @@ export default function CameraScreen() {
       if (Platform.OS !== 'web') {
         const mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!mediaPermission.granted) {
+          haptics.error();
           setError('Photo library access was denied. You can still use the camera.');
           return;
         }
@@ -207,10 +211,12 @@ export default function CameraScreen() {
         quality: 0.9,
       });
       if (!result.canceled && result.assets[0]?.uri) {
+        haptics.light();
         setDraftUri(result.assets[0].uri);
         setImageUri(null);
       }
     } catch {
+      haptics.error();
       setError('The photo library could not open. Please try again.');
     } finally {
       setBusy(null);
@@ -271,10 +277,12 @@ export default function CameraScreen() {
       if (!temporary && ride.scheduledToday) {
         await notifications.onPostCreated(ride.id, ride.scheduledToday).catch(() => []);
       }
+      haptics.success();
       resetCapture();
       // NativeTabs needs navigate (NAVIGATE), not replace, to leave Camera for Rides.
       router.navigate({ pathname: '/', params: { selectRideId: ride.id } });
     } catch (cause) {
+      haptics.error();
       setError(cause instanceof Error ? cause.message : 'The photo could not be published.');
     }
   };

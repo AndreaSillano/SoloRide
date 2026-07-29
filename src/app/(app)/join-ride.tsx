@@ -23,6 +23,7 @@ import {
   usePreviewRideByCode,
   type RidePreviewStatus,
 } from '@/features/rides';
+import { haptics } from '@/lib/haptics';
 
 const STATUS_MESSAGES: Record<Exclude<RidePreviewStatus, 'available'>, string> = {
   invalid: 'That code does not match a Ride. Check all 8 characters.',
@@ -58,10 +59,12 @@ export default function JoinRideScreen() {
     setError(null);
     try {
       const ride = await join.mutateAsync(code);
+      haptics.success();
       await requestSoloRideNotificationPermission();
       requestNotificationRefresh();
       router.replace({ pathname: '/', params: { selectRideId: ride.id } });
     } catch (cause) {
+      haptics.error();
       setError(cause instanceof Error ? cause.message : 'The Ride could not be joined.');
     }
   };

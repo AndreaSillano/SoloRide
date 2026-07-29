@@ -1,19 +1,19 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Share, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Share, StyleSheet, Text, View } from 'react-native';
 
 import { useCurrentUser } from '@/auth/auth-context';
 import {
   formatProfileName,
-  getOwnReactionEmoji,
+  getOwnReactionScore,
   useDeletePost,
   useRemoveReaction,
   useRideFeed,
   useUpsertReaction,
 } from '@/features/posts';
 import { usePostingStatus, useRide, useRideMembers } from '@/features/rides';
+import { haptics } from '@/lib/haptics';
 import { colors, spacing } from '@/theme';
 
 import { CommentsModal } from './comments-modal';
@@ -64,16 +64,18 @@ export function RideOverview({
           void deletePost
             .mutateAsync({ postId, rideId })
             .then(() => {
+              haptics.warning();
               setActivePostId((current) => (current === postId ? null : current));
               setReactionsPostId((current) => (current === postId ? null : current));
               setPickerPostId((current) => (current === postId ? null : current));
             })
-            .catch((error) =>
+            .catch((error) => {
+              haptics.error();
               Alert.alert(
                 'Couldn’t delete photo',
                 error instanceof Error ? error.message : 'The photo could not be deleted.',
-              ),
-            )
+              );
+            })
             .finally(() => setDeletingPostId(null));
         },
       },
@@ -81,55 +83,43 @@ export function RideOverview({
   };
 
   const handleDoubleTapImage = (postId: string) => {
-    const post = feed.data.find((item) => item.id === postId);
-    const ownEmoji = post ? getOwnReactionEmoji(post, user?.id) : null;
-
-    if (Platform.OS !== 'web') {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-
-    // Already reacted: double-tap removes it (never open comments).
-    if (ownEmoji) {
-      void removeReaction.mutateAsync({ postId, rideId }).catch((error) =>
-        Alert.alert(
-          'Couldn’t remove reaction',
-          error instanceof Error ? error.message : 'The reaction could not be removed.',
-        ),
-      );
-      return;
-    }
-
+    haptics.light();
+    // Always open the scale so the user can change or clear (swipe to 0).
     setPickerPostId(postId);
   };
 
-  const handleSelectReaction = (postId: string, emoji: string) => {
+  const handleSelectReaction = (postId: string, score: number) => {
     const post = feed.data.find((item) => item.id === postId);
-    const ownEmoji = post ? getOwnReactionEmoji(post, user?.id) : null;
+    const ownScore = post ? getOwnReactionScore(post, user?.id) : null;
     setPickerPostId(null);
 
-    // Tapping the same emoji again removes the reaction.
-    if (ownEmoji && ownEmoji === emoji) {
-      void removeReaction.mutateAsync({ postId, rideId }).catch((error) =>
+    // Center (0) clears; releasing on the same score is a no-op.
+    if (score === 0) {
+      if (!ownScore) return;
+      void removeReaction.mutateAsync({ postId, rideId }).catch((error) => {
+        haptics.error();
         Alert.alert(
           'Couldn’t remove reaction',
           error instanceof Error ? error.message : 'The reaction could not be removed.',
-        ),
-      );
+        );
+      });
       return;
     }
 
+    if (ownScore === score) return;
+
     void upsertReaction
-      .mutateAsync({ postId, rideId, emoji })
+      .mutateAsync({ postId, rideId, score })
       .then(() => {
-        if (Platform.OS === 'web') return;
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        haptics.medium();
       })
-      .catch((error) =>
+      .catch((error) => {
+        haptics.error();
         Alert.alert(
           'Couldn’t save reaction',
           error instanceof Error ? error.message : 'The reaction could not be saved.',
-        ),
-      );
+        );
+      });
   };
 
   if (ride.isPending) {
@@ -282,8 +272,8 @@ export function RideOverview({
               onDoubleTapImage={() => handleDoubleTapImage(post.id)}
               onPress={() => setActivePostId(post.id)}
               onPressReactions={() => setReactionsPostId(post.id)}
-              onSelectReaction={(emoji) => handleSelectReaction(post.id, emoji)}
-              ownReactionEmoji={getOwnReactionEmoji(post, user?.id)}
+              onSelectReaction={(score) => handleSelectReaction(post.id, score)}
+              ownReactionScore={getOwnReactionScore(post, user?.id)}
               post={post}
               reactionPickerVisible={pickerPostId === post.id}
             />

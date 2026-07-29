@@ -1,5 +1,6 @@
 import { useHeaderHeight } from '@react-navigation/elements';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { PropsWithChildren, ReactElement, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -30,13 +31,14 @@ import {
   formatProfileName,
   getReactionCount,
   getReactionSummary,
+  reactionScoreToSize,
   useSignedPostImage,
   type PostRecord,
 } from '@/features/posts';
 import { colors, radius, shadows, spacing } from '@/theme';
 
 import { ReactionBurst } from './reaction-burst';
-import { ReactionPicker } from './reaction-picker';
+import { ScalePicker } from './scale-picker';
 
 type AvatarProfile =
   | {
@@ -548,22 +550,22 @@ export function FeedPost({
   onSelectReaction,
   onCloseReactionPicker,
   reactionPickerVisible = false,
-  ownReactionEmoji = null,
+  ownReactionScore = null,
   isOwnPost = false,
   onDelete,
   deleting = false,
 }: {
   post: PostRecord;
   onPress: () => void;
-  /** Double-tap the photo: open the picker, or remove your reaction if one exists. */
+  /** Double-tap the photo: open the reaction scale picker. */
   onDoubleTapImage?: () => void;
   /** Opens the full reaction list modal. */
   onPressReactions?: () => void;
-  onSelectReaction?: (emoji: string) => void;
+  onSelectReaction?: (score: number) => void;
   onCloseReactionPicker?: () => void;
   reactionPickerVisible?: boolean;
-  /** Current user's emoji on this post, if any. */
-  ownReactionEmoji?: string | null;
+  /** Current user's score on this post, if any. */
+  ownReactionScore?: number | null;
   /** Whether the signed-in user authored this post; shows the delete icon. */
   isOwnPost?: boolean;
   onDelete?: () => void;
@@ -572,11 +574,11 @@ export function FeedPost({
   const author = formatProfileName(post.profile);
   const commentCount = getCommentCount(post);
   const reactionCount = getReactionCount(post);
-  const { emojis: reactionSummary, hasMore: hasMoreReactions } = getReactionSummary(post);
+  const { scores: reactionSummary, hasMore: hasMoreReactions } = getReactionSummary(post);
   const remaining = formatRemainingTime(post.expires_at);
   const lastTapAt = useRef(0);
   const singleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [burstEmoji, setBurstEmoji] = useState<string | null>(null);
+  const [burstScore, setBurstScore] = useState<number | null>(null);
   /** Second tap must land within this window to count as a double-tap. */
   const DOUBLE_TAP_MS = 350;
   /** Slightly longer than the double-tap window so a late second tap still wins. */
@@ -593,10 +595,7 @@ export function FeedPost({
       onCloseReactionPicker?.();
       return;
     }
-    if (!onDoubleTapImage) {
-      onPress();
-      return;
-    }
+    if (!onDoubleTapImage) return;
 
     const now = Date.now();
     if (lastTapAt.current > 0 && now - lastTapAt.current < DOUBLE_TAP_MS) {
@@ -609,41 +608,46 @@ export function FeedPost({
       return;
     }
 
+    // Single tap on the photo does nothing — comments open only from the
+    // comment icon / "Add a comment" row.
     lastTapAt.current = now;
     if (singleTapTimer.current) clearTimeout(singleTapTimer.current);
     singleTapTimer.current = setTimeout(() => {
       singleTapTimer.current = null;
       lastTapAt.current = 0;
-      onPress();
     }, SINGLE_TAP_DELAY_MS);
   };
 
-  const handlePickerSelect = (emoji: string) => {
-    // Same emoji = remove; skip the celebrate burst.
-    if (ownReactionEmoji && ownReactionEmoji === emoji) {
-      onSelectReaction?.(emoji);
-      return;
-    }
+  const handlePickerSelect = (score: number) => {
     onCloseReactionPicker?.();
-    setBurstEmoji(emoji);
-    onSelectReaction?.(emoji);
+    if (score !== 0) {
+      setBurstScore(score);
+    }
+    onSelectReaction?.(score);
   };
 
   const reactionOverlay = (
     <>
       {onSelectReaction && onCloseReactionPicker ? (
-        <ReactionPicker
+        <ScalePicker
           onClose={onCloseReactionPicker}
           onSelect={handlePickerSelect}
-          selectedEmoji={ownReactionEmoji}
+          selectedScore={ownReactionScore}
           visible={reactionPickerVisible}
         />
       ) : null}
-      {burstEmoji ? (
-        <ReactionBurst emoji={burstEmoji} onFinished={() => setBurstEmoji(null)} />
+      {burstScore != null && burstScore !== 0 ? (
+        <ReactionBurst score={burstScore} onFinished={() => setBurstScore(null)} />
       ) : null}
     </>
   );
+
+  const summaryScores =
+    reactionSummary.length > 0
+      ? reactionSummary
+      : ownReactionScore != null
+        ? [ownReactionScore]
+        : [];
 
   const actionsRow = (
     <View style={styles.feedActions}>
@@ -672,31 +676,33 @@ export function FeedPost({
         onPress={onPressReactions}
         style={({ pressed }) => [styles.feedReactions, pressed && styles.pressed]}
       >
-        {reactionSummary.length || ownReactionEmoji ? (
+        {summaryScores.length ? (
           <View style={styles.feedReactionStack}>
-            {(reactionSummary.length
-              ? reactionSummary
-              : ownReactionEmoji
-                ? [ownReactionEmoji]
-                : []
-            ).map((emoji, index) => (
-              <Text
-                key={`${emoji}-${index}`}
-                style={[
-                  styles.feedReactionEmojis,
-                  index > 0 ? styles.feedReactionOverlap : null,
-                  { zIndex: index + 1 },
-                ]}
-              >
-                {emoji}
-              </Text>
-            ))}
+            {summaryScores.map((score, index) => {
+              const size = reactionScoreToSize(score);
+              return (
+                <View
+                  key={`${score}-${index}`}
+                  style={[
+                    styles.feedReactionIconWrap,
+                    index > 0 ? styles.feedReactionOverlap : null,
+                    { zIndex: index + 1 },
+                  ]}
+                >
+                  <MaterialIcons
+                    color={colors.text}
+                    name={score > 0 ? 'thumb-up' : 'thumb-down'}
+                    size={size}
+                  />
+                </View>
+              );
+            })}
             {hasMoreReactions ? (
               <Text
                 style={[
                   styles.feedReactionMoreText,
                   styles.feedReactionOverlap,
-                  { zIndex: reactionSummary.length + 1 },
+                  { zIndex: summaryScores.length + 1 },
                 ]}
               >
                 +
@@ -704,7 +710,7 @@ export function FeedPost({
             ) : null}
           </View>
         ) : (
-          <Ionicons color={colors.muted} name="happy-outline" size={26} />
+          <MaterialIcons color={colors.muted} name="thumb-up-off-alt" size={24} />
         )}
       </Pressable>
     </View>
@@ -1062,16 +1068,17 @@ const styles = StyleSheet.create({
   feedReactionOverlap: {
     marginLeft: -8,
   },
+  feedReactionIconWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 28,
+    minWidth: 18,
+  },
   feedReactionMoreText: {
     color: colors.muted,
     fontSize: 20,
     fontWeight: '800',
     lineHeight: 26,
-  },
-  feedReactionEmojis: {
-    fontSize: 24,
-    lineHeight: 28,
-    textAlign: 'center',
   },
   feedCaption: {
     color: colors.textSoft,

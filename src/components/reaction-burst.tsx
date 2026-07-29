@@ -1,12 +1,22 @@
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text } from 'react-native';
+import { Animated, StyleSheet } from 'react-native';
 
-/** Large centered emoji that pops in then dissolves — Instagram-style confirm. */
+import { colors } from '@/theme';
+
+function burstSizeForScore(score: number) {
+  const magnitude = Math.abs(score);
+  if (magnitude >= 3) return 112;
+  if (magnitude === 2) return 88;
+  return 72;
+}
+
+/** Large centered thumb that pops in then dissolves — Instagram-style confirm. */
 export function ReactionBurst({
-  emoji,
+  score,
   onFinished,
 }: {
-  emoji: string;
+  score: number;
   onFinished?: () => void;
 }) {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -57,7 +67,9 @@ export function ReactionBurst({
     });
 
     return () => animation.stop();
-  }, [emoji, opacity, scale]);
+  }, [score, opacity, scale]);
+
+  if (score === 0) return null;
 
   return (
     <Animated.View
@@ -70,7 +82,12 @@ export function ReactionBurst({
         },
       ]}
     >
-      <Text style={styles.emoji}>{emoji}</Text>
+      <MaterialIcons
+        color={colors.white}
+        name={score > 0 ? 'thumb-up' : 'thumb-down'}
+        size={burstSizeForScore(score)}
+        style={styles.icon}
+      />
     </Animated.View>
   );
 }
@@ -82,9 +99,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 6,
   },
-  emoji: {
-    fontSize: 96,
-    textAlign: 'center',
+  icon: {
     textShadowColor: 'rgba(0,0,0,0.35)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 8,

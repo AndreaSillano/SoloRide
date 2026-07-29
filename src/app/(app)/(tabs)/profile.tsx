@@ -37,6 +37,7 @@ import {
 } from '@/features/permissions';
 import { ProfileDataError, useRemoveAvatar, useUpdateAvatar } from '@/features/profile';
 import { groupUserRides, useUserRides } from '@/features/rides';
+import { haptics } from '@/lib/haptics';
 import { colors, radius, spacing } from '@/theme';
 
 function OpenSettingsLink({ onOpen }: { onOpen?: () => void }) {
@@ -471,7 +472,10 @@ export default function ProfileScreen() {
           {cameraPermission ? (
             <Switch
               disabled={busy === 'camera'}
-              onValueChange={(value) => void toggleCamera(value)}
+              onValueChange={(value) => {
+                haptics.selection();
+                void toggleCamera(value);
+              }}
               trackColor={{ false: colors.borderStrong, true: colors.primary }}
               value={cameraGranted}
             />
@@ -492,7 +496,10 @@ export default function ProfileScreen() {
           </View>
           <Switch
             disabled={busy === 'location'}
-            onValueChange={(value) => void toggleLocation(value)}
+            onValueChange={(value) => {
+              haptics.selection();
+              void toggleLocation(value);
+            }}
             trackColor={{ false: colors.borderStrong, true: colors.primary }}
             value={locationGranted}
           />
@@ -517,7 +524,10 @@ export default function ProfileScreen() {
           {prefsReady ? (
             <Switch
               disabled={busy === 'toggle'}
-              onValueChange={(value) => void toggleAlerts(value)}
+              onValueChange={(value) => {
+                haptics.selection();
+                void toggleAlerts(value);
+              }}
               trackColor={{ false: colors.borderStrong, true: colors.primary }}
               value={alertsEnabled && permission !== 'denied'}
             />

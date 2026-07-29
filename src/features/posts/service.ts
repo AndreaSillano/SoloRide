@@ -27,7 +27,7 @@ import {
 } from './schemas';
 import {
   buildPostImagePath,
-  isValidReactionValue,
+  isValidReactionScore,
   POST_IMAGE_BUCKET,
   POST_IMAGE_URL_TTL_SECONDS,
 } from './utils';
@@ -37,7 +37,7 @@ const POST_SELECT = `
   location_name, scheduled_date, is_temporary, expires_at, created_at, updated_at,
   profile:profiles!posts_user_id_fkey(id, username, display_name, avatar_url),
   comments(count),
-  post_reactions(user_id, emoji)
+  post_reactions(user_id, score, updated_at)
 `;
 
 /** Hide expired temporary posts until cleanup deletes them. */
@@ -51,12 +51,12 @@ const COMMENT_SELECT = `
 `;
 
 const REACTION_SELECT = `
-  id, post_id, user_id, emoji, created_at, updated_at,
+  id, post_id, user_id, score, created_at, updated_at,
   profile:profiles!post_reactions_user_id_fkey(id, username, display_name, avatar_url)
 `;
 
 const REACTION_SELECT_PLAIN = `
-  id, post_id, user_id, emoji, created_at, updated_at
+  id, post_id, user_id, score, created_at, updated_at
 `;
 
 function isMissingRelationshipError(error: unknown) {
@@ -546,16 +546,16 @@ export async function upsertReaction(
       { cause: parsed.error },
     );
   }
-  if (!isValidReactionValue(parsed.data.emoji)) {
+  if (!isValidReactionScore(parsed.data.score)) {
     throw new PostDataError('INVALID_INPUT', 'That reaction is not available.');
   }
 
   const userId = await requireUserId();
   const postId = parsed.data.postId;
-  const emoji = parsed.data.emoji.trim();
+  const score = parsed.data.score;
 
   // Prefer update-or-insert over upsert: column-level UPDATE grants only cover
-  // `emoji`, and PostgREST upserts try to rewrite the conflict columns too.
+  // `score`, and PostgREST upserts try to rewrite the conflict columns too.
   const { data: existing, error: lookupError } = await supabase
     .from('post_reactions')
     .select('id')
@@ -569,7 +569,7 @@ export async function upsertReaction(
   if (existing?.id) {
     const { error } = await supabase
       .from('post_reactions')
-      .update({ emoji })
+      .update({ score })
       .eq('id', existing.id)
       .eq('user_id', userId);
     if (error) throw mapDatabaseError(error, 'The reaction could not be saved.');
@@ -581,7 +581,7 @@ export async function upsertReaction(
     .insert({
       post_id: postId,
       user_id: userId,
-      emoji,
+      score,
     })
     .select('id')
     .single();
@@ -591,7 +591,7 @@ export async function upsertReaction(
     if (errorLikeCode(error) === '23505') {
       const { error: updateError } = await supabase
         .from('post_reactions')
-        .update({ emoji })
+        .update({ score })
         .eq('post_id', postId)
         .eq('user_id', userId);
       if (updateError) {
