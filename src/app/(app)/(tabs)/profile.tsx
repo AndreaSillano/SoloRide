@@ -1,9 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Linking,
   Pressable,
   StyleSheet,
@@ -38,19 +40,30 @@ export default function ProfileScreen() {
   const notifications = useSoloRideNotifications(user?.id ?? null);
   const updateAvatar = useUpdateAvatar();
   const removeAvatar = useRemoveAvatar();
+  const [cameraPermission, requestCameraPermission, getCameraPermission] =
+    useCameraPermissions();
   const [permission, setPermission] = useState<SoloRidePermissionStatus>('undetermined');
   const [alertsEnabled, setAlertsEnabled] = useState(true);
   const [prefsReady, setPrefsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'logout' | 'toggle' | 'avatar' | null>(null);
+  const [busy, setBusy] = useState<'logout' | 'toggle' | 'camera' | 'avatar' | null>(null);
 
   const groups = useMemo(() => groupUserRides(rides.data ?? []), [rides.data]);
   const username = profile?.username ?? null;
   const avatarBusy = busy === 'avatar' || updateAvatar.isPending || removeAvatar.isPending;
+  const cameraGranted = Boolean(cameraPermission?.granted);
+  const cameraBlocked = cameraPermission?.granted === false && cameraPermission.canAskAgain === false;
 
   useEffect(() => {
     void notifications.getPermission().then(setPermission);
   }, [notifications]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void getCameraPermission();
+    });
+    return () => sub.remove();
+  }, [getCameraPermission]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -147,6 +160,42 @@ export default function ProfileScreen() {
     Alert.alert('Profile photo', undefined, buttons);
   };
 
+  const toggleCamera = async (next: boolean) => {
+    if (busy === 'camera') return;
+    setBusy('camera');
+    setError(null);
+    try {
+      if (next) {
+        if (cameraBlocked) {
+          await Linking.openSettings();
+          return;
+        }
+        const result = await requestCameraPermission();
+        if (!result.granted) {
+          setError(
+            result.canAskAgain === false
+              ? 'Camera access is blocked for SoloRide. Enable it in system Settings.'
+              : 'Camera access was not granted.',
+          );
+        }
+        return;
+      }
+      Alert.alert(
+        'Turn off camera?',
+        'SoloRide can’t revoke camera access itself. You can disable it in system Settings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+        ],
+      );
+    } catch {
+      setError('Camera permission could not be updated.');
+    } finally {
+      setBusy(null);
+      void getCameraPermission();
+    }
+  };
+
   const toggleAlerts = async (next: boolean) => {
     if (!user?.id || busy === 'toggle') return;
     setBusy('toggle');
@@ -213,16 +262,6 @@ export default function ProfileScreen() {
         </Pressable>
         <Text style={styles.username}>{username ? `@${username}` : 'Your profile'}</Text>
         <Text style={styles.tagline}>Private photo rides with your people</Text>
-        <Pressable
-          accessibilityRole="button"
-          disabled={avatarBusy}
-          onPress={openAvatarActions}
-          style={({ pressed }) => pressed && styles.pressed}
-        >
-          <Text style={styles.avatarAction}>
-            {profile?.avatar_url ? 'Change photo' : 'Add photo'}
-          </Text>
-        </Pressable>
       </View>
 
       <ErrorBanner message={profileError} />
@@ -234,14 +273,48 @@ export default function ProfileScreen() {
 
       {!rides.isPending && rides.data ? (
         <Text style={styles.rideSummary}>
-          {groups.active.length} active
-          {groups.upcoming.length ? ` · ${groups.upcoming.length} upcoming` : ''}
-          {groups.archived.length ? ` · ${groups.archived.length} archived` : ''}
+          {[
+            `${groups.active.length} active Ride${groups.active.length === 1 ? '' : 's'}`,
+            groups.upcoming.length
+              ? `${groups.upcoming.length} upcoming`
+              : null,
+            groups.archived.length
+              ? `${groups.archived.length} archived`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
         </Text>
       ) : null}
 
       <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Notifications</Text>
+        <Text style={styles.sectionLabel}>Permissions</Text>
+        <View style={styles.row}>
+          <View style={styles.rowIcon}>
+            <Ionicons color={colors.primary} name="camera-outline" size={20} />
+          </View>
+          <View style={styles.rowBody}>
+            <Text style={styles.rowTitle}>Camera</Text>
+            <Text style={styles.rowSubtitle}>
+              Take photos for your Rides from the Camera tab.
+            </Text>
+            {cameraBlocked ? (
+              <Button variant="secondary" onPress={() => void Linking.openSettings()}>
+                Open system Settings
+              </Button>
+            ) : null}
+          </View>
+          {cameraPermission ? (
+            <Switch
+              disabled={busy === 'camera'}
+              onValueChange={(value) => void toggleCamera(value)}
+              trackColor={{ false: colors.borderStrong, true: colors.primary }}
+              value={cameraGranted}
+            />
+          ) : (
+            <ActivityIndicator color={colors.primary} style={styles.toggleSpinner} />
+          )}
+        </View>
         <View style={styles.row}>
           <View style={styles.rowIcon}>
             <Ionicons color={colors.primary} name="notifications-outline" size={20} />
@@ -309,11 +382,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
     width: 30,
-  },
-  avatarAction: {
-    color: colors.accent,
-    fontSize: 15,
-    fontWeight: '700',
   },
   username: {
     color: colors.text,

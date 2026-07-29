@@ -212,8 +212,8 @@ export function planSoloRideNotifications({
           key: notificationKey(data),
           data,
           triggerAt,
-          title: ride.name,
-          body: 'Your SoloRide is scheduled for today.',
+          title: `${ride.name} is live`,
+          body: 'One photo. One moment. Share today’s Ride with your people.',
         });
       }
 
@@ -236,8 +236,8 @@ export function planSoloRideNotifications({
             key: notificationKey(data),
             data,
             triggerAt: reminderAt,
-            title: `Don't forget ${ride.name}`,
-            body: 'Post your SoloRide before today ends.',
+            title: `Still time for ${ride.name}`,
+            body: 'The day isn’t over — capture something real and post it.',
           });
         }
       }

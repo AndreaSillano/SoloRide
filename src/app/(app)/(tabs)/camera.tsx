@@ -7,14 +7,14 @@ import {
   ActivityIndicator,
   Image,
   Keyboard,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
-} from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+} from 'react-native';import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCurrentUser } from '@/auth/auth-context';
 import { PhotoTextEditor } from '@/components/photo-text-editor';
@@ -253,6 +253,22 @@ export default function CameraScreen() {
 
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The photo could not be published.');
+    }
+  };
+
+  const askForCamera = async () => {
+    setError(null);
+    try {
+      if (permission?.canAskAgain === false) {
+        await Linking.openSettings();
+        return;
+      }
+      const result = await requestPermission();
+      if (!result.granted && result.canAskAgain === false) {
+        setError('Camera access is blocked. Enable it in system Settings.');
+      }
+    } catch {
+      setError('Camera permission could not be requested. Try again.');
     }
   };
 
@@ -528,25 +544,27 @@ export default function CameraScreen() {
         <View style={[StyleSheet.absoluteFill, styles.cameraFallback]}>
           <StatePanel
             actionLabel={
-              permission?.canAskAgain === false ? undefined : 'Allow camera'
+              permission?.canAskAgain === false ? 'Open Settings' : 'Allow camera'
             }
             message={
               permission === null
                 ? 'Checking camera permission…'
-                : 'Camera access is off. Allow it, or choose a photo from your library.'
+                : permission?.canAskAgain === false
+                  ? 'Camera access is blocked for SoloRide. Enable it in system Settings.'
+                  : 'Camera access is off. Allow it, or choose a photo from your library.'
             }
-            onAction={
-              permission?.canAskAgain === false
-                ? undefined
-                : () => void requestPermission()
-            }
+            onAction={permission === null ? undefined : () => void askForCamera()}
             title="Camera access"
           />
         </View>
       )}
 
-      <SafeAreaView edges={['top', 'left', 'right']} style={styles.cameraChrome}>
-        <View style={styles.topBar}>
+      <SafeAreaView
+        edges={['top', 'left', 'right']}
+        pointerEvents="box-none"
+        style={styles.cameraChrome}
+      >
+        <View pointerEvents="box-none" style={styles.topBar}>
           <Pressable
             accessibilityLabel="Flip camera"
             accessibilityRole="button"
@@ -560,6 +578,7 @@ export default function CameraScreen() {
         </View>
 
         <View
+          pointerEvents="box-none"
           style={[
             styles.bottomBar,
             { paddingBottom: Math.max(insets.bottom, spacing.md) + TAB_BAR_CLEARANCE },
