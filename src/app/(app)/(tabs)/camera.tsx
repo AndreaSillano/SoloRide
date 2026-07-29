@@ -110,6 +110,10 @@ export default function CameraScreen() {
       if (preferredRideId && activeRides.some((ride) => ride.id === preferredRideId)) {
         return preferredRideId;
       }
+      const dueRide = activeRides.find(
+        (ride) => ride.canPublishPermanent && ride.isRequiredToday,
+      );
+      if (dueRide) return dueRide.id;
       if (activeRides.length === 1) return activeRides[0]!.id;
       return null;
     });

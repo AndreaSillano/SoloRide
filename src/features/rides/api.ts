@@ -1,5 +1,6 @@
 import { format } from 'date-fns';
 
+import { removeRidePostFiles } from '@/features/posts/service';
 import { supabase } from '@/lib/supabase';
 import { DATE_FORMAT } from '@/utils/schedule';
 
@@ -234,6 +235,19 @@ export async function leaveRide(rideId: string): Promise<void> {
 }
 
 export async function deleteRide(rideId: string): Promise<void> {
+  // Storage API first — SQL deletes only drop metadata and orphan the files.
+  try {
+    await removeRidePostFiles(rideId);
+  } catch (cause) {
+    throw new RideProductError(
+      'unknown',
+      cause instanceof Error
+        ? cause.message
+        : 'Ride photos could not be removed from storage.',
+      { cause },
+    );
+  }
+
   const { error } = await supabase.rpc('delete_ride', { p_ride_id: rideId });
   if (error) throw mapRideError(error);
 }

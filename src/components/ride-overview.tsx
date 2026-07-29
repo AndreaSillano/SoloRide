@@ -51,7 +51,12 @@ export function RideOverview({
           void deletePost
             .mutateAsync({ postId, rideId })
             .then(() => setActivePostId((current) => (current === postId ? null : current)))
-            .catch(() => Alert.alert('The photo could not be deleted.'))
+            .catch((error) =>
+              Alert.alert(
+                'Couldn’t delete photo',
+                error instanceof Error ? error.message : 'The photo could not be deleted.',
+              ),
+            )
             .finally(() => setDeletingPostId(null));
         },
       },

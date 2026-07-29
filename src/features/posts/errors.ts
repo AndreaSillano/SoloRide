@@ -69,10 +69,32 @@ export function mapDatabaseError(error: unknown, fallback: string): PostDataErro
       { cause: error },
     );
   }
-  if (details.code === 'PGRST116') {
+  if (details.code === 'PGRST116' || details.code === 'P0002') {
     return new PostDataError('NOT_FOUND', 'That post no longer exists.', {
       cause: error,
     });
+  }
+  if (message.toLowerCase().includes('only the author may delete')) {
+    return new PostDataError('DATABASE', 'You can only delete your own posts.', {
+      cause: error,
+    });
+  }
+  if (details.code === '42501' || message.toLowerCase().includes('not authenticated')) {
+    return new PostDataError(
+      'AUTH_REQUIRED',
+      'Please sign in again, then try deleting the photo.',
+      { cause: error },
+    );
+  }
+  if (
+    message.toLowerCase().includes('delete_own_post') ||
+    message.toLowerCase().includes('could not find the function')
+  ) {
+    return new PostDataError(
+      'DATABASE',
+      'Post delete needs a database update. Apply the latest SoloRide migrations and try again.',
+      { cause: error },
+    );
   }
   if (
     message.toLowerCase().includes('permission denied') &&

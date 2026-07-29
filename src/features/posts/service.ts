@@ -251,19 +251,22 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord> {
 export async function deletePost(postId: string): Promise<void> {
   const validPostId = parseUuid(postId, 'Post');
   const userId = await requireUserId();
+
   const { data, error: lookupError } = await supabase
     .from('posts')
     .select('id, user_id, image_path')
     .eq('id', validPostId)
     .eq('user_id', userId)
     .single();
-
   if (lookupError) {
     throw mapDatabaseError(lookupError, 'The post could not be found.');
   }
 
   const imagePath = String(data.image_path);
-  const { error: storageError } = await supabase.storage
+
+  // Remove the file first while the caller can still resolve it. storage.remove
+  // needs SELECT+DELETE; an empty result usually means RLS blocked the delete.
+  const { data: removed, error: storageError } = await supabase.storage
     .from(POST_IMAGE_BUCKET)
     .remove([imagePath]);
   if (storageError) {
@@ -273,14 +276,105 @@ export async function deletePost(postId: string): Promise<void> {
       { cause: storageError },
     );
   }
+  if (!removed?.length) {
+    const { error: stillExistsError } = await supabase.storage
+      .from(POST_IMAGE_BUCKET)
+      .createSignedUrl(imagePath, 60);
+    if (!stillExistsError) {
+      throw new PostDataError(
+        'STORAGE',
+        'The post image could not be removed, so the post was kept.',
+      );
+    }
+  }
 
-  const { error: deleteError } = await supabase
+  const { data: deleted, error: deleteError } = await supabase
     .from('posts')
     .delete()
     .eq('id', validPostId)
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .select('id');
   if (deleteError) {
     throw mapDatabaseError(deleteError, 'The post image was removed, but its record remains.');
+  }
+  if (!deleted?.length) {
+    throw new PostDataError('NOT_FOUND', 'The post could not be deleted.');
+  }
+}
+
+/** Removes expired 24h posts (file + row) for the signed-in user. */
+export async function purgeExpiredTemporaryPosts(): Promise<void> {
+  const userId = await requireUserId();
+  const { data, error } = await supabase
+    .from('posts')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('is_temporary', true)
+    .lte('expires_at', new Date().toISOString());
+  if (error) {
+    throw mapDatabaseError(error, 'Expired photos could not be cleaned up.');
+  }
+
+  for (const post of data ?? []) {
+    try {
+      await deletePost(String(post.id));
+    } catch {
+      // Keep going so one failure doesn’t block the rest.
+    }
+  }
+}
+
+/**
+ * Deletes every object under `{rideId}/` via the Storage API.
+ * Requires last-member creator purge policies.
+ */
+export async function removeRidePostFiles(rideId: string): Promise<void> {
+  const validRideId = parseUuid(rideId, 'Ride');
+  const { data: userFolders, error: listError } = await supabase.storage
+    .from(POST_IMAGE_BUCKET)
+    .list(validRideId, { limit: 1000 });
+  if (listError) {
+    throw new PostDataError(
+      'STORAGE',
+      'Ride photos could not be removed from storage.',
+      { cause: listError },
+    );
+  }
+
+  const paths: string[] = [];
+  for (const folder of userFolders ?? []) {
+    if (!folder.name || folder.name.startsWith('.')) continue;
+    const prefix = `${validRideId}/${folder.name}`;
+    const { data: files, error: filesError } = await supabase.storage
+      .from(POST_IMAGE_BUCKET)
+      .list(prefix, { limit: 1000 });
+    if (filesError) {
+      throw new PostDataError(
+        'STORAGE',
+        'Ride photos could not be removed from storage.',
+        { cause: filesError },
+      );
+    }
+    for (const file of files ?? []) {
+      if (!file.name || file.name.startsWith('.')) continue;
+      paths.push(`${prefix}/${file.name}`);
+    }
+  }
+
+  if (!paths.length) return;
+
+  for (let index = 0; index < paths.length; index += 100) {
+    const chunk = paths.slice(index, index + 100);
+    const { error: removeError } = await supabase.storage
+      .from(POST_IMAGE_BUCKET)
+      .remove(chunk);
+    if (removeError) {
+      throw new PostDataError(
+        'STORAGE',
+        'Ride photos could not be removed from storage.',
+        { cause: removeError },
+      );
+    }
   }
 }
 

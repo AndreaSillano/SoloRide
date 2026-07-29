@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
 import { useAuth } from '@/auth/auth-context';
+import { purgeExpiredTemporaryPosts } from '@/features/posts/service';
 import { fetchRideSchedule, fetchUserRides } from '@/features/rides/api';
 import { supabase } from '@/lib/supabase';
 import { DATE_FORMAT, getWeekRange } from '@/utils/schedule';
@@ -121,6 +122,12 @@ export function NotificationLifecycle() {
           }
         } catch {
           // Token sync is best effort.
+        }
+
+        try {
+          await purgeExpiredTemporaryPosts();
+        } catch {
+          // Expired temp cleanup is best effort.
         }
 
         try {
