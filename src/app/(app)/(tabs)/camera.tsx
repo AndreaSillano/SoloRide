@@ -18,6 +18,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCurrentUser } from '@/auth/auth-context';
+import { PhotoTextEditor } from '@/components/photo-text-editor';
 import {
   Button,
   ErrorBanner,
@@ -51,6 +52,7 @@ export default function CameraScreen() {
   const camera = useRef<CameraView>(null);
   const [focused, setFocused] = useState(true);
   const [facing, setFacing] = useState<Facing>('back');
+  const [draftUri, setDraftUri] = useState<string | null>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [selectedRideId, setSelectedRideId] = useState<string | null>(null);
   const [description, setDescription] = useState('');
@@ -138,6 +140,7 @@ export default function CameraScreen() {
   }, [locationQuery, selectedLocation]);
 
   const resetCapture = () => {
+    setDraftUri(null);
     setImageUri(null);
     setDescription('');
     setLocationQuery('');
@@ -153,7 +156,10 @@ export default function CameraScreen() {
     setError(null);
     try {
       const photo = await camera.current.takePictureAsync({ quality: 0.9 });
-      if (photo?.uri) setImageUri(photo.uri);
+      if (photo?.uri) {
+        setDraftUri(photo.uri);
+        setImageUri(null);
+      }
     } catch {
       setError('The camera could not take a photo. Please try again.');
     } finally {
@@ -177,7 +183,10 @@ export default function CameraScreen() {
         allowsEditing: true,
         quality: 0.9,
       });
-      if (!result.canceled) setImageUri(result.assets[0]?.uri ?? null);
+      if (!result.canceled && result.assets[0]?.uri) {
+        setDraftUri(result.assets[0].uri);
+        setImageUri(null);
+      }
     } catch {
       setError('The photo library could not open. Please try again.');
     } finally {
@@ -236,7 +245,9 @@ export default function CameraScreen() {
       });
       await notifications.onPostCreated(ride.id, ride.scheduledToday).catch(() => []);
       resetCapture();
-      router.replace({ pathname: '/', params: { selectRideId: ride.id } });
+      // NativeTabs needs navigate (NAVIGATE), not replace, to leave Camera for Rides.
+      router.navigate({ pathname: '/', params: { selectRideId: ride.id } });
+
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The photo could not be published.');
     }
@@ -260,6 +271,23 @@ export default function CameraScreen() {
           />
         </View>
       </SafeAreaView>
+    );
+  }
+
+  if (draftUri && !imageUri) {
+    return (
+      <PhotoTextEditor
+        imageUri={draftUri}
+        onCancel={resetCapture}
+        onDone={(uri) => {
+          setImageUri(uri);
+          setDraftUri(null);
+        }}
+        onSkip={() => {
+          setImageUri(draftUri);
+          setDraftUri(null);
+        }}
+      />
     );
   }
 

@@ -11,9 +11,10 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#F5F5F5"
     },
     "ios": {
+      "icon": "./assets/SoloRideIcon.icon",
       "supportsTablet": true,
       "config": {
         "usesNonExemptEncryption": false
@@ -22,20 +23,22 @@
         "NSCameraUsageDescription": "SoloRide uses the camera to add photos to your rides.",
         "NSLocationWhenInUseUsageDescription": "SoloRide uses your location while you record a ride.",
         "NSPhotoLibraryUsageDescription": "SoloRide uses your photo library to add photos to your rides."
-      }
+      },
+      "bundleIdentifier": "com.anonymous.SoloRide"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#0088FF"
       },
       "edgeToEdgeEnabled": true,
       "permissions": [
-        "CAMERA",
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "POST_NOTIFICATIONS"
-      ]
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS"
+      ],
+      "package": "com.anonymous.SoloRide"
     },
     "web": {
       "favicon": "./assets/favicon.png",

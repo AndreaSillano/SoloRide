@@ -1,6 +1,16 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, StyleSheet, Switch, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from 'react-native';
 
 import { useAuth, useCurrentUser } from '@/auth/auth-context';
 import {
@@ -17,6 +27,7 @@ import {
   useSoloRideNotifications,
   type SoloRidePermissionStatus,
 } from '@/features/notifications';
+import { ProfileDataError, useRemoveAvatar, useUpdateAvatar } from '@/features/profile';
 import { groupUserRides, useUserRides } from '@/features/rides';
 import { colors, radius, spacing } from '@/theme';
 
@@ -25,14 +36,17 @@ export default function ProfileScreen() {
   const { user, profile, profileError, refreshProfile } = useCurrentUser();
   const rides = useUserRides(user?.id);
   const notifications = useSoloRideNotifications(user?.id ?? null);
+  const updateAvatar = useUpdateAvatar();
+  const removeAvatar = useRemoveAvatar();
   const [permission, setPermission] = useState<SoloRidePermissionStatus>('undetermined');
   const [alertsEnabled, setAlertsEnabled] = useState(true);
   const [prefsReady, setPrefsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'logout' | 'toggle' | null>(null);
+  const [busy, setBusy] = useState<'logout' | 'toggle' | 'avatar' | null>(null);
 
   const groups = useMemo(() => groupUserRides(rides.data ?? []), [rides.data]);
   const username = profile?.username ?? null;
+  const avatarBusy = busy === 'avatar' || updateAvatar.isPending || removeAvatar.isPending;
 
   useEffect(() => {
     void notifications.getPermission().then(setPermission);
@@ -54,6 +68,84 @@ export default function ProfileScreen() {
       cancelled = true;
     };
   }, [user?.id]);
+
+  const pickAvatar = async () => {
+    setError(null);
+    setBusy('avatar');
+    try {
+      const mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!mediaPermission.granted) {
+        setError('Photo library access was denied.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.9,
+      });
+      if (result.canceled || !result.assets[0]?.uri) return;
+      await updateAvatar.mutateAsync(result.assets[0].uri);
+    } catch (cause) {
+      setError(
+        cause instanceof ProfileDataError || cause instanceof Error
+          ? cause.message
+          : 'The profile photo could not be updated.',
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const confirmRemoveAvatar = () => {
+    Alert.alert('Remove photo?', 'Your profile will show initials instead.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            setError(null);
+            setBusy('avatar');
+            try {
+              await removeAvatar.mutateAsync();
+            } catch (cause) {
+              setError(
+                cause instanceof ProfileDataError || cause instanceof Error
+                  ? cause.message
+                  : 'The profile photo could not be removed.',
+              );
+            } finally {
+              setBusy(null);
+            }
+          })();
+        },
+      },
+    ]);
+  };
+
+  const openAvatarActions = () => {
+    if (avatarBusy) return;
+    const buttons: {
+      text: string;
+      style?: 'cancel' | 'destructive' | 'default';
+      onPress?: () => void;
+    }[] = [
+      {
+        text: profile?.avatar_url ? 'Change photo' : 'Add photo',
+        onPress: () => void pickAvatar(),
+      },
+    ];
+    if (profile?.avatar_url) {
+      buttons.push({
+        text: 'Remove photo',
+        style: 'destructive',
+        onPress: confirmRemoveAvatar,
+      });
+    }
+    buttons.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert('Profile photo', undefined, buttons);
+  };
 
   const toggleAlerts = async (next: boolean) => {
     if (!user?.id || busy === 'toggle') return;
@@ -100,9 +192,37 @@ export default function ProfileScreen() {
   return (
     <ScrollScreen>
       <View style={styles.identity}>
-        <Avatar profile={{ username }} size={88} />
+        <Pressable
+          accessibilityLabel="Change profile photo"
+          accessibilityRole="button"
+          disabled={avatarBusy}
+          onPress={openAvatarActions}
+          style={({ pressed }) => [styles.avatarButton, pressed && styles.pressed]}
+        >
+          <Avatar
+            profile={{ username: profile?.username, avatar_url: profile?.avatar_url }}
+            size={88}
+          />
+          <View style={styles.avatarBadge}>
+            {avatarBusy ? (
+              <ActivityIndicator color={colors.white} size="small" />
+            ) : (
+              <Ionicons color={colors.white} name="camera" size={14} />
+            )}
+          </View>
+        </Pressable>
         <Text style={styles.username}>{username ? `@${username}` : 'Your profile'}</Text>
         <Text style={styles.tagline}>Private photo rides with your people</Text>
+        <Pressable
+          accessibilityRole="button"
+          disabled={avatarBusy}
+          onPress={openAvatarActions}
+          style={({ pressed }) => pressed && styles.pressed}
+        >
+          <Text style={styles.avatarAction}>
+            {profile?.avatar_url ? 'Change photo' : 'Add photo'}
+          </Text>
+        </Pressable>
       </View>
 
       <ErrorBanner message={profileError} />
@@ -174,6 +294,27 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     paddingTop: spacing.sm,
   },
+  avatarButton: {
+    position: 'relative',
+  },
+  avatarBadge: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderColor: colors.background,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    bottom: 0,
+    height: 30,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 0,
+    width: 30,
+  },
+  avatarAction: {
+    color: colors.accent,
+    fontSize: 15,
+    fontWeight: '700',
+  },
   username: {
     color: colors.text,
     fontSize: 28,
@@ -235,4 +376,5 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     paddingHorizontal: spacing.xxs,
   },
+  pressed: { opacity: 0.8 },
 });

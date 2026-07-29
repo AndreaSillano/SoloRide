@@ -17,6 +17,7 @@ import { envConfigurationError, isSupabaseConfigured } from '@/lib/env';
 export type Profile = {
   id: string;
   username: string;
+  avatar_url: string | null;
 };
 
 type AuthContextValue = {
@@ -42,7 +43,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const loadProfile = useCallback(async (userId: string) => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, username')
+      .select('id, username, avatar_url')
       .eq('id', userId)
       .maybeSingle<Profile>();
 
