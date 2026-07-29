@@ -79,10 +79,31 @@ export function mapDatabaseError(error: unknown, fallback: string): PostDataErro
       cause: error,
     });
   }
-  if (details.code === '42501' || message.toLowerCase().includes('not authenticated')) {
+  if (
+    message.toLowerCase().includes('could not find the table') ||
+    message.toLowerCase().includes('schema cache') ||
+    details.code === 'PGRST205' ||
+    details.code === 'PGRST200'
+  ) {
+    return new PostDataError(
+      'DATABASE',
+      'Reactions need a database update. Apply the latest SoloRide migrations (and reload the API schema), then try again.',
+      { cause: error },
+    );
+  }
+  if (details.code === '42501' || message.toLowerCase().includes('permission denied')) {
+    return new PostDataError(
+      'DATABASE',
+      message.toLowerCase().includes('post_reactions')
+        ? 'Reactions need a database update. Apply the latest SoloRide migrations and try again.'
+        : 'Please sign in again, then try again.',
+      { cause: error },
+    );
+  }
+  if (message.toLowerCase().includes('not authenticated')) {
     return new PostDataError(
       'AUTH_REQUIRED',
-      'Please sign in again, then try deleting the photo.',
+      'Please sign in again, then try again.',
       { cause: error },
     );
   }

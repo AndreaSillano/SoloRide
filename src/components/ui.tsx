@@ -25,8 +25,18 @@ import {
 } from 'react-native';import { SafeAreaView, useSafeAreaInsets, type Edge } from 'react-native-safe-area-context';
 
 import { WEEKDAYS, WEEKDAY_SHORT_LABELS } from '@/features/rides';
-import { getCommentCount, formatProfileName, useSignedPostImage, type PostRecord } from '@/features/posts';
+import {
+  getCommentCount,
+  formatProfileName,
+  getReactionCount,
+  getReactionSummary,
+  useSignedPostImage,
+  type PostRecord,
+} from '@/features/posts';
 import { colors, radius, shadows, spacing } from '@/theme';
+
+import { ReactionBurst } from './reaction-burst';
+import { ReactionPicker } from './reaction-picker';
 
 type AvatarProfile =
   | {
@@ -533,12 +543,27 @@ function formatRemainingTime(expiresAt: string | null | undefined) {
 export function FeedPost({
   post,
   onPress,
+  onDoubleTapImage,
+  onPressReactions,
+  onSelectReaction,
+  onCloseReactionPicker,
+  reactionPickerVisible = false,
+  ownReactionEmoji = null,
   isOwnPost = false,
   onDelete,
   deleting = false,
 }: {
   post: PostRecord;
   onPress: () => void;
+  /** Double-tap the photo: open the picker, or remove your reaction if one exists. */
+  onDoubleTapImage?: () => void;
+  /** Opens the full reaction list modal. */
+  onPressReactions?: () => void;
+  onSelectReaction?: (emoji: string) => void;
+  onCloseReactionPicker?: () => void;
+  reactionPickerVisible?: boolean;
+  /** Current user's emoji on this post, if any. */
+  ownReactionEmoji?: string | null;
   /** Whether the signed-in user authored this post; shows the delete icon. */
   isOwnPost?: boolean;
   onDelete?: () => void;
@@ -546,60 +571,191 @@ export function FeedPost({
 }) {
   const author = formatProfileName(post.profile);
   const commentCount = getCommentCount(post);
+  const reactionCount = getReactionCount(post);
+  const { emojis: reactionSummary, hasMore: hasMoreReactions } = getReactionSummary(post);
   const remaining = formatRemainingTime(post.expires_at);
+  const lastTapAt = useRef(0);
+  const singleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [burstEmoji, setBurstEmoji] = useState<string | null>(null);
+  /** Second tap must land within this window to count as a double-tap. */
+  const DOUBLE_TAP_MS = 350;
+  /** Slightly longer than the double-tap window so a late second tap still wins. */
+  const SINGLE_TAP_DELAY_MS = 370;
+
+  useEffect(() => {
+    return () => {
+      if (singleTapTimer.current) clearTimeout(singleTapTimer.current);
+    };
+  }, []);
+
+  const handleImagePress = () => {
+    if (reactionPickerVisible) {
+      onCloseReactionPicker?.();
+      return;
+    }
+    if (!onDoubleTapImage) {
+      onPress();
+      return;
+    }
+
+    const now = Date.now();
+    if (lastTapAt.current > 0 && now - lastTapAt.current < DOUBLE_TAP_MS) {
+      if (singleTapTimer.current) {
+        clearTimeout(singleTapTimer.current);
+        singleTapTimer.current = null;
+      }
+      lastTapAt.current = 0;
+      onDoubleTapImage();
+      return;
+    }
+
+    lastTapAt.current = now;
+    if (singleTapTimer.current) clearTimeout(singleTapTimer.current);
+    singleTapTimer.current = setTimeout(() => {
+      singleTapTimer.current = null;
+      lastTapAt.current = 0;
+      onPress();
+    }, SINGLE_TAP_DELAY_MS);
+  };
+
+  const handlePickerSelect = (emoji: string) => {
+    // Same emoji = remove; skip the celebrate burst.
+    if (ownReactionEmoji && ownReactionEmoji === emoji) {
+      onSelectReaction?.(emoji);
+      return;
+    }
+    onCloseReactionPicker?.();
+    setBurstEmoji(emoji);
+    onSelectReaction?.(emoji);
+  };
+
+  const reactionOverlay = (
+    <>
+      {onSelectReaction && onCloseReactionPicker ? (
+        <ReactionPicker
+          onClose={onCloseReactionPicker}
+          onSelect={handlePickerSelect}
+          selectedEmoji={ownReactionEmoji}
+          visible={reactionPickerVisible}
+        />
+      ) : null}
+      {burstEmoji ? (
+        <ReactionBurst emoji={burstEmoji} onFinished={() => setBurstEmoji(null)} />
+      ) : null}
+    </>
+  );
+
+  const actionsRow = (
+    <View style={styles.feedActions}>
+      <Pressable
+        accessibilityLabel="View comments"
+        accessibilityRole="button"
+        hitSlop={10}
+        onPress={onPress}
+        style={({ pressed }) => pressed && styles.pressed}
+      >
+        <Ionicons color={colors.text} name="chatbubble-outline" size={23} />
+      </Pressable>
+
+      <View style={styles.feedActionsSpacer} />
+
+      <Pressable
+        accessibilityLabel={
+          reactionCount === 0
+            ? 'No reactions yet'
+            : reactionCount === 1
+              ? 'View 1 reaction'
+              : `View all ${reactionCount} reactions`
+        }
+        accessibilityRole="button"
+        hitSlop={10}
+        onPress={onPressReactions}
+        style={({ pressed }) => [styles.feedReactions, pressed && styles.pressed]}
+      >
+        {reactionSummary.length || ownReactionEmoji ? (
+          <View style={styles.feedReactionStack}>
+            {(reactionSummary.length
+              ? reactionSummary
+              : ownReactionEmoji
+                ? [ownReactionEmoji]
+                : []
+            ).map((emoji, index) => (
+              <Text
+                key={`${emoji}-${index}`}
+                style={[
+                  styles.feedReactionEmojis,
+                  index > 0 ? styles.feedReactionOverlap : null,
+                  { zIndex: index + 1 },
+                ]}
+              >
+                {emoji}
+              </Text>
+            ))}
+            {hasMoreReactions ? (
+              <Text
+                style={[
+                  styles.feedReactionMoreText,
+                  styles.feedReactionOverlap,
+                  { zIndex: reactionSummary.length + 1 },
+                ]}
+              >
+                +
+              </Text>
+            ) : null}
+          </View>
+        ) : (
+          <Ionicons color={colors.muted} name="happy-outline" size={26} />
+        )}
+      </Pressable>
+    </View>
+  );
 
   if (post.is_temporary) {
     return (
       <View style={styles.feedItemTemporary}>
-        <Pressable accessibilityRole="button" onPress={onPress}>
-          <View style={styles.tempPhotoWrap}>
+        <View style={styles.tempPhotoWrap}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={handleImagePress}
+          >
             <PostImage aspectRatio={3 / 4} post={post} style={styles.tempPhoto} />
-            <View style={styles.tempOverlay}>
-              <Avatar profile={post.profile} size={34} />
-              <View style={styles.feedHeaderText}>
-                <Text style={styles.tempAuthor}>{author}</Text>
-                {post.location_name ? (
-                  <Text style={styles.tempMeta} numberOfLines={1}>
-                    ⌖ {post.location_name}
-                  </Text>
-                ) : null}
-              </View>
-              {isOwnPost && onDelete ? (
-                <Pressable
-                  accessibilityLabel="Delete photo"
-                  accessibilityRole="button"
-                  disabled={deleting}
-                  hitSlop={10}
-                  onPress={onDelete}
-                  style={({ pressed }) => [styles.feedDelete, pressed && styles.pressed]}
-                >
-                  {deleting ? (
-                    <ActivityIndicator color={colors.white} size="small" />
-                  ) : (
-                    <Ionicons color={colors.white} name="trash-outline" size={18} />
-                  )}
-                </Pressable>
+          </Pressable>
+          <View style={styles.tempOverlay} pointerEvents="box-none">
+            <Avatar profile={post.profile} size={34} />
+            <View style={styles.feedHeaderText}>
+              <Text style={styles.tempAuthor}>{author}</Text>
+              {post.location_name ? (
+                <Text style={styles.tempMeta} numberOfLines={1}>
+                  ⌖ {post.location_name}
+                </Text>
               ) : null}
             </View>
-            {remaining ? (
-              <View style={styles.tempTimerBadge} pointerEvents="none">
-                <Text style={styles.tempTimerText}>{remaining}</Text>
-              </View>
+            {isOwnPost && onDelete ? (
+              <Pressable
+                accessibilityLabel="Delete photo"
+                accessibilityRole="button"
+                disabled={deleting}
+                hitSlop={10}
+                onPress={onDelete}
+                style={({ pressed }) => [styles.feedDelete, pressed && styles.pressed]}
+              >
+                {deleting ? (
+                  <ActivityIndicator color={colors.white} size="small" />
+                ) : (
+                  <Ionicons color={colors.white} name="trash-outline" size={18} />
+                )}
+              </Pressable>
             ) : null}
           </View>
-        </Pressable>
-
-        <View style={styles.feedActions}>
-          <Pressable
-            accessibilityLabel="View comments"
-            accessibilityRole="button"
-            hitSlop={10}
-            onPress={onPress}
-            style={({ pressed }) => pressed && styles.pressed}
-          >
-            <Ionicons color={colors.text} name="chatbubble-outline" size={23} />
-          </Pressable>
+          {remaining ? (
+            <View style={styles.tempTimerBadge} pointerEvents="none">
+              <Text style={styles.tempTimerText}>{remaining}</Text>
+            </View>
+          ) : null}
+          {reactionOverlay}
         </View>
+
+        {actionsRow}
 
         {post.description ? (
           <Text style={styles.feedCaption}>
@@ -652,21 +808,17 @@ export function FeedPost({
         ) : null}
       </View>
 
-      <Pressable accessibilityRole="button" onPress={onPress}>
-        <PostImage post={post} style={styles.feedImage} />
-      </Pressable>
-
-      <View style={styles.feedActions}>
+      <View style={styles.feedImageWrap}>
         <Pressable
-          accessibilityLabel="View comments"
           accessibilityRole="button"
-          hitSlop={10}
-          onPress={onPress}
-          style={({ pressed }) => pressed && styles.pressed}
+          onPress={handleImagePress}
         >
-          <Ionicons color={colors.text} name="chatbubble-outline" size={23} />
+          <PostImage post={post} style={styles.feedImage} />
         </Pressable>
+        {reactionOverlay}
       </View>
+
+      {actionsRow}
 
       {post.description ? (
         <Text style={styles.feedCaption}>
@@ -847,7 +999,13 @@ const styles = StyleSheet.create({
   feedTime: { color: colors.muted, fontSize: 12 },
   feedDelete: { paddingLeft: spacing.xs },
   feedImage: { aspectRatio: 1 },
+  feedImageWrap: {
+    overflow: 'hidden',
+    position: 'relative',
+    width: '100%',
+  },
   tempPhotoWrap: {
+    overflow: 'hidden',
     position: 'relative',
     width: '100%',
   },
@@ -890,6 +1048,30 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
+  },
+  feedActionsSpacer: { flex: 1 },
+  feedReactions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xxs,
+  },
+  feedReactionStack: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  feedReactionOverlap: {
+    marginLeft: -8,
+  },
+  feedReactionMoreText: {
+    color: colors.muted,
+    fontSize: 20,
+    fontWeight: '800',
+    lineHeight: 26,
+  },
+  feedReactionEmojis: {
+    fontSize: 24,
+    lineHeight: 28,
+    textAlign: 'center',
   },
   feedCaption: {
     color: colors.textSoft,

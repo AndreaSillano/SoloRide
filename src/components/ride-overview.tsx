@@ -1,14 +1,23 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Share, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, Share, StyleSheet, Text, View } from 'react-native';
 
 import { useCurrentUser } from '@/auth/auth-context';
-import { formatProfileName, useDeletePost, useRideFeed } from '@/features/posts';
+import {
+  formatProfileName,
+  getOwnReactionEmoji,
+  useDeletePost,
+  useRemoveReaction,
+  useRideFeed,
+  useUpsertReaction,
+} from '@/features/posts';
 import { usePostingStatus, useRide, useRideMembers } from '@/features/rides';
 import { colors, spacing } from '@/theme';
 
 import { CommentsModal } from './comments-modal';
+import { ReactionsModal } from './reactions-modal';
 import {
   Body,
   Button,
@@ -37,7 +46,11 @@ export function RideOverview({
   const feed = useRideFeed(rideId);
   const posting = usePostingStatus(rideId, user?.id);
   const deletePost = useDeletePost();
+  const upsertReaction = useUpsertReaction();
+  const removeReaction = useRemoveReaction();
   const [activePostId, setActivePostId] = useState<string | null>(null);
+  const [reactionsPostId, setReactionsPostId] = useState<string | null>(null);
+  const [pickerPostId, setPickerPostId] = useState<string | null>(null);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
 
   const confirmDeletePost = (postId: string) => {
@@ -50,7 +63,11 @@ export function RideOverview({
           setDeletingPostId(postId);
           void deletePost
             .mutateAsync({ postId, rideId })
-            .then(() => setActivePostId((current) => (current === postId ? null : current)))
+            .then(() => {
+              setActivePostId((current) => (current === postId ? null : current));
+              setReactionsPostId((current) => (current === postId ? null : current));
+              setPickerPostId((current) => (current === postId ? null : current));
+            })
             .catch((error) =>
               Alert.alert(
                 'Couldn’t delete photo',
@@ -61,6 +78,58 @@ export function RideOverview({
         },
       },
     ]);
+  };
+
+  const handleDoubleTapImage = (postId: string) => {
+    const post = feed.data.find((item) => item.id === postId);
+    const ownEmoji = post ? getOwnReactionEmoji(post, user?.id) : null;
+
+    if (Platform.OS !== 'web') {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    // Already reacted: double-tap removes it (never open comments).
+    if (ownEmoji) {
+      void removeReaction.mutateAsync({ postId, rideId }).catch((error) =>
+        Alert.alert(
+          'Couldn’t remove reaction',
+          error instanceof Error ? error.message : 'The reaction could not be removed.',
+        ),
+      );
+      return;
+    }
+
+    setPickerPostId(postId);
+  };
+
+  const handleSelectReaction = (postId: string, emoji: string) => {
+    const post = feed.data.find((item) => item.id === postId);
+    const ownEmoji = post ? getOwnReactionEmoji(post, user?.id) : null;
+    setPickerPostId(null);
+
+    // Tapping the same emoji again removes the reaction.
+    if (ownEmoji && ownEmoji === emoji) {
+      void removeReaction.mutateAsync({ postId, rideId }).catch((error) =>
+        Alert.alert(
+          'Couldn’t remove reaction',
+          error instanceof Error ? error.message : 'The reaction could not be removed.',
+        ),
+      );
+      return;
+    }
+
+    void upsertReaction
+      .mutateAsync({ postId, rideId, emoji })
+      .then(() => {
+        if (Platform.OS === 'web') return;
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      })
+      .catch((error) =>
+        Alert.alert(
+          'Couldn’t save reaction',
+          error instanceof Error ? error.message : 'The reaction could not be saved.',
+        ),
+      );
   };
 
   if (ride.isPending) {
@@ -208,9 +277,15 @@ export function RideOverview({
               key={post.id}
               deleting={deletingPostId === post.id}
               isOwnPost={post.user_id === user?.id}
+              onCloseReactionPicker={() => setPickerPostId(null)}
               onDelete={() => confirmDeletePost(post.id)}
+              onDoubleTapImage={() => handleDoubleTapImage(post.id)}
               onPress={() => setActivePostId(post.id)}
+              onPressReactions={() => setReactionsPostId(post.id)}
+              onSelectReaction={(emoji) => handleSelectReaction(post.id, emoji)}
+              ownReactionEmoji={getOwnReactionEmoji(post, user?.id)}
               post={post}
+              reactionPickerVisible={pickerPostId === post.id}
             />
           ))}
           {feed.isFetchingNextPage ? (
@@ -236,6 +311,12 @@ export function RideOverview({
         postId={activePostId}
         rideId={rideId}
         visible={Boolean(activePostId)}
+      />
+
+      <ReactionsModal
+        onClose={() => setReactionsPostId(null)}
+        postId={reactionsPostId}
+        visible={Boolean(reactionsPostId)}
       />
     </>
   );

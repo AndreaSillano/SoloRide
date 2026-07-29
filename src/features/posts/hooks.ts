@@ -10,7 +10,12 @@ import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { useCurrentUser } from '@/auth/auth-context';
 import { queryKeys } from '@/lib/queryKeys';
 
-import type { CreateCommentInput, CreatePostInput } from './schemas';
+import type {
+  CreateCommentInput,
+  CreatePostInput,
+  RemoveReactionInput,
+  UpsertReactionInput,
+} from './schemas';
 import {
   createComment,
   createPost,
@@ -18,8 +23,11 @@ import {
   deletePost,
   getComments,
   getPost,
+  getReactions,
   getRideFeedPage,
   getSignedPostImage,
+  removeReaction,
+  upsertReaction,
 } from './service';
 import {
   POST_IMAGE_URL_EXPIRY_SAFETY_MS,
@@ -99,6 +107,15 @@ export function useComments(postId: string | null | undefined) {
   });
 }
 
+export function useReactions(postId: string | null | undefined) {
+  const { user } = useCurrentUser();
+  return useQuery({
+    queryKey: queryKeys.reactions(postId ?? ''),
+    queryFn: () => getReactions(postId ?? ''),
+    enabled: Boolean(postId && user?.id),
+  });
+}
+
 export function useSignedPostImage(imagePath: string | null | undefined) {
   const { user } = useCurrentUser();
   return useQuery({
@@ -150,6 +167,9 @@ export function useDeletePost() {
       queryClient.removeQueries({
         queryKey: queryKeys.comments(variables.postId),
       });
+      queryClient.removeQueries({
+        queryKey: queryKeys.reactions(variables.postId),
+      });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.ridePosts(variables.rideId),
       });
@@ -199,6 +219,42 @@ export function useDeleteComment() {
       });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.ridePosts(variables.rideId),
+      });
+    },
+  });
+}
+
+export function useUpsertReaction() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpsertReactionInput) => upsertReaction(input),
+    onSuccess: (reaction, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.reactions(reaction.post_id),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.ridePosts(variables.rideId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.post(reaction.post_id),
+      });
+    },
+  });
+}
+
+export function useRemoveReaction() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: RemoveReactionInput) => removeReaction(input),
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.reactions(variables.postId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.ridePosts(variables.rideId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.post(variables.postId),
       });
     },
   });

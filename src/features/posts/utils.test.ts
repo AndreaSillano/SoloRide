@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
 import { mapDatabaseError, mapUploadError } from './errors';
-import { createPostInputSchema } from './schemas';
+import {
+  createPostInputSchema,
+  upsertReactionInputSchema,
+} from './schemas';
 import {
   buildPostImagePath,
   formatLocationLabel,
+  getOwnReactionEmoji,
+  getReactionCount,
+  getReactionSummary,
   getResizeDimensions,
+  isReactionEmoji,
+  REACTION_OPTIONS,
 } from './utils';
 
 const rideId = '11111111-1111-4111-8111-111111111111';
@@ -169,5 +177,84 @@ describe('post data utilities', () => {
     });
 
     expect(formatProfileName(parsed.profile)).toBe('andreas');
+  });
+
+  it('exposes five easy-to-edit reaction options', () => {
+    expect(REACTION_OPTIONS).toHaveLength(5);
+    expect(isReactionEmoji('🔥')).toBe(true);
+    expect(isReactionEmoji('❤️')).toBe(false);
+    expect(isReactionEmoji('👋')).toBe(false);
+  });
+
+  it('accepts emoji graphemes and rejects plain text', async () => {
+    const { isEmojiGrapheme, isValidReactionValue } = await import('./utils');
+    expect(isEmojiGrapheme('🔥')).toBe(true);
+    expect(isEmojiGrapheme('hello')).toBe(false);
+    expect(isValidReactionValue('🔥')).toBe(true);
+    expect(isValidReactionValue('abc')).toBe(false);
+  });
+
+  it('validates reaction upsert input', () => {
+    expect(
+      upsertReactionInputSchema.parse({
+        postId,
+        rideId,
+        emoji: '🔥',
+      }),
+    ).toEqual({ postId, rideId, emoji: '🔥' });
+
+    expect(
+      upsertReactionInputSchema.safeParse({
+        postId,
+        rideId,
+        emoji: '',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('summarizes feed reactions without duplicates', () => {
+    const post = {
+      post_reactions: [
+        { user_id: userId, emoji: '🔥' },
+        { user_id: '44444444-4444-4444-8444-444444444444', emoji: '❤️' },
+        { user_id: '55555555-5555-4555-8555-555555555555', emoji: '🔥' },
+        { user_id: '66666666-6666-4666-8666-666666666666', emoji: '😂' },
+        { user_id: '77777777-7777-4777-8777-777777777777', emoji: '👎' },
+      ],
+    };
+
+    expect(getReactionCount(post)).toBe(5);
+    expect(getReactionSummary(post)).toEqual({
+      emojis: ['🔥', '😂', '👎'],
+      hasMore: true,
+    });
+    expect(getReactionSummary(post, 10)).toEqual({
+      emojis: ['❤️', '🔥', '😂', '👎'],
+      hasMore: false,
+    });
+    expect(getOwnReactionEmoji(post, userId)).toBe('🔥');
+    expect(getOwnReactionEmoji(post, '00000000-0000-4000-8000-000000000000')).toBeNull();
+  });
+
+  it('parses embedded post reactions on feed rows', async () => {
+    const { postSchema } = await import('./schemas');
+    const parsed = postSchema.parse({
+      id: postId,
+      ride_id: rideId,
+      user_id: userId,
+      image_path: `${rideId}/${userId}/${postId}.jpg`,
+      description: null,
+      latitude: null,
+      longitude: null,
+      location_name: null,
+      scheduled_date: '2026-07-28',
+      created_at: '2026-07-28T12:00:00Z',
+      updated_at: '2026-07-28T12:00:00Z',
+      profile: null,
+      comments: [{ count: 2 }],
+      post_reactions: [{ user_id: userId, emoji: '🔥' }],
+    });
+
+    expect(parsed.post_reactions).toEqual([{ user_id: userId, emoji: '🔥' }]);
   });
 });

@@ -6,6 +6,7 @@ export const queryKeys = {
   ridePosts: (rideId: string) => ['ride-posts', rideId] as const,
   post: (postId: string) => ['post', postId] as const,
   comments: (postId: string) => ['comments', postId] as const,
+  reactions: (postId: string) => ['reactions', postId] as const,
   postedStatus: (rideId: string, userId: string, scheduledDate: string) =>
     ['posted-status', rideId, userId, scheduledDate] as const,
   weekPostedStatus: (rideId: string, userId: string, weekStart: string, weekEnd: string) =>

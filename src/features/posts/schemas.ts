@@ -39,6 +39,12 @@ const embeddedProfileSchema = z.preprocess((value) => {
   return value;
 }, postProfileSchema.nullish());
 
+/** Compact embed used on feed rows (emoji + who, no nested profile). */
+export const postReactionEmbedSchema = z.object({
+  user_id: uuidSchema,
+  emoji: z.string().min(1).max(16),
+});
+
 export const postSchema = z.object({
   id: uuidSchema,
   ride_id: uuidSchema,
@@ -55,6 +61,7 @@ export const postSchema = z.object({
   updated_at: z.string(),
   profile: embeddedProfileSchema,
   comments: z.array(z.object({ count: z.number() })).nullish(),
+  post_reactions: z.array(postReactionEmbedSchema).nullish(),
 });
 
 export const commentSchema = z.object({
@@ -62,6 +69,16 @@ export const commentSchema = z.object({
   post_id: uuidSchema,
   user_id: uuidSchema,
   content: z.string().min(1).max(2000),
+  created_at: z.string(),
+  updated_at: z.string(),
+  profile: embeddedProfileSchema,
+});
+
+export const reactionSchema = z.object({
+  id: uuidSchema,
+  post_id: uuidSchema,
+  user_id: uuidSchema,
+  emoji: z.string().min(1).max(16),
   created_at: z.string(),
   updated_at: z.string(),
   profile: embeddedProfileSchema,
@@ -100,7 +117,21 @@ export const createCommentInputSchema = z.object({
   content: z.string().trim().min(1, 'Write a comment first.').max(2000),
 });
 
+export const upsertReactionInputSchema = z.object({
+  postId: uuidSchema,
+  rideId: uuidSchema,
+  emoji: z.string().min(1, 'Pick a reaction.').max(16),
+});
+
+export const removeReactionInputSchema = z.object({
+  postId: uuidSchema,
+  rideId: uuidSchema,
+});
+
 export type PostRecord = z.infer<typeof postSchema>;
 export type CommentRecord = z.infer<typeof commentSchema>;
+export type ReactionRecord = z.infer<typeof reactionSchema>;
 export type CreatePostInput = z.input<typeof createPostInputSchema>;
 export type CreateCommentInput = z.input<typeof createCommentInputSchema>;
+export type UpsertReactionInput = z.input<typeof upsertReactionInputSchema>;
+export type RemoveReactionInput = z.input<typeof removeReactionInputSchema>;

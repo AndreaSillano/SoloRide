@@ -12,15 +12,22 @@ import {
   commentSchema,
   createCommentInputSchema,
   createPostInputSchema,
+  removeReactionInputSchema,
   type CommentRecord,
   type CreateCommentInput,
   type CreatePostInput,
   type PostRecord,
+  type ReactionRecord,
+  type RemoveReactionInput,
+  type UpsertReactionInput,
   postSchema,
+  reactionSchema,
+  upsertReactionInputSchema,
   uuidSchema,
 } from './schemas';
 import {
   buildPostImagePath,
+  isValidReactionValue,
   POST_IMAGE_BUCKET,
   POST_IMAGE_URL_TTL_SECONDS,
 } from './utils';
@@ -29,7 +36,8 @@ const POST_SELECT = `
   id, ride_id, user_id, image_path, description, latitude, longitude,
   location_name, scheduled_date, is_temporary, expires_at, created_at, updated_at,
   profile:profiles!posts_user_id_fkey(id, username, display_name, avatar_url),
-  comments(count)
+  comments(count),
+  post_reactions(user_id, emoji)
 `;
 
 /** Hide expired temporary posts until cleanup deletes them. */
@@ -41,6 +49,69 @@ const COMMENT_SELECT = `
   id, post_id, user_id, content, created_at, updated_at,
   profile:profiles!comments_user_id_fkey(id, username, display_name, avatar_url)
 `;
+
+const REACTION_SELECT = `
+  id, post_id, user_id, emoji, created_at, updated_at,
+  profile:profiles!post_reactions_user_id_fkey(id, username, display_name, avatar_url)
+`;
+
+const REACTION_SELECT_PLAIN = `
+  id, post_id, user_id, emoji, created_at, updated_at
+`;
+
+function isMissingRelationshipError(error: unknown) {
+  const message = String(
+    typeof error === 'object' && error !== null && 'message' in error
+      ? (error as { message?: unknown }).message
+      : error,
+  ).toLowerCase();
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code ?? '')
+      : '';
+  return (
+    code === 'PGRST200' ||
+    message.includes('could not find a relationship') ||
+    message.includes('schema cache')
+  );
+}
+
+async function selectReactionRow(filter: {
+  id?: string;
+  postId?: string;
+  userId?: string;
+}): Promise<ReactionRecord> {
+  let query = supabase.from('post_reactions').select(REACTION_SELECT);
+  if (filter.id) query = query.eq('id', filter.id);
+  if (filter.postId) query = query.eq('post_id', filter.postId);
+  if (filter.userId) query = query.eq('user_id', filter.userId);
+
+  const { data, error } = await query.maybeSingle();
+  if (!error) {
+    if (!data) {
+      throw new PostDataError('NOT_FOUND', 'The reaction could not be found.');
+    }
+    return parseFeedReaction(data);
+  }
+
+  if (!isMissingRelationshipError(error)) {
+    throw mapDatabaseError(error, 'The reaction could not be saved.');
+  }
+
+  // Schema cache may lag right after the migration; return without profile.
+  let plain = supabase.from('post_reactions').select(REACTION_SELECT_PLAIN);
+  if (filter.id) plain = plain.eq('id', filter.id);
+  if (filter.postId) plain = plain.eq('post_id', filter.postId);
+  if (filter.userId) plain = plain.eq('user_id', filter.userId);
+  const { data: row, error: plainError } = await plain.maybeSingle();
+  if (plainError) {
+    throw mapDatabaseError(plainError, 'The reaction could not be saved.');
+  }
+  if (!row) {
+    throw new PostDataError('NOT_FOUND', 'The reaction could not be found.');
+  }
+  return parseFeedReaction({ ...row, profile: null });
+}
 
 function parseUuid(value: string, label: string) {
   const parsed = uuidSchema.safeParse(value);
@@ -74,6 +145,26 @@ function parseFeedComments(data: unknown): CommentRecord[] {
   const parsed = commentSchema.array().safeParse(data);
   if (!parsed.success) {
     throw new PostDataError('DATABASE', 'Comments could not be loaded.', {
+      cause: parsed.error,
+    });
+  }
+  return parsed.data;
+}
+
+function parseFeedReactions(data: unknown): ReactionRecord[] {
+  const parsed = reactionSchema.array().safeParse(data);
+  if (!parsed.success) {
+    throw new PostDataError('DATABASE', 'Reactions could not be loaded.', {
+      cause: parsed.error,
+    });
+  }
+  return parsed.data;
+}
+
+function parseFeedReaction(data: unknown): ReactionRecord {
+  const parsed = reactionSchema.safeParse(data);
+  if (!parsed.success) {
+    throw new PostDataError('DATABASE', 'The reaction could not be saved.', {
       cause: parsed.error,
     });
   }
@@ -415,4 +506,129 @@ export async function deleteComment(commentId: string): Promise<void> {
     .eq('user_id', userId);
 
   if (error) throw mapDatabaseError(error, 'The comment could not be deleted.');
+}
+
+export async function getReactions(postId: string): Promise<ReactionRecord[]> {
+  const validPostId = parseUuid(postId, 'Post');
+  const { data, error } = await supabase
+    .from('post_reactions')
+    .select(REACTION_SELECT)
+    .eq('post_id', validPostId)
+    .order('created_at', { ascending: true });
+
+  if (!error) return parseFeedReactions(data ?? []);
+
+  if (!isMissingRelationshipError(error)) {
+    throw mapDatabaseError(error, 'Reactions could not be loaded.');
+  }
+
+  const { data: rows, error: plainError } = await supabase
+    .from('post_reactions')
+    .select(REACTION_SELECT_PLAIN)
+    .eq('post_id', validPostId)
+    .order('created_at', { ascending: true });
+  if (plainError) {
+    throw mapDatabaseError(plainError, 'Reactions could not be loaded.');
+  }
+  return parseFeedReactions(
+    (rows ?? []).map((row) => ({ ...row, profile: null })),
+  );
+}
+
+export async function upsertReaction(
+  input: UpsertReactionInput,
+): Promise<ReactionRecord> {
+  const parsed = upsertReactionInputSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new PostDataError(
+      'INVALID_INPUT',
+      parsed.error.issues[0]?.message ?? 'The reaction is invalid.',
+      { cause: parsed.error },
+    );
+  }
+  if (!isValidReactionValue(parsed.data.emoji)) {
+    throw new PostDataError('INVALID_INPUT', 'That reaction is not available.');
+  }
+
+  const userId = await requireUserId();
+  const postId = parsed.data.postId;
+  const emoji = parsed.data.emoji.trim();
+
+  // Prefer update-or-insert over upsert: column-level UPDATE grants only cover
+  // `emoji`, and PostgREST upserts try to rewrite the conflict columns too.
+  const { data: existing, error: lookupError } = await supabase
+    .from('post_reactions')
+    .select('id')
+    .eq('post_id', postId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (lookupError) {
+    throw mapDatabaseError(lookupError, 'The reaction could not be saved.');
+  }
+
+  if (existing?.id) {
+    const { error } = await supabase
+      .from('post_reactions')
+      .update({ emoji })
+      .eq('id', existing.id)
+      .eq('user_id', userId);
+    if (error) throw mapDatabaseError(error, 'The reaction could not be saved.');
+    return selectReactionRow({ id: existing.id });
+  }
+
+  const { data: inserted, error } = await supabase
+    .from('post_reactions')
+    .insert({
+      post_id: postId,
+      user_id: userId,
+      emoji,
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    // Race: another request inserted first — fall back to update.
+    if (errorLikeCode(error) === '23505') {
+      const { error: updateError } = await supabase
+        .from('post_reactions')
+        .update({ emoji })
+        .eq('post_id', postId)
+        .eq('user_id', userId);
+      if (updateError) {
+        throw mapDatabaseError(updateError, 'The reaction could not be saved.');
+      }
+      return selectReactionRow({ postId, userId });
+    }
+    throw mapDatabaseError(error, 'The reaction could not be saved.');
+  }
+  return selectReactionRow({ id: String(inserted.id) });
+}
+
+function errorLikeCode(error: unknown) {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    return String((error as { code?: unknown }).code ?? '');
+  }
+  return '';
+}
+
+export async function removeReaction(
+  input: RemoveReactionInput,
+): Promise<void> {
+  const parsed = removeReactionInputSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new PostDataError(
+      'INVALID_INPUT',
+      parsed.error.issues[0]?.message ?? 'The reaction request is invalid.',
+      { cause: parsed.error },
+    );
+  }
+
+  const userId = await requireUserId();
+  const { error } = await supabase
+    .from('post_reactions')
+    .delete()
+    .eq('post_id', parsed.data.postId)
+    .eq('user_id', userId);
+
+  if (error) throw mapDatabaseError(error, 'The reaction could not be removed.');
 }
