@@ -9,6 +9,7 @@ import {
   Linking,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -65,7 +66,7 @@ export default function CameraScreen() {
   const [facing, setFacing] = useState<Facing>('back');
   const [draftUri, setDraftUri] = useState<string | null>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
-  const [selectedRideId, setSelectedRideId] = useState<string | null>(null);
+  const [selectedRideIds, setSelectedRideIds] = useState<string[]>([]);
   const [wantTemporary, setWantTemporary] = useState(false);
   const [description, setDescription] = useState('');
   const [locationQuery, setLocationQuery] = useState('');
@@ -75,21 +76,54 @@ export default function CameraScreen() {
   const [error, setError] = useState<string | null>(null);
   const [rideMenuOpen, setRideMenuOpen] = useState(false);
   const skipLocationSearch = useRef(false);
+  const initializedRideSelection = useRef(false);
 
   const activeRides = useMemo(() => cameraRides.data ?? [], [cameraRides.data]);
-  const selectedRide = useMemo(
-    () => activeRides.find((ride) => ride.id === selectedRideId) ?? null,
-    [activeRides, selectedRideId],
+  const permanentEligible = useMemo(
+    () => activeRides.filter((ride) => ride.canPublishPermanent),
+    [activeRides],
   );
-  const isTemporary = Boolean(
-    selectedRide && (!selectedRide.canPublishPermanent || wantTemporary),
+  const temporaryEligible = useMemo(
+    () => activeRides.filter((ride) => ride.temporaryRemaining > 0),
+    [activeRides],
   );
+  const canChoosePermanent = permanentEligible.length > 0;
+  const isTemporary = !canChoosePermanent || wantTemporary;
+  const selectableRides = isTemporary ? temporaryEligible : permanentEligible;
+  const selectedRides = useMemo(
+    () => selectableRides.filter((ride) => selectedRideIds.includes(ride.id)),
+    [selectableRides, selectedRideIds],
+  );
+  const primaryRide = selectedRides[0] ?? null;
   const canShareTemporary = Boolean(
-    selectedRide && selectedRide.temporaryRemaining > 0,
+    isTemporary && selectedRides.length === 1 && selectedRides[0]!.temporaryRemaining > 0,
   );
-  const canPublish = Boolean(
-    selectedRide && (isTemporary ? canShareTemporary : selectedRide.canPublishPermanent),
-  );
+  const canPublish = isTemporary
+    ? canShareTemporary
+    : selectedRides.length > 0 &&
+      selectedRides.every((ride) => ride.canPublishPermanent);
+
+  const defaultPermanentRideIds = useCallback(() => {
+    const required = permanentEligible
+      .filter((ride) => ride.isRequiredToday)
+      .map((ride) => ride.id);
+    const preferred =
+      preferredRideId && permanentEligible.some((ride) => ride.id === preferredRideId)
+        ? [preferredRideId]
+        : [];
+    const ids = [...new Set([...required, ...preferred])];
+    if (ids.length) return ids;
+    if (permanentEligible.length === 1) return [permanentEligible[0]!.id];
+    return [];
+  }, [permanentEligible, preferredRideId]);
+
+  const defaultTemporaryRideId = useCallback(() => {
+    if (preferredRideId && temporaryEligible.some((ride) => ride.id === preferredRideId)) {
+      return preferredRideId;
+    }
+    if (temporaryEligible.length === 1) return temporaryEligible[0]!.id;
+    return null;
+  }, [preferredRideId, temporaryEligible]);
 
   useFocusEffect(
     useCallback(() => {
@@ -103,30 +137,44 @@ export default function CameraScreen() {
 
   useEffect(() => {
     if (!activeRides.length) {
-      setSelectedRideId(null);
+      setSelectedRideIds([]);
+      setWantTemporary(false);
+      initializedRideSelection.current = false;
       return;
     }
-    setSelectedRideId((current) => {
-      if (current && activeRides.some((ride) => ride.id === current)) return current;
-      if (preferredRideId && activeRides.some((ride) => ride.id === preferredRideId)) {
-        return preferredRideId;
-      }
-      const dueRide = activeRides.find(
-        (ride) => ride.canPublishPermanent && ride.isRequiredToday,
-      );
-      if (dueRide) return dueRide.id;
-      if (activeRides.length === 1) return activeRides[0]!.id;
-      return null;
-    });
-  }, [activeRides, preferredRideId]);
 
-  useEffect(() => {
-    if (!selectedRide?.canPublishPermanent) {
+    if (!canChoosePermanent) {
       setWantTemporary(true);
-      return;
     }
-    setWantTemporary(false);
-  }, [selectedRide?.id, selectedRide?.canPublishPermanent]);
+
+    setSelectedRideIds((current) => {
+      if (isTemporary) {
+        const stillValid = current.filter((id) =>
+          temporaryEligible.some((ride) => ride.id === id),
+        );
+        if (stillValid.length) return [stillValid[0]!];
+        if (initializedRideSelection.current) return [];
+        initializedRideSelection.current = true;
+        const fallback = defaultTemporaryRideId();
+        return fallback ? [fallback] : [];
+      }
+
+      const stillValid = current.filter((id) =>
+        permanentEligible.some((ride) => ride.id === id),
+      );
+      if (initializedRideSelection.current) return stillValid;
+      initializedRideSelection.current = true;
+      return defaultPermanentRideIds();
+    });
+  }, [
+    activeRides.length,
+    canChoosePermanent,
+    defaultPermanentRideIds,
+    defaultTemporaryRideId,
+    isTemporary,
+    permanentEligible,
+    temporaryEligible,
+  ]);
 
   useEffect(() => {
     if (skipLocationSearch.current) {
@@ -170,7 +218,7 @@ export default function CameraScreen() {
     setSelectedLocation(null);
     setLocationSuggestions([]);
     setRideMenuOpen(false);
-    setWantTemporary(false);
+    setWantTemporary(!canChoosePermanent);
     setError(null);
   };
 
@@ -258,33 +306,74 @@ export default function CameraScreen() {
   };
 
   const publish = async () => {
-    const ride = activeRides.find((entry) => entry.id === selectedRideId);
-    if (!imageUri || !ride || !canPublish) return;
-    const temporary = !ride.canPublishPermanent || wantTemporary;
+    if (!imageUri || !primaryRide || !canPublish || !selectedRides.length) return;
     setError(null);
     try {
       const typedName = locationQuery.trim() || null;
       await createPost.mutateAsync({
-        rideId: ride.id,
+        rideIds: selectedRides.map((ride) => ride.id),
         imageUri,
         description,
-        scheduledDate: ride.postDate,
-        isTemporary: temporary,
+        scheduledDate: primaryRide.postDate,
+        isTemporary,
         latitude: selectedLocation?.latitude ?? null,
         longitude: selectedLocation?.longitude ?? null,
         locationName: selectedLocation?.locationName ?? typedName,
       });
-      if (!temporary && ride.scheduledToday) {
-        await notifications.onPostCreated(ride.id, ride.scheduledToday).catch(() => []);
+      if (!isTemporary) {
+        await Promise.all(
+          selectedRides
+            .filter((ride) => ride.scheduledToday)
+            .map((ride) =>
+              notifications.onPostCreated(ride.id, ride.scheduledToday!).catch(() => []),
+            ),
+        );
       }
       haptics.success();
       resetCapture();
       // NativeTabs needs navigate (NAVIGATE), not replace, to leave Camera for Rides.
-      router.navigate({ pathname: '/', params: { selectRideId: ride.id } });
+      router.navigate({ pathname: '/', params: { selectRideId: primaryRide.id } });
     } catch (cause) {
       haptics.error();
       setError(cause instanceof Error ? cause.message : 'The photo could not be published.');
     }
+  };
+
+  const togglePermanentRide = (rideId: string) => {
+    setSelectedRideIds((current) =>
+      current.includes(rideId)
+        ? current.filter((id) => id !== rideId)
+        : [...current, rideId],
+    );
+  };
+
+  const selectTemporaryRide = (rideId: string) => {
+    setSelectedRideIds([rideId]);
+    setRideMenuOpen(false);
+  };
+
+  const choosePermanent = () => {
+    setWantTemporary(false);
+    setRideMenuOpen(false);
+    setSelectedRideIds((current) => {
+      const stillValid = current.filter((id) =>
+        permanentEligible.some((ride) => ride.id === id),
+      );
+      return stillValid.length ? stillValid : defaultPermanentRideIds();
+    });
+  };
+
+  const chooseTemporary = () => {
+    setWantTemporary(true);
+    setRideMenuOpen(false);
+    setSelectedRideIds((current) => {
+      const stillValid = current.find((id) =>
+        temporaryEligible.some((ride) => ride.id === id),
+      );
+      if (stillValid) return [stillValid];
+      const fallback = defaultTemporaryRideId();
+      return fallback ? [fallback] : [];
+    });
   };
 
   const askForCamera = async () => {
@@ -351,14 +440,14 @@ export default function CameraScreen() {
           : null;
 
     const footerPad = Math.max(insets.bottom, spacing.sm);
-    const temporaryForced = Boolean(selectedRide && !selectedRide.canPublishPermanent);
-    const temporaryHint = !selectedRide
+    const temporaryForced = !canChoosePermanent;
+    const temporaryHint = temporaryForced
       ? null
-      : isTemporary && !temporaryForced
+      : isTemporary
         ? 'Lasts 24 hours and doesn’t count as today’s publication.'
-        : !isTemporary
-          ? 'Stays in the feed and counts as today’s publication.'
-          : null;
+        : selectedRides.length > 1
+          ? 'Same photo on each selected Ride. Counts as today’s publication for each.'
+          : 'Stays in the feed and counts as today’s publication.';
     const composeTitle = temporaryForced
       ? '24-hour share'
       : isTemporary
@@ -370,11 +459,20 @@ export default function CameraScreen() {
         : 'No 24h shares left'
       : isTemporary
         ? 'Share for 24h'
-        : 'Publish';
+        : selectedRides.length > 1
+          ? `Publish to ${selectedRides.length} Rides`
+          : 'Publish';
     const tempAvailability =
-      selectedRide && (temporaryForced || isTemporary)
-        ? `${selectedRide.temporaryRemaining}/${MAX_ACTIVE_TEMPORARY_POSTS} available`
+      isTemporary && primaryRide
+        ? `${primaryRide.temporaryRemaining}/${MAX_ACTIVE_TEMPORARY_POSTS} available`
         : null;
+    const rideTriggerLabel = isTemporary
+      ? (primaryRide?.name ?? 'Choose a Ride')
+      : selectedRides.length === 0
+        ? 'Choose Rides'
+        : selectedRides.length === 1
+          ? selectedRides[0]!.name
+          : `${selectedRides.length} Rides selected`;
 
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
@@ -399,8 +497,17 @@ export default function CameraScreen() {
             extraKeyboardSpace={KEYBOARD_SCROLL_EXTRA}
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             keyboardShouldPersistTaps="handled"
+            onScrollBeginDrag={() => setRideMenuOpen(false)}
             style={styles.flex}
           >
+            {rideMenuOpen ? (
+              <Pressable
+                accessibilityLabel="Dismiss ride menu"
+                accessibilityRole="button"
+                onPress={() => setRideMenuOpen(false)}
+                style={styles.rideMenuBackdrop}
+              />
+            ) : null}
             <View style={styles.previewFrame}>
               <Image resizeMode="cover" source={{ uri: imageUri }} style={styles.preview} />
               <Pressable
@@ -419,75 +526,14 @@ export default function CameraScreen() {
               </Text>
             ) : null}
 
-            <View style={styles.composeForm}>
-              <View style={styles.postToBlock}>
-                <View style={styles.postToLabelRow}>
-                  <Text style={styles.sectionLabel}>Post to</Text>
-                  {tempAvailability ? (
-                    <Text style={styles.captionMeta}>{tempAvailability}</Text>
-                  ) : null}
-                </View>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => setRideMenuOpen((open) => !open)}
-                  style={({ pressed }) => [styles.rideDropdownTrigger, pressed && styles.pressed]}
-                >
-                  <View style={styles.rideDropdownTriggerText}>
-                    <Text ellipsizeMode="tail" numberOfLines={1} style={styles.rideName}>
-                      {selectedRide?.name ?? 'Choose a Ride'}
-                    </Text>
-                    {selectedRide ? (
-                      <View
-                        style={[
-                          styles.rideBadge,
-                          selectedRide.canPublishPermanent
-                            ? styles.rideBadgeDue
-                            : styles.rideBadgeOptional,
-                        ]}
-                      >
-                        <Ionicons
-                          color={
-                            selectedRide.canPublishPermanent ? colors.accent : colors.muted
-                          }
-                          name={
-                            selectedRide.canPublishPermanent ? 'camera' : 'time-outline'
-                          }
-                          size={14}
-                        />
-                      </View>
-                    ) : null}
-                  </View>
-                  <Ionicons
-                    color={colors.muted}
-                    name={rideMenuOpen ? 'chevron-up' : 'chevron-down'}
-                    size={18}
-                  />
-                </Pressable>
-                {rideMenuOpen ? (
-                  <View style={styles.rideDropdownPanel}>
-                    {activeRides.map((ride) => (
-                      <RideOption
-                        key={ride.id}
-                        onPress={() => {
-                          setSelectedRideId(ride.id);
-                          setWantTemporary(!ride.canPublishPermanent);
-                          setRideMenuOpen(false);
-                        }}
-                        ride={ride}
-                        selected={selectedRideId === ride.id}
-                      />
-                    ))}
-                  </View>
-                ) : null}
-              </View>
-
-              {selectedRide?.canPublishPermanent ? (
+            <View style={rideMenuOpen ? styles.rideMenuForeground : styles.composeFormTop}>
+              {canChoosePermanent ? (
                 <View style={styles.modeBlock}>
                   <Text style={styles.sectionLabel}>Post type</Text>
                   <View style={styles.modeRow}>
                     <Pressable
                       accessibilityRole="button"
-                      onPress={() => setWantTemporary(false)}
+                      onPress={choosePermanent}
                       style={({ pressed }) => [
                         styles.modeChip,
                         !wantTemporary && styles.modeChipSelected,
@@ -505,13 +551,13 @@ export default function CameraScreen() {
                     </Pressable>
                     <Pressable
                       accessibilityRole="button"
-                      disabled={!canShareTemporary}
-                      onPress={() => setWantTemporary(true)}
+                      disabled={!temporaryEligible.length}
+                      onPress={chooseTemporary}
                       style={({ pressed }) => [
                         styles.modeChip,
                         wantTemporary && styles.modeChipSelected,
                         pressed && styles.pressed,
-                        !canShareTemporary && styles.disabled,
+                        !temporaryEligible.length && styles.disabled,
                       ]}
                     >
                       <Text
@@ -527,6 +573,70 @@ export default function CameraScreen() {
                 </View>
               ) : null}
 
+              <View style={styles.postToBlock}>
+                <View style={styles.postToLabelRow}>
+                  <Text style={styles.sectionLabel}>
+                    {isTemporary ? 'Post to' : 'Post to Rides'}
+                  </Text>
+                  {tempAvailability ? (
+                    <Text style={styles.captionMeta}>{tempAvailability}</Text>
+                  ) : !isTemporary && permanentEligible.length > 1 ? (
+                    <Text style={styles.captionMeta}>select one or more</Text>
+                  ) : null}
+                </View>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setRideMenuOpen((open) => !open)}
+                  style={({ pressed }) => [styles.rideDropdownTrigger, pressed && styles.pressed]}
+                >
+                  <View style={styles.rideDropdownTriggerText}>
+                    <Text ellipsizeMode="tail" numberOfLines={1} style={styles.rideName}>
+                      {rideTriggerLabel}
+                    </Text>
+                    {isTemporary && primaryRide ? (
+                      <View style={[styles.rideBadge, styles.rideBadgeOptional]}>
+                        <Ionicons color={colors.muted} name="time-outline" size={14} />
+                      </View>
+                    ) : !isTemporary && selectedRides.length > 0 ? (
+                      <View style={[styles.rideBadge, styles.rideBadgeDue]}>
+                        <Ionicons color={colors.accent} name="camera" size={14} />
+                      </View>
+                    ) : null}
+                  </View>
+                  <Ionicons
+                    color={colors.muted}
+                    name={rideMenuOpen ? 'chevron-up' : 'chevron-down'}
+                    size={18}
+                  />
+                </Pressable>
+                {rideMenuOpen ? (
+                  <View style={styles.rideDropdownPanel}>
+                    <ScrollView
+                      bounces={false}
+                      keyboardShouldPersistTaps="handled"
+                      nestedScrollEnabled
+                      style={styles.rideDropdownScroll}
+                    >
+                      {(isTemporary ? temporaryEligible : permanentEligible).map((ride) => (
+                        <RideOption
+                          key={ride.id}
+                          onPress={() =>
+                            isTemporary
+                              ? selectTemporaryRide(ride.id)
+                              : togglePermanentRide(ride.id)
+                          }
+                          ride={ride}
+                          selected={selectedRideIds.includes(ride.id)}
+                        />
+                      ))}
+                    </ScrollView>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+
+            <View style={styles.composeForm}>
               {temporaryHint ? <Text style={styles.hint}>{temporaryHint}</Text> : null}
 
               <View style={styles.captionBlock}>
@@ -635,7 +745,7 @@ export default function CameraScreen() {
           >
             <View style={[styles.composeFooter, { paddingBottom: footerPad }]}>
               <Button
-                disabled={!selectedRideId || !canPublish || busy === 'location'}
+                disabled={!selectedRides.length || !canPublish || busy === 'location'}
                 loading={createPost.isPending}
                 onPress={() => void publish()}
               >
@@ -865,6 +975,11 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xs,
+    position: 'relative',
+  },
+  rideMenuBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
   },
   previewFrame: {
     alignSelf: 'center',
@@ -900,13 +1015,15 @@ const styles = StyleSheet.create({
   },
   previewRetakeText: { color: colors.white, fontSize: 13, fontWeight: '800' },
   composeForm: { gap: spacing.lg },
+  composeFormTop: { gap: spacing.lg },
+  rideMenuForeground: { gap: spacing.lg, zIndex: 2 },
   sectionLabel: {
     color: colors.textSoft,
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0.2,
   },
-  postToBlock: { gap: spacing.xs, zIndex: 2 },
+  postToBlock: { gap: spacing.xs },
   rideDropdownTrigger: {
     alignItems: 'center',
     backgroundColor: colors.surface,
@@ -930,10 +1047,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.sm,
     borderWidth: StyleSheet.hairlineWidth,
-    gap: spacing.xxs,
     overflow: 'hidden',
     padding: spacing.xs,
     ...shadows.floating,
+  },
+  rideDropdownScroll: {
+    maxHeight: 220,
   },
   rideOption: {
     alignItems: 'center',

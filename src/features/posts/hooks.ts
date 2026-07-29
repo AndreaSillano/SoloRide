@@ -132,21 +132,23 @@ export function useCreatePost() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreatePostInput) => createPost(input),
-    onSuccess: (post) => {
-      queryClient.setQueryData(queryKeys.post(post.id), post);
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.ridePosts(post.ride_id),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.postedStatus(
-          post.ride_id,
-          post.user_id,
-          post.scheduled_date,
-        ),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: ['week-posted-status', post.ride_id],
-      });
+    onSuccess: (posts) => {
+      for (const post of posts) {
+        queryClient.setQueryData(queryKeys.post(post.id), post);
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.ridePosts(post.ride_id),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.postedStatus(
+            post.ride_id,
+            post.user_id,
+            post.scheduled_date,
+          ),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: ['week-posted-status', post.ride_id],
+        });
+      }
       void queryClient.invalidateQueries({ queryKey: ['rides-due-today'] });
       void queryClient.invalidateQueries({ queryKey: ['camera-rides'] });
     },

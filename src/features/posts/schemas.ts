@@ -87,7 +87,7 @@ export const reactionSchema = z.object({
 
 export const createPostInputSchema = z
   .object({
-    rideId: uuidSchema,
+    rideIds: z.array(uuidSchema).min(1, 'Choose at least one Ride.'),
     imageUri: z.string().min(1, 'Choose an image first.'),
     description: nullableTrimmedString(50),
     latitude: z.number().min(-90).max(90).optional().nullable(),
@@ -104,9 +104,25 @@ export const createPostInputSchema = z
         path: ['latitude'],
       });
     }
+    const uniqueRideIds = new Set(value.rideIds);
+    if (uniqueRideIds.size !== value.rideIds.length) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Each Ride can only be selected once.',
+        path: ['rideIds'],
+      });
+    }
+    if ((value.isTemporary ?? false) && uniqueRideIds.size > 1) {
+      context.addIssue({
+        code: 'custom',
+        message: '24-hour photos can only be shared to one Ride.',
+        path: ['rideIds'],
+      });
+    }
   })
   .transform((value) => ({
     ...value,
+    rideIds: [...new Set(value.rideIds)],
     latitude: value.latitude ?? null,
     longitude: value.longitude ?? null,
     isTemporary: value.isTemporary ?? false,

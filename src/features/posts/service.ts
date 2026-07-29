@@ -281,7 +281,7 @@ export async function getSignedPostImage(
   };
 }
 
-export async function createPost(input: CreatePostInput): Promise<PostRecord> {
+export async function createPost(input: CreatePostInput): Promise<PostRecord[]> {
   const parsed = createPostInputSchema.safeParse(input);
   if (!parsed.success) {
     throw new PostDataError(
@@ -292,51 +292,67 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord> {
   }
 
   const userId = await requireUserId();
-  const postId = Crypto.randomUUID();
-  const imagePath = buildPostImagePath(parsed.data.rideId, userId, postId);
   const imageBytes = await preparePostImage(parsed.data.imageUri);
-
-  const { error: uploadError } = await supabase.storage
-    .from(POST_IMAGE_BUCKET)
-    .upload(imagePath, imageBytes, {
-      contentType: 'image/jpeg',
-      upsert: false,
-    });
-
-  if (uploadError) {
-    // An upload can succeed server-side even if its response is interrupted.
-    await supabase.storage.from(POST_IMAGE_BUCKET).remove([imagePath]);
-    throw mapUploadError(uploadError);
-  }
-
   const isTemporary = parsed.data.isTemporary;
-  const { data: inserted, error: insertError } = await supabase
-    .from('posts')
-    .insert({
-      id: postId,
-      ride_id: parsed.data.rideId,
-      user_id: userId,
-      image_path: imagePath,
-      description: parsed.data.description,
-      latitude: parsed.data.latitude,
-      longitude: parsed.data.longitude,
-      location_name: parsed.data.locationName,
-      scheduled_date: parsed.data.scheduledDate,
-      is_temporary: isTemporary,
-      // DB trigger overwrites this for temps; required by check constraint.
-      expires_at: isTemporary
-        ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-        : null,
-    })
-    .select(POST_SELECT)
-    .single();
+  const prepared = parsed.data.rideIds.map((rideId) => {
+    const postId = Crypto.randomUUID();
+    return {
+      rideId,
+      postId,
+      imagePath: buildPostImagePath(rideId, userId, postId),
+    };
+  });
 
-  if (insertError) {
-    await supabase.storage.from(POST_IMAGE_BUCKET).remove([imagePath]);
-    throw mapDatabaseError(insertError, 'The post could not be saved.');
+  const uploadedPaths: string[] = [];
+  try {
+    for (const entry of prepared) {
+      const { error: uploadError } = await supabase.storage
+        .from(POST_IMAGE_BUCKET)
+        .upload(entry.imagePath, imageBytes, {
+          contentType: 'image/jpeg',
+          upsert: false,
+        });
+      if (uploadError) {
+        throw mapUploadError(uploadError);
+      }
+      uploadedPaths.push(entry.imagePath);
+    }
+
+    // DB trigger overwrites expires_at for temps; required by check constraint.
+    const expiresAt = isTemporary
+      ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+      : null;
+
+    const { data: inserted, error: insertError } = await supabase
+      .from('posts')
+      .insert(
+        prepared.map((entry) => ({
+          id: entry.postId,
+          ride_id: entry.rideId,
+          user_id: userId,
+          image_path: entry.imagePath,
+          description: parsed.data.description,
+          latitude: parsed.data.latitude,
+          longitude: parsed.data.longitude,
+          location_name: parsed.data.locationName,
+          scheduled_date: parsed.data.scheduledDate,
+          is_temporary: isTemporary,
+          expires_at: expiresAt,
+        })),
+      )
+      .select(POST_SELECT);
+
+    if (insertError) {
+      throw mapDatabaseError(insertError, 'The post could not be saved.');
+    }
+
+    return parseFeedPosts(inserted ?? []);
+  } catch (error) {
+    if (uploadedPaths.length) {
+      await supabase.storage.from(POST_IMAGE_BUCKET).remove(uploadedPaths);
+    }
+    throw error;
   }
-
-  return parseFeedPost(inserted);
 }
 
 export async function deletePost(postId: string): Promise<void> {

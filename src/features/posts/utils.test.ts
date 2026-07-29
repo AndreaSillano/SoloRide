@@ -49,7 +49,7 @@ describe('post data utilities', () => {
 
   it('normalizes optional post text and coordinates', () => {
     const result = createPostInputSchema.parse({
-      rideId,
+      rideIds: [rideId],
       imageUri: 'file:///photo.jpg',
       description: '   ',
       locationName: '  Riverside  ',
@@ -57,6 +57,7 @@ describe('post data utilities', () => {
     });
 
     expect(result).toMatchObject({
+      rideIds: [rideId],
       description: null,
       locationName: 'Riverside',
       latitude: null,
@@ -67,18 +68,64 @@ describe('post data utilities', () => {
 
   it('accepts temporary post input', () => {
     const result = createPostInputSchema.parse({
-      rideId,
+      rideIds: [rideId],
       imageUri: 'file:///photo.jpg',
       scheduledDate: '2026-07-28',
       isTemporary: true,
     });
 
     expect(result.isTemporary).toBe(true);
+    expect(result.rideIds).toEqual([rideId]);
+  });
+
+  it('accepts multiple rides for a permanent post', () => {
+    const secondRideId = '44444444-4444-4444-8444-444444444444';
+    const result = createPostInputSchema.parse({
+      rideIds: [rideId, secondRideId],
+      imageUri: 'file:///photo.jpg',
+      scheduledDate: '2026-07-28',
+      isTemporary: false,
+    });
+
+    expect(result.rideIds).toEqual([rideId, secondRideId]);
+    expect(result.isTemporary).toBe(false);
+  });
+
+  it('rejects temporary posts with multiple rides', () => {
+    const secondRideId = '44444444-4444-4444-8444-444444444444';
+    const result = createPostInputSchema.safeParse({
+      rideIds: [rideId, secondRideId],
+      imageUri: 'file:///photo.jpg',
+      scheduledDate: '2026-07-28',
+      isTemporary: true,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an empty ride list', () => {
+    const result = createPostInputSchema.safeParse({
+      rideIds: [],
+      imageUri: 'file:///photo.jpg',
+      scheduledDate: '2026-07-28',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects duplicate ride ids', () => {
+    const result = createPostInputSchema.safeParse({
+      rideIds: [rideId, rideId],
+      imageUri: 'file:///photo.jpg',
+      scheduledDate: '2026-07-28',
+    });
+
+    expect(result.success).toBe(false);
   });
 
   it('rejects incomplete coordinate pairs', () => {
     const result = createPostInputSchema.safeParse({
-      rideId,
+      rideIds: [rideId],
       imageUri: 'file:///photo.jpg',
       scheduledDate: '2026-07-28',
       latitude: 44,
