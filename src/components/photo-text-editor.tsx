@@ -259,11 +259,11 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
     try {
       await new Promise((resolve) => setTimeout(resolve, 100));
       const uri = await captureRef(canvas, {
-        format: 'jpg',
-        quality: 0.92,
+        format: 'png',
+        quality: 1,
         result: 'tmpfile',
-        width: Math.round(canvasSize.width),
-        height: Math.round(canvasSize.height),
+        width: Math.round(canvasSize.width * 2),
+        height: Math.round(canvasSize.height * 2),
       });
       onDone(uri);
     } catch {
@@ -374,7 +374,7 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
         </Pressable>
       </View>
 
-      <View style={[styles.toolDock, { top: topPad + 52 }]}>
+      <View style={[styles.toolDock, { top: topPad + 62 }]}>
         <Pressable
           accessibilityLabel="Text tool"
           accessibilityRole="button"
@@ -499,13 +499,16 @@ const styles = StyleSheet.create({
     zIndex: 3,
   },
   chip: {
+    alignItems: 'center',
     backgroundColor: 'rgba(15,22,18,0.45)',
     borderRadius: radius.pill,
+    justifyContent: 'center',
+    minHeight: 50,
     minWidth: 84,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  chipStrong: { alignItems: 'center' },
+  chipStrong: { alignItems: 'center', justifyContent: 'center' },
   chipText: {
     color: colors.white,
     fontSize: 15,
@@ -566,7 +569,7 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
     paddingLeft: spacing.sm,
     paddingRight: spacing.xs,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
   },
   colorPreview: {
     borderRadius: radius.pill,
@@ -579,11 +582,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 2,
   },
-  colorScroll: { flexGrow: 0, maxWidth: 260 },
+  colorScroll: { flexGrow: 0, flexShrink: 1, maxWidth: 260 },
   colorScrollContent: {
     alignItems: 'center',
     gap: spacing.xs,
     paddingHorizontal: spacing.xxs,
+    paddingVertical: spacing.xs,
   },
   colorSwatch: {
     alignItems: 'center',
@@ -592,12 +596,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     height: 32,
     justifyContent: 'center',
+    overflow: 'hidden',
     width: 32,
   },
   colorSwatchSelected: {
     borderColor: colors.white,
     borderWidth: 2,
-    transform: [{ scale: 1.06 }],
   },
   error: {
     color: colors.accentSoft,

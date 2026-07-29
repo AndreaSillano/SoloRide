@@ -2,7 +2,7 @@ import type { PostRecord } from './schemas';
 
 export const POST_IMAGE_BUCKET = 'ride-posts';
 export const POST_IMAGE_MAX_LONG_EDGE = 1600;
-export const POST_IMAGE_JPEG_QUALITY = 0.75;
+export const POST_IMAGE_JPEG_QUALITY = 0.9;
 export const POST_IMAGE_URL_TTL_SECONDS = 60 * 60;
 export const POST_IMAGE_URL_EXPIRY_SAFETY_MS = 60_000;
 

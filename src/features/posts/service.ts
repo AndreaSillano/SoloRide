@@ -27,10 +27,15 @@ import {
 
 const POST_SELECT = `
   id, ride_id, user_id, image_path, description, latitude, longitude,
-  location_name, scheduled_date, created_at, updated_at,
+  location_name, scheduled_date, is_temporary, expires_at, created_at, updated_at,
   profile:profiles!posts_user_id_fkey(id, username, display_name, avatar_url),
   comments(count)
 `;
+
+/** Hide expired temporary posts until cleanup deletes them. */
+function activeFeedFilter() {
+  return `is_temporary.eq.false,expires_at.gt.${new Date().toISOString()}`;
+}
 
 const COMMENT_SELECT = `
   id, post_id, user_id, content, created_at, updated_at,
@@ -103,6 +108,7 @@ export async function getRideFeedPage(
     .from('posts')
     .select(POST_SELECT)
     .eq('ride_id', validRideId)
+    .or(activeFeedFilter())
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
     .limit(RIDE_FEED_PAGE_SIZE + 1);
@@ -127,9 +133,13 @@ export async function getPost(postId: string): Promise<PostRecord> {
     .from('posts')
     .select(POST_SELECT)
     .eq('id', validPostId)
-    .single();
+    .or(activeFeedFilter())
+    .maybeSingle();
 
   if (error) throw mapDatabaseError(error, 'The post could not be loaded.');
+  if (!data) {
+    throw new PostDataError('NOT_FOUND', 'That post no longer exists.');
+  }
   return parseFeedPost(data);
 }
 
@@ -208,6 +218,7 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord> {
     throw mapUploadError(uploadError);
   }
 
+  const isTemporary = parsed.data.isTemporary;
   const { data: inserted, error: insertError } = await supabase
     .from('posts')
     .insert({
@@ -220,6 +231,11 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord> {
       longitude: parsed.data.longitude,
       location_name: parsed.data.locationName,
       scheduled_date: parsed.data.scheduledDate,
+      is_temporary: isTemporary,
+      // DB trigger overwrites this for temps; required by check constraint.
+      expires_at: isTemporary
+        ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+        : null,
     })
     .select(POST_SELECT)
     .single();

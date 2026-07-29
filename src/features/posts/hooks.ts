@@ -131,6 +131,7 @@ export function useCreatePost() {
         queryKey: ['week-posted-status', post.ride_id],
       });
       void queryClient.invalidateQueries({ queryKey: ['rides-due-today'] });
+      void queryClient.invalidateQueries({ queryKey: ['camera-rides'] });
     },
   });
 }
@@ -159,6 +160,7 @@ export function useDeletePost() {
         queryKey: ['week-posted-status', variables.rideId],
       });
       void queryClient.invalidateQueries({ queryKey: ['rides-due-today'] });
+      void queryClient.invalidateQueries({ queryKey: ['camera-rides'] });
     },
   });
 }

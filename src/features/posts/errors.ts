@@ -1,6 +1,7 @@
 export type PostDataErrorCode =
   | 'AUTH_REQUIRED'
   | 'DUPLICATE_POST'
+  | 'TEMPORARY_LIMIT'
   | 'INVALID_INPUT'
   | 'NETWORK'
   | 'IMAGE_PROCESSING'
@@ -50,6 +51,7 @@ export function mapDatabaseError(error: unknown, fallback: string): PostDataErro
   }
 
   const details = errorLike(error);
+  const message = String(details.message ?? '');
   if (details.code === '23505') {
     return new PostDataError(
       'DUPLICATE_POST',
@@ -57,10 +59,31 @@ export function mapDatabaseError(error: unknown, fallback: string): PostDataErro
       { cause: error },
     );
   }
+  if (
+    details.code === 'P0001' ||
+    message.toLowerCase().includes('temporary photo limit')
+  ) {
+    return new PostDataError(
+      'TEMPORARY_LIMIT',
+      'You already have 3 temporary photos active on this Ride.',
+      { cause: error },
+    );
+  }
   if (details.code === 'PGRST116') {
     return new PostDataError('NOT_FOUND', 'That post no longer exists.', {
       cause: error,
     });
+  }
+  if (
+    message.toLowerCase().includes('permission denied') &&
+    (message.toLowerCase().includes('is_temporary') ||
+      message.toLowerCase().includes('expires_at'))
+  ) {
+    return new PostDataError(
+      'DATABASE',
+      'Temporary posts need a database update. Apply the latest SoloRide migrations and try again.',
+      { cause: error },
+    );
   }
   return new PostDataError('DATABASE', fallback, { cause: error });
 }

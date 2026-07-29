@@ -125,19 +125,23 @@ export function RideOverview({
                     : 'No more posting days'}
             </Text>
             <Button
-              disabled={!posting.canPost}
+              disabled={data.is_archived}
               onPress={() =>
                 router.push({ pathname: '/camera', params: { rideId } })
               }
             >
-              {posting.hasPosted
-                ? 'Photo posted'
-                : !posting.isRequiredToday
-                  ? 'Take a bonus photo'
-                  : 'Take today’s photo'}
+              {data.is_archived
+                ? 'Ride archived'
+                : posting.canPost
+                  ? posting.isRequiredToday
+                    ? 'Take today’s photo'
+                    : 'Take a bonus photo'
+                  : 'Share a 24h photo'}
             </Button>
-            {!posting.scheduledToday && !data.is_archived ? (
-              <Body muted>Posting opens only on a scheduled day.</Body>
+            {!data.is_archived && !posting.canPost ? (
+              <Body muted>
+                Outside scheduled days, photos last 24 hours and don’t count as a publication.
+              </Body>
             ) : null}
           </Card>
 

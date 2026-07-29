@@ -70,8 +70,27 @@ function mutationParams(input: CreateRideInput) {
     p_notification_time: values.notificationTime,
     p_weekdays: [...values.weekdays].sort((a, b) => a - b),
     p_strict_schedule: values.strictSchedule,
-    p_local_date: localDateParam(),
   };
+}
+
+export async function createRide(input: CreateRideInput): Promise<Ride> {
+  const { data, error } = await supabase.rpc('create_ride', {
+    ...mutationParams(input),
+    p_local_date: localDateParam(),
+  });
+  if (error) throw mapRideError(error);
+  return unwrapRide(data);
+}
+
+export async function updateRide(input: UpdateRideInput): Promise<Ride> {
+  const { rideId, ...form } = input;
+  const { data, error } = await supabase.rpc('update_ride_with_schedule', {
+    p_ride_id: rideId,
+    ...mutationParams(form),
+  });
+
+  if (error) throw mapRideError(error);
+  return unwrapRide(data);
 }
 
 function normalizePreviewStatus(status: unknown): RidePreviewStatus {
@@ -199,23 +218,6 @@ export async function previewRideByCode(code: string): Promise<RidePreview> {
   return toPreview(data);
 }
 
-export async function createRide(input: CreateRideInput): Promise<Ride> {
-  const { data, error } = await supabase.rpc('create_ride', mutationParams(input));
-  if (error) throw mapRideError(error);
-  return unwrapRide(data);
-}
-
-export async function updateRide(input: UpdateRideInput): Promise<Ride> {
-  const { rideId, ...form } = input;
-  const { data, error } = await supabase.rpc('update_ride_with_schedule', {
-    p_ride_id: rideId,
-    ...mutationParams(form),
-  });
-
-  if (error) throw mapRideError(error);
-  return unwrapRide(data);
-}
-
 export async function joinRideByCode(code: string): Promise<Ride> {
   const { data, error } = await supabase.rpc('join_ride_by_code', {
     p_code: parseCode(code),
@@ -262,6 +264,7 @@ export async function fetchPostedTodayStatus(
     .eq('ride_id', rideId)
     .eq('user_id', userId)
     .eq('scheduled_date', scheduledDate)
+    .eq('is_temporary', false)
     .maybeSingle();
 
   if (error) throw mapRideError(error);
@@ -281,6 +284,7 @@ export async function fetchWeekPostStatus(
     .select('id')
     .eq('ride_id', rideId)
     .eq('user_id', userId)
+    .eq('is_temporary', false)
     .gte('scheduled_date', weekStart)
     .lte('scheduled_date', weekEnd)
     .maybeSingle();

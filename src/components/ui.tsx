@@ -520,6 +520,16 @@ function formatFeedTimestamp(isoDate: string) {
   return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
+function formatRemainingTime(expiresAt: string | null | undefined) {
+  if (!expiresAt) return null;
+  const remainingMs = new Date(expiresAt).getTime() - Date.now();
+  if (remainingMs <= 0) return null;
+  const remainingMinutes = Math.ceil(remainingMs / 60_000);
+  if (remainingMinutes < 60) return `${remainingMinutes}m left`;
+  const remainingHours = Math.ceil(remainingMinutes / 60);
+  return `${remainingHours}h left`;
+}
+
 export function FeedPost({
   post,
   onPress,
@@ -536,6 +546,80 @@ export function FeedPost({
 }) {
   const author = formatProfileName(post.profile);
   const commentCount = getCommentCount(post);
+  const remaining = formatRemainingTime(post.expires_at);
+
+  if (post.is_temporary) {
+    return (
+      <View style={styles.feedItemTemporary}>
+        <Pressable accessibilityRole="button" onPress={onPress}>
+          <View style={styles.tempPhotoWrap}>
+            <PostImage aspectRatio={3 / 4} post={post} style={styles.tempPhoto} />
+            <View style={styles.tempOverlay}>
+              <Avatar profile={post.profile} size={34} />
+              <View style={styles.feedHeaderText}>
+                <Text style={styles.tempAuthor}>{author}</Text>
+                {post.location_name ? (
+                  <Text style={styles.tempMeta} numberOfLines={1}>
+                    ⌖ {post.location_name}
+                  </Text>
+                ) : null}
+              </View>
+              {isOwnPost && onDelete ? (
+                <Pressable
+                  accessibilityLabel="Delete photo"
+                  accessibilityRole="button"
+                  disabled={deleting}
+                  hitSlop={10}
+                  onPress={onDelete}
+                  style={({ pressed }) => [styles.feedDelete, pressed && styles.pressed]}
+                >
+                  {deleting ? (
+                    <ActivityIndicator color={colors.white} size="small" />
+                  ) : (
+                    <Ionicons color={colors.white} name="trash-outline" size={18} />
+                  )}
+                </Pressable>
+              ) : null}
+            </View>
+            {remaining ? (
+              <View style={styles.tempTimerBadge} pointerEvents="none">
+                <Text style={styles.tempTimerText}>{remaining}</Text>
+              </View>
+            ) : null}
+          </View>
+        </Pressable>
+
+        <View style={styles.feedActions}>
+          <Pressable
+            accessibilityLabel="View comments"
+            accessibilityRole="button"
+            hitSlop={10}
+            onPress={onPress}
+            style={({ pressed }) => pressed && styles.pressed}
+          >
+            <Ionicons color={colors.text} name="chatbubble-outline" size={23} />
+          </Pressable>
+        </View>
+
+        {post.description ? (
+          <Text style={styles.feedCaption}>
+            <Text style={styles.feedAuthor}>{author} </Text>
+            {post.description}
+          </Text>
+        ) : null}
+
+        <Pressable accessibilityRole="button" onPress={onPress}>
+          <Text style={styles.feedViewComments}>
+            {commentCount === 0
+              ? 'Add a comment'
+              : commentCount === 1
+                ? 'View 1 comment'
+                : `View all ${commentCount} comments`}
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.feedItem}>
@@ -743,6 +827,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingBottom: spacing.sm,
   },
+  feedItemTemporary: {
+    backgroundColor: colors.background,
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingBottom: spacing.sm,
+  },
   feedHeader: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -757,6 +847,43 @@ const styles = StyleSheet.create({
   feedTime: { color: colors.muted, fontSize: 12 },
   feedDelete: { paddingLeft: spacing.xs },
   feedImage: { aspectRatio: 1 },
+  tempPhotoWrap: {
+    position: 'relative',
+    width: '100%',
+  },
+  tempPhoto: {
+    aspectRatio: 3 / 4,
+    width: '100%',
+  },
+  tempOverlay: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(12, 18, 15, 0.42)',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    left: 0,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  tempAuthor: { color: colors.white, fontSize: 14, fontWeight: '800' },
+  tempMeta: { color: 'rgba(255,255,255,0.82)', fontSize: 12, fontWeight: '600' },
+  tempTimerBadge: {
+    backgroundColor: 'rgba(12, 18, 15, 0.55)',
+    borderRadius: radius.pill,
+    bottom: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+    position: 'absolute',
+    right: spacing.sm,
+  },
+  tempTimerText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
   feedActions: {
     alignItems: 'center',
     flexDirection: 'row',

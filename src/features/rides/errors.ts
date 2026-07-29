@@ -91,6 +91,13 @@ export function mapRideError(error: unknown): RideProductError {
   if (text.includes('not found') || databaseCode === 'P0002') {
     return new RideProductError('not_found', undefined, { cause: error });
   }
+  if (text.includes('exclude existing posts') || text.includes('new weekdays')) {
+    return new RideProductError(
+      'validation',
+      'Those posting days would leave out an existing permanent photo. Keep those days, or delete that photo first.',
+      { cause: error },
+    );
+  }
   if (text.includes('date') || text.includes('schedule') || databaseCode === '22023') {
     return new RideProductError('validation', undefined, { cause: error });
   }

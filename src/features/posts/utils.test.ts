@@ -53,7 +53,19 @@ describe('post data utilities', () => {
       locationName: 'Riverside',
       latitude: null,
       longitude: null,
+      isTemporary: false,
     });
+  });
+
+  it('accepts temporary post input', () => {
+    const result = createPostInputSchema.parse({
+      rideId,
+      imageUri: 'file:///photo.jpg',
+      scheduledDate: '2026-07-28',
+      isTemporary: true,
+    });
+
+    expect(result.isTemporary).toBe(true);
   });
 
   it('rejects incomplete coordinate pairs', () => {
@@ -72,6 +84,12 @@ describe('post data utilities', () => {
       'DUPLICATE_POST',
     );
     expect(
+      mapDatabaseError(
+        { code: 'P0001', message: 'Temporary photo limit reached (max 3 active per ride)' },
+        'fallback',
+      ).code,
+    ).toBe('TEMPORARY_LIMIT');
+    expect(
       mapUploadError(new TypeError('Network request failed')).code,
     ).toBe('NETWORK');
   });
@@ -88,6 +106,8 @@ describe('post data utilities', () => {
       longitude: '-121.3',
       location_name: 'Bend',
       scheduled_date: '2026-07-28',
+      is_temporary: true,
+      expires_at: '2026-07-29T12:00:00Z',
       created_at: '2026-07-28T12:00:00Z',
       updated_at: '2026-07-28T12:00:00Z',
       profile: null,
@@ -97,6 +117,30 @@ describe('post data utilities', () => {
     expect(parsed.latitude).toBeCloseTo(44.05);
     expect(parsed.longitude).toBeCloseTo(-121.3);
     expect(parsed.profile).toBeNull();
+    expect(parsed.is_temporary).toBe(true);
+    expect(parsed.expires_at).toBe('2026-07-29T12:00:00Z');
+  });
+
+  it('defaults missing temporary flags on feed rows', async () => {
+    const { postSchema } = await import('./schemas');
+    const parsed = postSchema.parse({
+      id: postId,
+      ride_id: rideId,
+      user_id: userId,
+      image_path: `${rideId}/${userId}/${postId}.jpg`,
+      description: null,
+      latitude: null,
+      longitude: null,
+      location_name: null,
+      scheduled_date: '2026-07-28',
+      created_at: '2026-07-28T12:00:00Z',
+      updated_at: '2026-07-28T12:00:00Z',
+      profile: null,
+      comments: null,
+    });
+
+    expect(parsed.is_temporary).toBe(false);
+    expect(parsed.expires_at).toBeNull();
   });
 
   it('unwraps array-shaped profile embeds from PostgREST', async () => {

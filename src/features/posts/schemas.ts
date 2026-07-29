@@ -49,6 +49,8 @@ export const postSchema = z.object({
   longitude: nullableCoordinate(-180, 180),
   location_name: z.string().nullable(),
   scheduled_date: scheduledDateSchema,
+  is_temporary: z.boolean().default(false),
+  expires_at: z.string().nullable().default(null),
   created_at: z.string(),
   updated_at: z.string(),
   profile: embeddedProfileSchema,
@@ -69,11 +71,12 @@ export const createPostInputSchema = z
   .object({
     rideId: uuidSchema,
     imageUri: z.string().min(1, 'Choose an image first.'),
-    description: nullableTrimmedString(2000),
+    description: nullableTrimmedString(50),
     latitude: z.number().min(-90).max(90).optional().nullable(),
     longitude: z.number().min(-180).max(180).optional().nullable(),
     locationName: nullableTrimmedString(200),
     scheduledDate: scheduledDateSchema,
+    isTemporary: z.boolean().optional().default(false),
   })
   .superRefine((value, context) => {
     if ((value.latitude == null) !== (value.longitude == null)) {
@@ -88,6 +91,7 @@ export const createPostInputSchema = z
     ...value,
     latitude: value.latitude ?? null,
     longitude: value.longitude ?? null,
+    isTemporary: value.isTemporary ?? false,
   }));
 
 export const createCommentInputSchema = z.object({

@@ -14,6 +14,7 @@ export type SocialNotificationData = {
   rideId: string;
   postId: string;
   commentId?: string;
+  isTemporary?: boolean;
 };
 
 function pushProjectId(): string | null {

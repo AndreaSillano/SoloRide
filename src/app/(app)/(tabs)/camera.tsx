@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
-  Keyboard,
   Linking,
   Platform,
   Pressable,
@@ -35,7 +34,11 @@ import {
   useCreatePost,
   type LocationSuggestion,
 } from '@/features/posts';
-import { useRidesDueToday, type DueTodayRide } from '@/features/rides';
+import {
+  MAX_ACTIVE_TEMPORARY_POSTS,
+  useCameraRides,
+  type CameraRide,
+} from '@/features/rides';
 import { colors, radius, shadows, spacing } from '@/theme';
 
 type Facing = 'back' | 'front';
@@ -45,12 +48,14 @@ type Facing = 'back' | 'front';
 const TAB_BAR_CLEARANCE = 56;
 /** Publish button + vertical padding when the keyboard is open. */
 const PUBLISH_BAR_HEIGHT = spacing.sm + 54 + spacing.sm;
+/** Extra scroll clearance above the sticky publish bar while typing. */
+const KEYBOARD_SCROLL_EXTRA = spacing.xl + spacing.md;
 
 export default function CameraScreen() {
   const { rideId: preferredRideId } = useLocalSearchParams<{ rideId?: string }>();
   const { user } = useCurrentUser();
   const insets = useSafeAreaInsets();
-  const due = useRidesDueToday(user?.id);
+  const cameraRides = useCameraRides(user?.id);
   const createPost = useCreatePost();
   const notifications = useSoloRideNotifications(user?.id ?? null);
   const [permission, requestPermission, getPermission] = useCameraPermissions();
@@ -60,6 +65,7 @@ export default function CameraScreen() {
   const [draftUri, setDraftUri] = useState<string | null>(null);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [selectedRideId, setSelectedRideId] = useState<string | null>(null);
+  const [wantTemporary, setWantTemporary] = useState(false);
   const [description, setDescription] = useState('');
   const [locationQuery, setLocationQuery] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<LocationSuggestion | null>(null);
@@ -67,13 +73,21 @@ export default function CameraScreen() {
   const [busy, setBusy] = useState<'capture' | 'gallery' | 'location' | 'search' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rideMenuOpen, setRideMenuOpen] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const skipLocationSearch = useRef(false);
 
-  const postableRides = useMemo(() => due.data?.postableRides ?? [], [due.data?.postableRides]);
+  const activeRides = useMemo(() => cameraRides.data ?? [], [cameraRides.data]);
   const selectedRide = useMemo(
-    () => postableRides.find((ride) => ride.id === selectedRideId) ?? null,
-    [postableRides, selectedRideId],
+    () => activeRides.find((ride) => ride.id === selectedRideId) ?? null,
+    [activeRides, selectedRideId],
+  );
+  const isTemporary = Boolean(
+    selectedRide && (!selectedRide.canPublishPermanent || wantTemporary),
+  );
+  const canShareTemporary = Boolean(
+    selectedRide && selectedRide.temporaryRemaining > 0,
+  );
+  const canPublish = Boolean(
+    selectedRide && (isTemporary ? canShareTemporary : selectedRide.canPublishPermanent),
   );
 
   useFocusEffect(
@@ -87,34 +101,27 @@ export default function CameraScreen() {
   );
 
   useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, (event) => {
-      setKeyboardHeight(event.endCoordinates.height);
-    });
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      setKeyboardHeight(0);
-    });
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!postableRides.length) {
+    if (!activeRides.length) {
       setSelectedRideId(null);
       return;
     }
     setSelectedRideId((current) => {
-      if (current && postableRides.some((ride) => ride.id === current)) return current;
-      if (preferredRideId && postableRides.some((ride) => ride.id === preferredRideId)) {
+      if (current && activeRides.some((ride) => ride.id === current)) return current;
+      if (preferredRideId && activeRides.some((ride) => ride.id === preferredRideId)) {
         return preferredRideId;
       }
-      if (postableRides.length === 1) return postableRides[0]!.id;
+      if (activeRides.length === 1) return activeRides[0]!.id;
       return null;
     });
-  }, [postableRides, preferredRideId]);
+  }, [activeRides, preferredRideId]);
+
+  useEffect(() => {
+    if (!selectedRide?.canPublishPermanent) {
+      setWantTemporary(true);
+      return;
+    }
+    setWantTemporary(false);
+  }, [selectedRide?.id, selectedRide?.canPublishPermanent]);
 
   useEffect(() => {
     if (skipLocationSearch.current) {
@@ -158,6 +165,7 @@ export default function CameraScreen() {
     setSelectedLocation(null);
     setLocationSuggestions([]);
     setRideMenuOpen(false);
+    setWantTemporary(false);
     setError(null);
   };
 
@@ -240,8 +248,9 @@ export default function CameraScreen() {
   };
 
   const publish = async () => {
-    const ride = postableRides.find((entry) => entry.id === selectedRideId);
-    if (!imageUri || !ride) return;
+    const ride = activeRides.find((entry) => entry.id === selectedRideId);
+    if (!imageUri || !ride || !canPublish) return;
+    const temporary = !ride.canPublishPermanent || wantTemporary;
     setError(null);
     try {
       const typedName = locationQuery.trim() || null;
@@ -249,16 +258,18 @@ export default function CameraScreen() {
         rideId: ride.id,
         imageUri,
         description,
-        scheduledDate: ride.scheduledToday,
+        scheduledDate: ride.postDate,
+        isTemporary: temporary,
         latitude: selectedLocation?.latitude ?? null,
         longitude: selectedLocation?.longitude ?? null,
         locationName: selectedLocation?.locationName ?? typedName,
       });
-      await notifications.onPostCreated(ride.id, ride.scheduledToday).catch(() => []);
+      if (!temporary && ride.scheduledToday) {
+        await notifications.onPostCreated(ride.id, ride.scheduledToday).catch(() => []);
+      }
       resetCapture();
       // NativeTabs needs navigate (NAVIGATE), not replace, to leave Camera for Rides.
       router.navigate({ pathname: '/', params: { selectRideId: ride.id } });
-
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The photo could not be published.');
     }
@@ -280,21 +291,21 @@ export default function CameraScreen() {
     }
   };
 
-  if (due.isPending) {
+  if (cameraRides.isPending) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <StatePanel loading message="Checking today’s Rides…" />
+        <StatePanel loading message="Checking your Rides…" />
       </SafeAreaView>
     );
   }
 
-  if (!postableRides.length) {
+  if (!activeRides.length) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.emptyWrap}>
           <StatePanel
-            message="No Ride is waiting for a photo today. Come back on a scheduled day."
-            title="Nothing due today"
+            message="Join or create an active Ride to share photos anytime."
+            title="No active Rides"
           />
         </View>
       </SafeAreaView>
@@ -327,22 +338,53 @@ export default function CameraScreen() {
           ? 'Pick a suggestion above or keep typing.'
           : null;
 
-    const footerPadClosed = Math.max(insets.bottom, spacing.sm) + TAB_BAR_CLEARANCE;
-    const keyboardOpen = keyboardHeight > 0;
+    const footerPad = Math.max(insets.bottom, spacing.sm);
+    const temporaryForced = Boolean(selectedRide && !selectedRide.canPublishPermanent);
+    const temporaryHint = !selectedRide
+      ? null
+      : isTemporary && !temporaryForced
+        ? 'Lasts 24 hours and doesn’t count as today’s publication.'
+        : !isTemporary
+          ? 'Stays in the feed and counts as today’s publication.'
+          : null;
+    const composeTitle = temporaryForced
+      ? '24-hour share'
+      : isTemporary
+        ? '24h photo'
+        : 'New photo';
+    const publishLabel = temporaryForced
+      ? canShareTemporary
+        ? 'Share for 24 hours'
+        : 'No 24h shares left'
+      : isTemporary
+        ? 'Share for 24h'
+        : 'Publish';
+    const tempAvailability =
+      selectedRide && (temporaryForced || isTemporary)
+        ? `${selectedRide.temporaryRemaining}/${MAX_ACTIVE_TEMPORARY_POSTS} available`
+        : null;
 
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
         <View style={styles.flex}>
           <View style={styles.composeTopBar}>
-            <Text style={styles.composeTitle}>New photo</Text>
+            <Text style={styles.composeTitle}>{composeTitle}</Text>
           </View>
 
           <KeyboardAwareScrollView
-            bottomOffset={PUBLISH_BAR_HEIGHT}
+            bottomOffset={PUBLISH_BAR_HEIGHT + KEYBOARD_SCROLL_EXTRA + footerPad}
             contentContainerStyle={[
               styles.composeContent,
-              { paddingBottom: spacing.xl + spacing.sm + 54 + footerPadClosed },
+              {
+                paddingBottom:
+                  spacing.xl +
+                  PUBLISH_BAR_HEIGHT +
+                  footerPad +
+                  TAB_BAR_CLEARANCE +
+                  KEYBOARD_SCROLL_EXTRA,
+              },
             ]}
+            extraKeyboardSpace={KEYBOARD_SCROLL_EXTRA}
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             keyboardShouldPersistTaps="handled"
             style={styles.flex}
@@ -359,10 +401,20 @@ export default function CameraScreen() {
                 <Text style={styles.previewRetakeText}>Retake</Text>
               </Pressable>
             </View>
+            {isTemporary ? (
+              <Text style={styles.tempPreviewHint}>
+                This photo will disappear from the feed after 24 hours.
+              </Text>
+            ) : null}
 
             <View style={styles.composeForm}>
               <View style={styles.postToBlock}>
-                <Text style={styles.sectionLabel}>Post to</Text>
+                <View style={styles.postToLabelRow}>
+                  <Text style={styles.sectionLabel}>Post to</Text>
+                  {tempAvailability ? (
+                    <Text style={styles.captionMeta}>{tempAvailability}</Text>
+                  ) : null}
+                </View>
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => setRideMenuOpen((open) => !open)}
@@ -376,16 +428,18 @@ export default function CameraScreen() {
                       <View
                         style={[
                           styles.rideBadge,
-                          selectedRide.isRequiredToday
+                          selectedRide.canPublishPermanent
                             ? styles.rideBadgeDue
                             : styles.rideBadgeOptional,
                         ]}
                       >
                         <Ionicons
                           color={
-                            selectedRide.isRequiredToday ? colors.accent : colors.muted
+                            selectedRide.canPublishPermanent ? colors.accent : colors.muted
                           }
-                          name={selectedRide.isRequiredToday ? 'camera' : 'camera-outline'}
+                          name={
+                            selectedRide.canPublishPermanent ? 'camera' : 'time-outline'
+                          }
                           size={14}
                         />
                       </View>
@@ -399,11 +453,12 @@ export default function CameraScreen() {
                 </Pressable>
                 {rideMenuOpen ? (
                   <View style={styles.rideDropdownPanel}>
-                    {postableRides.map((ride) => (
+                    {activeRides.map((ride) => (
                       <RideOption
                         key={ride.id}
                         onPress={() => {
                           setSelectedRideId(ride.id);
+                          setWantTemporary(!ride.canPublishPermanent);
                           setRideMenuOpen(false);
                         }}
                         ride={ride}
@@ -414,20 +469,77 @@ export default function CameraScreen() {
                 ) : null}
               </View>
 
-              <Field
-                autoCapitalize="sentences"
-                label="Caption"
-                maxLength={2000}
-                multiline
-                onChangeText={setDescription}
-                onFocus={() => setRideMenuOpen(false)}
-                placeholder="A small moment from today…"
-                style={styles.description}
-                value={description}
-              />
+              {selectedRide?.canPublishPermanent ? (
+                <View style={styles.modeBlock}>
+                  <Text style={styles.sectionLabel}>Post type</Text>
+                  <View style={styles.modeRow}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => setWantTemporary(false)}
+                      style={({ pressed }) => [
+                        styles.modeChip,
+                        !wantTemporary && styles.modeChipSelected,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.modeChipText,
+                          !wantTemporary && styles.modeChipTextSelected,
+                        ]}
+                      >
+                        Permanent
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={!canShareTemporary}
+                      onPress={() => setWantTemporary(true)}
+                      style={({ pressed }) => [
+                        styles.modeChip,
+                        wantTemporary && styles.modeChipSelected,
+                        pressed && styles.pressed,
+                        !canShareTemporary && styles.disabled,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.modeChipText,
+                          wantTemporary && styles.modeChipTextSelected,
+                        ]}
+                      >
+                        24 hours
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
+
+              {temporaryHint ? <Text style={styles.hint}>{temporaryHint}</Text> : null}
+
+              <View style={styles.captionBlock}>
+                <View style={styles.captionLabelRow}>
+                  <Text style={styles.sectionLabel}>Caption</Text>
+                  <Text style={styles.captionMeta}>optional</Text>
+                </View>
+                <Field
+                  autoCapitalize="sentences"
+                  maxLength={50}
+                  multiline
+                  onChangeText={setDescription}
+                  onFocus={() => setRideMenuOpen(false)}
+                  placeholder="A small moment from today…"
+                  style={styles.description}
+                  value={description}
+                />
+                <Text style={styles.captionCounter}>{description.length}/50</Text>
+              </View>
 
               <View style={styles.locationBlock}>
-                <Text style={styles.sectionLabel}>Location</Text>
+                <View style={styles.captionLabelRow}>
+                  <Text style={styles.sectionLabel}>Location</Text>
+                  <Text style={styles.captionMeta}>optional</Text>
+                </View>
 
                 {locationSuggestions.length ? (
                   <View style={styles.suggestionList}>
@@ -505,21 +617,17 @@ export default function CameraScreen() {
             </View>
           </KeyboardAwareScrollView>
 
-          <KeyboardStickyView style={styles.composeFooterSticky}>
-            <View
-              style={[
-                styles.composeFooter,
-                {
-                  paddingBottom: keyboardOpen ? spacing.sm : footerPadClosed,
-                },
-              ]}
-            >
+          <KeyboardStickyView
+            offset={{ closed: -TAB_BAR_CLEARANCE, opened: 0 }}
+            style={styles.composeFooterSticky}
+          >
+            <View style={[styles.composeFooter, { paddingBottom: footerPad }]}>
               <Button
-                disabled={!selectedRideId || busy === 'location'}
+                disabled={!selectedRideId || !canPublish || busy === 'location'}
                 loading={createPost.isPending}
                 onPress={() => void publish()}
               >
-                Publish
+                {publishLabel}
               </Button>
             </View>
           </KeyboardStickyView>
@@ -634,11 +742,15 @@ function RideOption({
   selected,
   onPress,
 }: {
-  ride: DueTodayRide;
+  ride: CameraRide;
   selected: boolean;
   onPress: () => void;
 }) {
-  const statusLabel = ride.isRequiredToday ? 'Photo due today' : 'Optional today';
+  const statusLabel = ride.canPublishPermanent
+    ? ride.isRequiredToday
+      ? 'Photo due today'
+      : 'Optional today'
+    : '24h photos only';
 
   return (
     <Pressable
@@ -657,12 +769,12 @@ function RideOption({
       <View
         style={[
           styles.rideStatusChip,
-          ride.isRequiredToday ? styles.rideBadgeDue : styles.rideBadgeOptional,
+          ride.canPublishPermanent ? styles.rideBadgeDue : styles.rideBadgeOptional,
         ]}
       >
         <Ionicons
-          color={ride.isRequiredToday ? colors.accent : colors.muted}
-          name={ride.isRequiredToday ? 'camera' : 'camera-outline'}
+          color={ride.canPublishPermanent ? colors.accent : colors.muted}
+          name={ride.canPublishPermanent ? 'camera' : 'time-outline'}
           size={16}
         />
       </View>
@@ -711,9 +823,11 @@ const styles = StyleSheet.create({
     width: 80,
   },
   shutterInner: {
+    alignItems: 'center',
     backgroundColor: colors.white,
     borderRadius: 32,
     height: 64,
+    justifyContent: 'center',
     width: 64,
   },
   errorOverlay: {
@@ -745,12 +859,20 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     overflow: 'hidden',
     position: 'relative',
-    width: '72%',
+    width: '92%',
     ...shadows.card,
   },
   preview: {
     aspectRatio: 3 / 4,
     width: '100%',
+  },
+  tempPreviewHint: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+    marginTop: -spacing.sm,
+    textAlign: 'center',
   },
   previewRetake: {
     alignItems: 'center',
@@ -827,6 +949,51 @@ const styles = StyleSheet.create({
   },
   rideBadgeDue: { backgroundColor: colors.accentSoft },
   rideBadgeOptional: { backgroundColor: colors.surfaceMuted },
+  modeBlock: { gap: spacing.xs },
+  modeRow: { flexDirection: 'row', gap: spacing.sm },
+  modeChip: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    flex: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  modeChipSelected: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  modeChipText: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  modeChipTextSelected: { color: colors.primary },
+  captionBlock: { gap: spacing.xs },
+  captionLabelRow: {
+    alignItems: 'baseline',
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  postToLabelRow: {
+    alignItems: 'baseline',
+    flexDirection: 'row',
+    gap: spacing.xs,
+    justifyContent: 'space-between',
+  },
+  captionMeta: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  captionCounter: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'right',
+  },
   description: { minHeight: 88, paddingTop: spacing.md, textAlignVertical: 'top' },
   locationBlock: { gap: spacing.xs },
   locationInputRow: {

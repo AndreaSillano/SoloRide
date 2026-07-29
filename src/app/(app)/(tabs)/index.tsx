@@ -75,6 +75,7 @@ export default function HomeScreen() {
       const tasks: Promise<unknown>[] = [
         rides.refetch(),
         queryClient.invalidateQueries({ queryKey: ['rides-due-today'] }),
+        queryClient.invalidateQueries({ queryKey: ['camera-rides'] }),
       ];
       if (selectedRideId) {
         tasks.push(
