@@ -2,7 +2,7 @@
   "expo": {
     "name": "SoloRide",
     "slug": "soloride",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "scheme": "soloride",
     "icon": "./assets/icon.png",
