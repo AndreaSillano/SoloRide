@@ -14,6 +14,8 @@ import {
   Text,
   TextInput,
   type ImageStyle,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   type PressableProps,
   type RefreshControlProps,
   type StyleProp,
@@ -86,9 +88,11 @@ export function Screen({
 export function ScrollScreen({
   children,
   contentStyle,
+  onScroll,
 }: PropsWithChildren<{
   contentStyle?: StyleProp<import('react-native').ViewStyle>;
   keyboardVerticalOffset?: number;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 }>) {
   const headerHeight = useSafeHeaderHeight();
   const insets = useSafeAreaInsets();
@@ -110,6 +114,8 @@ export function ScrollScreen({
           contentInset={{ bottom: KEYBOARD_CLEARANCE }}
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
+          onScroll={onScroll}
+          scrollEventThrottle={onScroll ? 16 : undefined}
           scrollIndicatorInsets={{ bottom: KEYBOARD_CLEARANCE }}
           style={styles.flex}
         >
@@ -126,6 +132,7 @@ export function FixedHeaderScreen({
   contentStyle,
   overlay,
   refreshControl,
+  onScroll,
 }: PropsWithChildren<{
   header: ReactNode;
   contentStyle?: StyleProp<import('react-native').ViewStyle>;
@@ -133,6 +140,7 @@ export function FixedHeaderScreen({
    * should stay fixed to the screen instead of scrolling with content. */
   overlay?: ReactNode;
   refreshControl?: ReactElement<RefreshControlProps>;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
 }>) {
   const insets = useSafeAreaInsets();
 
@@ -154,7 +162,9 @@ export function FixedHeaderScreen({
           contentInset={{ bottom: KEYBOARD_CLEARANCE }}
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
+          onScroll={onScroll}
           refreshControl={refreshControl}
+          scrollEventThrottle={onScroll ? 16 : undefined}
           scrollIndicatorInsets={{ bottom: KEYBOARD_CLEARANCE }}
           style={styles.flex}
         >

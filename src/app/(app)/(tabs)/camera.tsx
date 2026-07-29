@@ -10,11 +10,15 @@ import {
   Linking,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
-} from 'react-native';import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+} from 'react-native';
+import {
+  KeyboardAwareScrollView,
+  KeyboardStickyView,
+} from 'react-native-keyboard-controller';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCurrentUser } from '@/auth/auth-context';
 import { PhotoTextEditor } from '@/components/photo-text-editor';
@@ -39,6 +43,8 @@ type Facing = 'back' | 'front';
 /** Native tab bar sits above the home indicator; safe-area bottom alone
  * doesn't clear the bar when chrome is absolutely positioned. */
 const TAB_BAR_CLEARANCE = 56;
+/** Publish button + vertical padding when the keyboard is open. */
+const PUBLISH_BAR_HEIGHT = spacing.sm + 54 + spacing.sm;
 
 export default function CameraScreen() {
   const { rideId: preferredRideId } = useLocalSearchParams<{ rideId?: string }>();
@@ -47,7 +53,7 @@ export default function CameraScreen() {
   const due = useRidesDueToday(user?.id);
   const createPost = useCreatePost();
   const notifications = useSoloRideNotifications(user?.id ?? null);
-  const [permission, requestPermission] = useCameraPermissions();
+  const [permission, requestPermission, getPermission] = useCameraPermissions();
   const camera = useRef<CameraView>(null);
   const [focused, setFocused] = useState(true);
   const [facing, setFacing] = useState<Facing>('back');
@@ -63,7 +69,6 @@ export default function CameraScreen() {
   const [rideMenuOpen, setRideMenuOpen] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const skipLocationSearch = useRef(false);
-  const composeScroll = useRef<ScrollView>(null);
 
   const postableRides = useMemo(() => due.data?.postableRides ?? [], [due.data?.postableRides]);
   const selectedRide = useMemo(
@@ -74,8 +79,11 @@ export default function CameraScreen() {
   useFocusEffect(
     useCallback(() => {
       setFocused(true);
+      // Permission may have been granted during sign-in onboarding via
+      // requestCoreAppPermissions(); refresh so this tab picks that up.
+      void getPermission();
       return () => setFocused(false);
-    }, []),
+    }, [getPermission]),
   );
 
   useEffect(() => {
@@ -319,6 +327,9 @@ export default function CameraScreen() {
           ? 'Pick a suggestion above or keep typing.'
           : null;
 
+    const footerPadClosed = Math.max(insets.bottom, spacing.sm) + TAB_BAR_CLEARANCE;
+    const keyboardOpen = keyboardHeight > 0;
+
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
         <View style={styles.flex}>
@@ -326,15 +337,14 @@ export default function CameraScreen() {
             <Text style={styles.composeTitle}>New photo</Text>
           </View>
 
-          <ScrollView
-            automaticallyAdjustKeyboardInsets
+          <KeyboardAwareScrollView
+            bottomOffset={PUBLISH_BAR_HEIGHT}
             contentContainerStyle={[
               styles.composeContent,
-              { paddingBottom: spacing.xl + 72 },
+              { paddingBottom: spacing.xl + spacing.sm + 54 + footerPadClosed },
             ]}
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             keyboardShouldPersistTaps="handled"
-            ref={composeScroll}
             style={styles.flex}
           >
             <View style={styles.previewFrame}>
@@ -410,10 +420,7 @@ export default function CameraScreen() {
                 maxLength={2000}
                 multiline
                 onChangeText={setDescription}
-                onFocus={() => {
-                  setRideMenuOpen(false);
-                  setTimeout(() => composeScroll.current?.scrollToEnd({ animated: true }), 100);
-                }}
+                onFocus={() => setRideMenuOpen(false)}
                 placeholder="A small moment from today…"
                 style={styles.description}
                 value={description}
@@ -466,13 +473,7 @@ export default function CameraScreen() {
                       autoCapitalize="words"
                       maxLength={200}
                       onChangeText={updateLocationQuery}
-                      onFocus={() => {
-                        setRideMenuOpen(false);
-                        setTimeout(
-                          () => composeScroll.current?.scrollToEnd({ animated: true }),
-                          100,
-                        );
-                      }}
+                      onFocus={() => setRideMenuOpen(false)}
                       placeholder="Search or type a place"
                       returnKeyType="done"
                       value={locationQuery}
@@ -502,27 +503,26 @@ export default function CameraScreen() {
 
               <ErrorBanner message={error} />
             </View>
-          </ScrollView>
+          </KeyboardAwareScrollView>
 
-          <View
-            style={[
-              styles.composeFooter,
-              {
-                paddingBottom:
-                  keyboardHeight > 0
-                    ? keyboardHeight + spacing.sm
-                    : Math.max(insets.bottom, spacing.sm) + TAB_BAR_CLEARANCE,
-              },
-            ]}
-          >
-            <Button
-              disabled={!selectedRideId || busy === 'location'}
-              loading={createPost.isPending}
-              onPress={() => void publish()}
+          <KeyboardStickyView style={styles.composeFooterSticky}>
+            <View
+              style={[
+                styles.composeFooter,
+                {
+                  paddingBottom: keyboardOpen ? spacing.sm : footerPadClosed,
+                },
+              ]}
             >
-              Publish
-            </Button>
-          </View>
+              <Button
+                disabled={!selectedRideId || busy === 'location'}
+                loading={createPost.isPending}
+                onPress={() => void publish()}
+              >
+                Publish
+              </Button>
+            </View>
+          </KeyboardStickyView>
         </View>
       </SafeAreaView>
     );
@@ -881,6 +881,12 @@ const styles = StyleSheet.create({
   },
   suggestionText: { color: colors.text, flex: 1, fontSize: 14, fontWeight: '600' },
   hint: { color: colors.muted, fontSize: 13, fontWeight: '500', marginTop: 2 },
+  composeFooterSticky: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+  },
   composeFooter: {
     backgroundColor: colors.background,
     borderTopColor: colors.border,

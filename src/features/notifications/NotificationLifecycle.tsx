@@ -18,6 +18,7 @@ import {
 } from './push';
 import {
   cancelSoloRideNotifications,
+  getSoloRideNotificationPermission,
   reconcileSoloRideNotifications,
 } from './service';
 
@@ -30,7 +31,7 @@ export function requestNotificationRefresh() {
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldPlaySound: true,
-    shouldSetBadge: false,
+    shouldSetBadge: true,
     shouldShowBanner: true,
     shouldShowList: true,
   }),
@@ -86,29 +87,54 @@ export function NotificationLifecycle() {
   const { user } = useAuth();
   const previousUserId = useRef<string | null>(null);
   const reconciling = useRef(false);
+  const pendingReconcile = useRef(false);
 
   const reconcile = useCallback(async () => {
-    if (!user || reconciling.current) return;
+    if (!user) return;
+    // Permission prompts and AppState can fire while a pass is in flight;
+    // queue a follow-up instead of dropping the refresh that runs after grant.
+    if (reconciling.current) {
+      pendingReconcile.current = true;
+      return;
+    }
+
     reconciling.current = true;
     try {
-      const enabled = await getNotificationsEnabled(user.id);
-      if (!enabled) {
-        await cancelSoloRideNotifications({ userId: user.id });
-        await unregisterExpoPushToken();
-        return;
-      }
+      do {
+        pendingReconcile.current = false;
+        const userId = user.id;
+        const enabled = await getNotificationsEnabled(userId);
+        if (!enabled) {
+          await cancelSoloRideNotifications({ userId });
+          await unregisterExpoPushToken();
+          continue;
+        }
 
-      const plan = await loadNotificationPlan(user.id);
-      const result = await reconcileSoloRideNotifications({ userId: user.id, ...plan });
-      if (result.permission === 'granted') {
-        await registerExpoPushToken(user.id);
-      } else {
-        await unregisterExpoPushToken();
-      }
-    } catch {
-      // Foreground refresh is best effort; screen queries expose actionable errors.
+        // Push token sync is independent of local reminder scheduling so a
+        // rides/posts fetch failure cannot leave push_tokens empty.
+        try {
+          const permission = await getSoloRideNotificationPermission();
+          if (permission === 'granted') {
+            await registerExpoPushToken(userId);
+          } else {
+            await unregisterExpoPushToken();
+          }
+        } catch {
+          // Token sync is best effort.
+        }
+
+        try {
+          const plan = await loadNotificationPlan(userId);
+          await reconcileSoloRideNotifications({ userId, ...plan });
+        } catch {
+          // Local reminder scheduling is best effort.
+        }
+      } while (pendingReconcile.current);
     } finally {
       reconciling.current = false;
+      if (pendingReconcile.current) {
+        void reconcile();
+      }
     }
   }, [user]);
 
@@ -120,12 +146,16 @@ export function NotificationLifecycle() {
     }
     previousUserId.current = user?.id ?? null;
 
+    void Notifications.setBadgeCountAsync(0).catch(() => undefined);
     void reconcile();
   }, [reconcile, user?.id]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void reconcile();
+      if (state === 'active') {
+        void Notifications.setBadgeCountAsync(0).catch(() => undefined);
+        void reconcile();
+      }
     });
     const listener = () => void reconcile();
     refreshListeners.add(listener);

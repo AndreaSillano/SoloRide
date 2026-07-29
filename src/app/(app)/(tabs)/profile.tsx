@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -39,6 +39,25 @@ import { ProfileDataError, useRemoveAvatar, useUpdateAvatar } from '@/features/p
 import { groupUserRides, useUserRides } from '@/features/rides';
 import { colors, radius, spacing } from '@/theme';
 
+function OpenSettingsLink({ onOpen }: { onOpen?: () => void }) {
+  return (
+    <Pressable
+      accessibilityHint="Opens SoloRide settings on this device"
+      accessibilityRole="button"
+      hitSlop={8}
+      onPress={() => {
+        onOpen?.();
+        void Linking.openSettings();
+      }}
+      style={({ pressed }) => [styles.settingsLink, pressed && styles.pressed]}
+    >
+      <Ionicons color={colors.primary} name="settings-outline" size={14} />
+      <Text style={styles.settingsLinkText}>Open Settings</Text>
+      <Ionicons color={colors.primary} name="open-outline" size={12} />
+    </Pressable>
+  );
+}
+
 export default function ProfileScreen() {
   const { logout } = useAuth();
   const { user, profile, profileError, refreshProfile } = useCurrentUser();
@@ -57,6 +76,7 @@ export default function ProfileScreen() {
   const [busy, setBusy] = useState<
     'logout' | 'toggle' | 'camera' | 'location' | 'avatar' | null
   >(null);
+  const awaitingNotificationSettings = useRef(false);
 
   const groups = useMemo(() => groupUserRides(rides.data ?? []), [rides.data]);
   const username = profile?.username ?? null;
@@ -79,14 +99,29 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        void getCameraPermission();
-        void refreshLocationPermission();
-        void notifications.getPermission().then(setPermission);
-      }
+      if (state !== 'active' || !user?.id) return;
+      void getCameraPermission();
+      void refreshLocationPermission();
+      void notifications.getPermission().then(async (next) => {
+        setPermission(next);
+        if (next === 'granted' && awaitingNotificationSettings.current) {
+          awaitingNotificationSettings.current = false;
+          setAlertsEnabled(true);
+          await setNotificationsEnabled(user.id, true);
+          requestNotificationRefresh();
+          return;
+        }
+        if (next !== 'granted') {
+          const enabled = await getNotificationsEnabled(user.id);
+          if (!enabled) return;
+          setAlertsEnabled(false);
+          await setNotificationsEnabled(user.id, false);
+          requestNotificationRefresh();
+        }
+      });
     });
     return () => sub.remove();
-  }, [getCameraPermission, notifications]);
+  }, [getCameraPermission, notifications, user?.id]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -262,29 +297,79 @@ export default function ProfileScreen() {
     setBusy('toggle');
     setError(null);
     const previous = alertsEnabled;
-    setAlertsEnabled(next);
     try {
       if (next) {
+        // iOS will not show the permission dialog again after a deny / Settings
+        // revoke — the user must re-enable Notifications there.
+        if (permission === 'denied') {
+          awaitingNotificationSettings.current = true;
+          Alert.alert(
+            'Enable notifications in Settings',
+            'iOS won’t ask again from SoloRide. Turn on Allow Notifications (and Badges) for SoloRide, then return here.',
+            [
+              {
+                text: 'Cancel',
+                style: 'cancel',
+                onPress: () => {
+                  awaitingNotificationSettings.current = false;
+                },
+              },
+              { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+            ],
+          );
+          return;
+        }
+
         const nextPermission = await requestSoloRideNotificationPermission();
         setPermission(nextPermission);
         if (nextPermission !== 'granted') {
           setAlertsEnabled(false);
           await setNotificationsEnabled(user.id, false);
-          setError(
-            nextPermission === 'denied'
-              ? 'Notifications are blocked for SoloRide. Enable them in system Settings.'
-              : 'Notifications are unavailable on this device.',
-          );
+          requestNotificationRefresh();
+          if (nextPermission === 'denied') {
+            awaitingNotificationSettings.current = true;
+            Alert.alert(
+              'Enable notifications in Settings',
+              'iOS won’t ask again from SoloRide. Turn on Allow Notifications (and Badges) for SoloRide, then return here.',
+              [
+                {
+                  text: 'Cancel',
+                  style: 'cancel',
+                  onPress: () => {
+                    awaitingNotificationSettings.current = false;
+                  },
+                },
+                { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+              ],
+            );
+            return;
+          }
+          setError('Notifications are unavailable on this device.');
           return;
         }
+        setAlertsEnabled(true);
+        await setNotificationsEnabled(user.id, true);
+        requestNotificationRefresh();
+        return;
       }
-      await setNotificationsEnabled(user.id, next);
+
+      setAlertsEnabled(false);
+      await setNotificationsEnabled(user.id, false);
       requestNotificationRefresh();
+      Alert.alert(
+        'Ride alerts turned off',
+        'Reminders and push are stopped for this account. To also revoke system permission, disable Notifications in Settings.',
+        [
+          { text: 'Done', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+        ],
+      );
     } catch {
       setAlertsEnabled(previous);
       setError('Notification preference could not be updated.');
     } finally {
       setBusy(null);
+      void notifications.getPermission().then(setPermission);
     }
   };
 
@@ -381,11 +466,7 @@ export default function ProfileScreen() {
             <Text style={styles.rowSubtitle}>
               Take photos for your Rides from the Camera tab.
             </Text>
-            {cameraBlocked ? (
-              <Button variant="secondary" onPress={() => void Linking.openSettings()}>
-                Open system Settings
-              </Button>
-            ) : null}
+            {cameraBlocked ? <OpenSettingsLink /> : null}
           </View>
           {cameraPermission ? (
             <Switch
@@ -407,11 +488,7 @@ export default function ProfileScreen() {
             <Text style={styles.rowSubtitle}>
               Optionally tag photos with where they were taken.
             </Text>
-            {locationBlocked ? (
-              <Button variant="secondary" onPress={() => void Linking.openSettings()}>
-                Open system Settings
-              </Button>
-            ) : null}
+            {locationBlocked ? <OpenSettingsLink /> : null}
           </View>
           <Switch
             disabled={busy === 'location'}
@@ -430,9 +507,11 @@ export default function ProfileScreen() {
               Schedule reminders, new photos in your Rides, and comments on your posts.
             </Text>
             {permission === 'denied' ? (
-              <Button variant="secondary" onPress={() => void Linking.openSettings()}>
-                Open system Settings
-              </Button>
+              <OpenSettingsLink
+                onOpen={() => {
+                  awaitingNotificationSettings.current = true;
+                }}
+              />
             ) : null}
           </View>
           {prefsReady ? (
@@ -534,6 +613,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     lineHeight: 18,
+  },
+  settingsLink: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  settingsLinkText: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '700',
   },
   toggleSpinner: { marginRight: spacing.xs },
   helpCopy: {

@@ -1,8 +1,11 @@
 import {
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 
 import { useCurrentUser } from '@/auth/auth-context';
 import { queryKeys } from '@/lib/queryKeys';
@@ -15,7 +18,7 @@ import {
   deletePost,
   getComments,
   getPost,
-  getRideFeed,
+  getRideFeedPage,
   getSignedPostImage,
 } from './service';
 import {
@@ -23,13 +26,39 @@ import {
   POST_IMAGE_URL_TTL_SECONDS,
 } from './utils';
 
+/** How close to the bottom (px) before the next page is requested. */
+const FEED_LOAD_MORE_THRESHOLD_PX = 720;
+
 export function useRideFeed(rideId: string | null | undefined) {
   const { user } = useCurrentUser();
-  return useQuery({
+  const query = useInfiniteQuery({
     queryKey: queryKeys.ridePosts(rideId ?? ''),
-    queryFn: () => getRideFeed(rideId ?? ''),
+    queryFn: ({ pageParam }) => getRideFeedPage(rideId ?? '', pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
     enabled: Boolean(rideId && user?.id),
   });
+
+  const posts = useMemo(
+    () => query.data?.pages.flatMap((page) => page.posts) ?? [],
+    [query.data],
+  );
+
+  const loadMoreIfNearEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (!query.hasNextPage || query.isFetchingNextPage) return;
+    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+    const distanceFromEnd =
+      contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    if (distanceFromEnd > FEED_LOAD_MORE_THRESHOLD_PX) return;
+    void query.fetchNextPage();
+  };
+
+  return {
+    ...query,
+    /** Flattened posts across loaded pages (newest first). */
+    data: posts,
+    loadMoreIfNearEnd,
+  };
 }
 
 export function usePost(postId: string | null | undefined) {

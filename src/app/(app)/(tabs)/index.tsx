@@ -229,6 +229,7 @@ export default function HomeScreen() {
     <FixedHeaderScreen
       contentStyle={{ paddingBottom: insets.bottom + spacing.sm }}
       header={header}
+      onScroll={selectedRideId ? feed.loadMoreIfNearEnd : undefined}
       refreshControl={
         hasRides ? (
           <RefreshControl

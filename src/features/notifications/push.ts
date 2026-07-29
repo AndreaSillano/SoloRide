@@ -53,12 +53,19 @@ export async function registerExpoPushToken(userId: string): Promise<string | nu
 
   await ensureSoloRideAndroidChannel();
 
-  let token: string;
-  try {
-    token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-  } catch {
-    return null;
+  // APNs can briefly fail right after a fresh permission grant; retry a few times.
+  let token: string | null = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+      break;
+    } catch {
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+      }
+    }
   }
+  if (!token) return null;
 
   const { error } = await supabase.from('push_tokens').upsert(
     {

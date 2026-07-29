@@ -23,6 +23,7 @@ expo-env.d.ts
 *.pem
 keystore.properties
 credentials/android/
+*-firebase-adminsdk-*.json
 
 # Metro
 .metro-health-check*

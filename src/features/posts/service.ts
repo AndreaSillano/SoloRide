@@ -84,16 +84,41 @@ async function requireUserId() {
   return data.user.id;
 }
 
-export async function getRideFeed(rideId: string): Promise<PostRecord[]> {
+/** First page + each scroll page of the Ride photo feed. */
+export const RIDE_FEED_PAGE_SIZE = 8;
+
+export type RideFeedPage = {
+  posts: PostRecord[];
+  /** `created_at` of the oldest post in this page; null when no further pages. */
+  nextCursor: string | null;
+};
+
+export async function getRideFeedPage(
+  rideId: string,
+  cursor: string | null = null,
+): Promise<RideFeedPage> {
   const validRideId = parseUuid(rideId, 'Ride');
-  const { data, error } = await supabase
+  // Fetch one extra row so we know whether another page exists without a count query.
+  let query = supabase
     .from('posts')
     .select(POST_SELECT)
     .eq('ride_id', validRideId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(RIDE_FEED_PAGE_SIZE + 1);
 
+  if (cursor) {
+    query = query.lt('created_at', cursor);
+  }
+
+  const { data, error } = await query;
   if (error) throw mapDatabaseError(error, 'The Ride feed could not be loaded.');
-  return parseFeedPosts(data ?? []);
+
+  const rows = parseFeedPosts(data ?? []);
+  const hasMore = rows.length > RIDE_FEED_PAGE_SIZE;
+  const posts = hasMore ? rows.slice(0, RIDE_FEED_PAGE_SIZE) : rows;
+  const nextCursor = hasMore ? posts[posts.length - 1]?.created_at ?? null : null;
+  return { posts, nextCursor };
 }
 
 export async function getPost(postId: string): Promise<PostRecord> {

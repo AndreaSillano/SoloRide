@@ -110,17 +110,19 @@ export async function requestSoloRideNotificationPermission(): Promise<SoloRideP
     await ensureSoloRideAndroidChannel();
     const current = await Notifications.getPermissionsAsync();
     const currentStatus = interpretPermission(current);
-    if (currentStatus === 'granted' || currentStatus === 'denied') return currentStatus;
-    if (!current.canAskAgain) return 'denied';
+    if (currentStatus === 'denied') return 'denied';
+    if (!current.canAskAgain && currentStatus !== 'granted') return 'denied';
 
-    return interpretPermission(
-      await Notifications.requestPermissionsAsync({
-        ios: {
-          allowAlert: true,
-          allowSound: true,
-        },
-      }),
-    );
+    // Always pass allowBadge. If the first grant omitted badges, iOS may not
+    // show that toggle until permission is reset and requested again.
+    const next = await Notifications.requestPermissionsAsync({
+      ios: {
+        allowAlert: true,
+        allowBadge: true,
+        allowSound: true,
+      },
+    });
+    return interpretPermission(next);
   } catch {
     return 'unavailable';
   }
@@ -177,6 +179,7 @@ export async function reconcileSoloRideNotifications(
             title: plan.title,
             body: plan.body,
             sound: 'default',
+            badge: 1,
             data: plan.data,
           },
           trigger: {

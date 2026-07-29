@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "937898093332",
+    "project_id": "soloride-3bf4f",
+    "storage_bucket": "soloride-3bf4f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:937898093332:android:3d707f511ba51b2f28f001",
+        "android_client_info": {
+          "package_name": "com.anonymous.SoloRide"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBuyWc-Vxehju5-Io5v9H4ozwkX1f89tTM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

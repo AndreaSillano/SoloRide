@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Share, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Share, StyleSheet, Text, View } from 'react-native';
 
 import { useCurrentUser } from '@/auth/auth-context';
 import { formatProfileName, useDeletePost, useRideFeed } from '@/features/posts';
@@ -192,7 +192,7 @@ export function RideOverview({
           onAction={() => void feed.refetch()}
           title="Couldn’t load photos"
         />
-      ) : feed.data?.length ? (
+      ) : feed.data.length ? (
         <View style={styles.feed}>
           {feed.data.map((post) => (
             <FeedPost
@@ -204,6 +204,11 @@ export function RideOverview({
               post={post}
             />
           ))}
+          {feed.isFetchingNextPage ? (
+            <View style={styles.loadMore}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : null}
         </View>
       ) : (
         <View style={styles.emptyFeed}>
@@ -251,6 +256,10 @@ const styles = StyleSheet.create({
   code: { fontWeight: '800', letterSpacing: 1 },
   // Cancels ScrollScreen's horizontal padding so feed photos run edge-to-edge.
   feed: { marginHorizontal: -spacing.lg },
+  loadMore: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+  },
   emptyFeed: {
     alignItems: 'center',
     gap: spacing.sm,
