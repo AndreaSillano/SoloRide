@@ -5,7 +5,6 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Image,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -18,8 +17,7 @@ import {
   type StyleProp,
   type TextInputProps,
   View,
-} from 'react-native';
-import { SafeAreaView, useSafeAreaInsets, type Edge } from 'react-native-safe-area-context';
+} from 'react-native';import { SafeAreaView, useSafeAreaInsets, type Edge } from 'react-native-safe-area-context';
 
 import { WEEKDAYS, WEEKDAY_SHORT_LABELS } from '@/features/rides';
 import { getCommentCount, formatProfileName, useSignedPostImage, type PostRecord } from '@/features/posts';
@@ -45,38 +43,33 @@ function useSafeHeaderHeight() {
   }
 }
 
+/** Extra room above the keyboard so fields aren't flush against it. */
+const KEYBOARD_CLEARANCE = spacing.lg;
+
 export function Screen({
   children,
   centered = false,
-  keyboardVerticalOffset,
 }: PropsWithChildren<{ centered?: boolean; keyboardVerticalOffset?: number }>) {
   const headerHeight = useSafeHeaderHeight();
   const insets = useSafeAreaInsets();
-  // Bottom inset is handled via content padding (not the SafeAreaView) so that
-  // KeyboardAvoidingView measures from the true screen edge and doesn't add a
-  // redundant gap on top of the keyboard equal to the home-indicator height.
   const edges: Edge[] = headerHeight > 0 ? ['left', 'right'] : ['top', 'left', 'right'];
 
   return (
     <SafeAreaView edges={edges} style={styles.safeArea}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={keyboardVerticalOffset ?? 0}
+      <ScrollView
+        automaticallyAdjustKeyboardInsets
+        contentContainerStyle={[
+          styles.screen,
+          headerHeight > 0 && { paddingTop: headerHeight + spacing.xxs },
+          { paddingBottom: spacing.xxl + insets.bottom + KEYBOARD_CLEARANCE },
+          centered && styles.centered,
+        ]}
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        keyboardShouldPersistTaps="handled"
         style={styles.flex}
       >
-        <ScrollView
-          contentContainerStyle={[
-            styles.screen,
-            headerHeight > 0 && { paddingTop: headerHeight + spacing.xxs },
-            { paddingBottom: spacing.xxl + insets.bottom },
-            centered && styles.centered,
-          ]}
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-          keyboardShouldPersistTaps="handled"
-        >
-          {children}
-        </ScrollView>
-      </KeyboardAvoidingView>
+        {children}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -84,38 +77,30 @@ export function Screen({
 export function ScrollScreen({
   children,
   contentStyle,
-  keyboardVerticalOffset,
 }: PropsWithChildren<{
   contentStyle?: StyleProp<import('react-native').ViewStyle>;
   keyboardVerticalOffset?: number;
 }>) {
   const headerHeight = useSafeHeaderHeight();
   const insets = useSafeAreaInsets();
-  // Bottom inset is handled via content padding (not the SafeAreaView) so that
-  // KeyboardAvoidingView measures from the true screen edge and doesn't add a
-  // redundant gap on top of the keyboard equal to the home-indicator height.
   const edges: Edge[] = headerHeight > 0 ? ['left', 'right'] : ['top', 'left', 'right'];
 
   return (
     <SafeAreaView edges={edges} style={styles.safeArea}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={keyboardVerticalOffset ?? 0}
+      <ScrollView
+        automaticallyAdjustKeyboardInsets
+        contentContainerStyle={[
+          styles.scrollContent,
+          headerHeight > 0 && { paddingTop: headerHeight + spacing.xxs },
+          { paddingBottom: spacing.lg + insets.bottom + KEYBOARD_CLEARANCE },
+          contentStyle,
+        ]}
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        keyboardShouldPersistTaps="handled"
         style={styles.flex}
       >
-        <ScrollView
-          contentContainerStyle={[
-            styles.scrollContent,
-            headerHeight > 0 && { paddingTop: headerHeight + spacing.xxs },
-            { paddingBottom: spacing.lg + insets.bottom },
-            contentStyle,
-          ]}
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-          keyboardShouldPersistTaps="handled"
-        >
-          {children}
-        </ScrollView>
-      </KeyboardAvoidingView>
+        {children}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -138,27 +123,24 @@ export function FixedHeaderScreen({
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      {/* Elevated above the ScrollView so absolutely-positioned dropdowns
+          rendered inside `header` can overlay the scrolling content below. */}
+      <View style={styles.fixedHeader}>{header}</View>
+      <ScrollView
+        automaticallyAdjustKeyboardInsets
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: spacing.lg + insets.bottom + KEYBOARD_CLEARANCE },
+          contentStyle,
+        ]}
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={refreshControl}
         style={styles.flex}
       >
-        {/* Elevated above the ScrollView so absolutely-positioned dropdowns
-            rendered inside `header` can overlay the scrolling content below. */}
-        <View style={styles.fixedHeader}>{header}</View>
-        <ScrollView
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: spacing.lg + insets.bottom },
-            contentStyle,
-          ]}
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-          keyboardShouldPersistTaps="handled"
-          refreshControl={refreshControl}
-        >
-          {children}
-        </ScrollView>
-        {overlay}
-      </KeyboardAvoidingView>
+        {children}
+      </ScrollView>
+      {overlay}
     </SafeAreaView>
   );
 }
@@ -168,9 +150,15 @@ export function Card({ children }: PropsWithChildren) {
 }
 
 export function AppMark({ compact = false }: { compact?: boolean }) {
+  const size = compact ? 64 : 96;
+  const corner = compact ? radius.md : radius.lg;
   return (
-    <View style={[styles.appMark, compact && styles.appMarkCompact]}>
-      <Text style={[styles.appMarkText, compact && styles.appMarkTextCompact]}>SR</Text>
+    <View style={[styles.appMark, { borderRadius: corner, height: size, width: size }]}>
+      <Image
+        accessibilityLabel="SoloRide"
+        source={require('../../assets/icon.png')}
+        style={{ borderRadius: corner, height: size, width: size }}
+      />
     </View>
   );
 }
@@ -547,28 +535,7 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   appMark: {
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: radius.lg,
-    height: 72,
-    justifyContent: 'center',
-    transform: [{ rotate: '-4deg' }],
-    width: 72,
-    ...shadows.floating,
-  },
-  appMarkCompact: {
-    borderRadius: radius.sm,
-    height: 38,
-    width: 38,
-  },
-  appMarkText: {
-    color: colors.white,
-    fontSize: 24,
-    fontWeight: '900',
-    letterSpacing: -1,
-  },
-  appMarkTextCompact: {
-    fontSize: 13,
+    overflow: 'hidden',
   },
   eyebrow: {
     color: colors.accent,

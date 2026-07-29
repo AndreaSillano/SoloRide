@@ -19,17 +19,17 @@ export default function AuthLandingScreen() {
     <Screen>
       <View style={styles.hero}>
         <AppMark />
-        <Eyebrow>Private photo journals</Eyebrow>
-        <Heading>Remember the ride, together.</Heading>
+        <Eyebrow>Share your ride, with your friends.</Eyebrow>
+        <Heading>Remember the thoughts, together.</Heading>
         <Body muted>
-          A quiet place for your closest people to share one real photo at a
+          A quiet place for your closest people to share one real thought at a
           time.
         </Body>
       </View>
       <Card>
         <ErrorBanner message={envConfigurationError} />
         <Button variant="accent" onPress={() => router.push('/register')}>
-          Start a SoloRide
+          Start a Ride
         </Button>
         <Button variant="secondary" onPress={() => router.push('/login')}>
           I already have an account

@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   Image,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -62,7 +61,7 @@ export default function CameraScreen() {
   const [busy, setBusy] = useState<'capture' | 'gallery' | 'location' | 'search' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rideMenuOpen, setRideMenuOpen] = useState(false);
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const skipLocationSearch = useRef(false);
   const composeScroll = useRef<ScrollView>(null);
 
@@ -82,8 +81,12 @@ export default function CameraScreen() {
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
-    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
     return () => {
       showSub.remove();
       hideSub.remove();
@@ -302,20 +305,21 @@ export default function CameraScreen() {
 
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
-          style={styles.flex}
-        >
+        <View style={styles.flex}>
           <View style={styles.composeTopBar}>
             <Text style={styles.composeTitle}>New photo</Text>
           </View>
 
           <ScrollView
-            contentContainerStyle={styles.composeContent}
+            automaticallyAdjustKeyboardInsets
+            contentContainerStyle={[
+              styles.composeContent,
+              { paddingBottom: spacing.xl + 72 },
+            ]}
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             keyboardShouldPersistTaps="handled"
             ref={composeScroll}
+            style={styles.flex}
           >
             <View style={styles.previewFrame}>
               <Image resizeMode="cover" source={{ uri: imageUri }} style={styles.preview} />
@@ -491,9 +495,10 @@ export default function CameraScreen() {
             style={[
               styles.composeFooter,
               {
-                paddingBottom: keyboardVisible
-                  ? spacing.sm
-                  : Math.max(insets.bottom, spacing.sm) + TAB_BAR_CLEARANCE,
+                paddingBottom:
+                  keyboardHeight > 0
+                    ? keyboardHeight + spacing.sm
+                    : Math.max(insets.bottom, spacing.sm) + TAB_BAR_CLEARANCE,
               },
             ]}
           >
@@ -505,7 +510,7 @@ export default function CameraScreen() {
               Publish
             </Button>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </SafeAreaView>
     );
   }
