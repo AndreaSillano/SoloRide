@@ -15,11 +15,14 @@ expo-env.d.ts
 # Native credentials / signing
 *.orig.*
 *.jks
+*.keystore
 *.p8
 *.p12
 *.key
 *.mobileprovision
 *.pem
+keystore.properties
+credentials/android/
 
 # Metro
 .metro-health-check*
