@@ -22,14 +22,14 @@ begin
   if coalesce(new.is_temporary, false) then
     push_title := '24h solo arc';
     push_body := format(
-      '%s has made another (temporary) step on their Solo Ride in %s',
+      '%s has made another (temporary) step on his Solo Ride in %s',
       coalesce(author_name, 'Someone'),
       coalesce(ride_name, 'your Ride')
     );
   else
     push_title := 'Solo arc update';
     push_body := format(
-      '%s has made another step on their Solo Ride in %s',
+      '%s has made another step on Solo Ride in %s',
       coalesce(author_name, 'Someone'),
       coalesce(ride_name, 'your Ride')
     );

@@ -32,6 +32,7 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
+      "versionCode": 2,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.ACCESS_COARSE_LOCATION",
