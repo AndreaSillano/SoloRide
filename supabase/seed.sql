@@ -1,0 +1,1 @@
+-- SoloRide intentionally has no default seed data.
