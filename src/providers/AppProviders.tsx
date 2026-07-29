@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import type { PropsWithChildren } from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider, useAuth } from '@/auth/auth-context';
 import { NotificationLifecycle } from '@/features/notifications/NotificationLifecycle';
+import { requestCoreAppPermissions } from '@/features/permissions';
 
 /** Drops cached rides/feed/errors when the signed-in account changes so a
  * failed fetch during logout can't stick around after the next login. */
@@ -27,6 +29,27 @@ function ClearQueryCacheOnAuthChange() {
   return null;
 }
 
+/** After a fresh login/signup, ask for camera, location, and notifications
+ * from a still-mounted provider so the auth screen can unmount safely. */
+function RequestPermissionsOnSignIn() {
+  const { user } = useAuth();
+  const previousUserId = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    const nextId = user?.id ?? null;
+    const previous = previousUserId.current;
+    previousUserId.current = nextId;
+
+    if (previous === undefined) return;
+    if (!nextId || previous === nextId) return;
+    if (previous !== null) return;
+
+    void requestCoreAppPermissions();
+  }, [user?.id]);
+
+  return null;
+}
+
 export function AppProviders({ children }: PropsWithChildren) {
   const [queryClient] = useState(
     () =>
@@ -45,13 +68,16 @@ export function AppProviders({ children }: PropsWithChildren) {
 
   return (
     <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <ClearQueryCacheOnAuthChange />
-          <NotificationLifecycle />
-          {children}
-        </AuthProvider>
-      </QueryClientProvider>
+      <KeyboardProvider>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <ClearQueryCacheOnAuthChange />
+            <RequestPermissionsOnSignIn />
+            <NotificationLifecycle />
+            {children}
+          </AuthProvider>
+        </QueryClientProvider>
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }

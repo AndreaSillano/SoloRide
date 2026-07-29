@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Share, StyleSheet, Text, View } from 'react-native';
@@ -8,7 +9,16 @@ import { usePostingStatus, useRide, useRideMembers } from '@/features/rides';
 import { colors, spacing } from '@/theme';
 
 import { CommentsModal } from './comments-modal';
-import { Body, Button, Card, FeedPost, Heading, SectionTitle, StatePanel } from './ui';
+import {
+  Body,
+  Button,
+  Card,
+  FeedPost,
+  Heading,
+  RideFeedSkeleton,
+  SectionTitle,
+  StatePanel,
+} from './ui';
 
 export function RideOverview({
   rideId,
@@ -49,7 +59,7 @@ export function RideOverview({
   };
 
   if (ride.isPending) {
-    return <StatePanel loading message="Opening your Ride…" />;
+    return <RideFeedSkeleton />;
   }
   if (ride.isError || !ride.data) {
     return (
@@ -66,13 +76,21 @@ export function RideOverview({
 
   return (
     <>
+      {data.is_archived ? (
+        <View style={styles.archivedBanner}>
+          <Ionicons color={colors.muted} name="archive-outline" size={16} />
+          <Text style={styles.archivedBannerText}>This Ride is archived</Text>
+        </View>
+      ) : null}
       {showHeading ? (
         <View style={styles.headerRow}>
           <View style={styles.headerText}>
-            <Heading>{data.name}</Heading>
+            <Heading numberOfLines={1}>{data.name}</Heading>
             <Body muted>
-              {new Date(`${data.start_date}T12:00:00`).toLocaleDateString()} –{' '}
-              {new Date(`${data.end_date}T12:00:00`).toLocaleDateString()}
+              {new Date(`${data.start_date}T12:00:00`).toLocaleDateString()}
+              {data.end_date
+                ? ` – ${new Date(`${data.end_date}T12:00:00`).toLocaleDateString()}`
+                : ' · Never ends'}
             </Body>
           </View>
           <Button
@@ -166,7 +184,7 @@ export function RideOverview({
 
       {!compact ? <SectionTitle>Photos</SectionTitle> : null}
       {feed.isPending ? (
-        <StatePanel loading message="Loading private photos…" />
+        <RideFeedSkeleton />
       ) : feed.isError ? (
         <StatePanel
           actionLabel="Try again"
@@ -188,7 +206,15 @@ export function RideOverview({
           ))}
         </View>
       ) : (
-        <StatePanel message="The first scheduled photo will appear here." title="Quiet for now" />
+        <View style={styles.emptyFeed}>
+          <View style={styles.emptyIconWrap}>
+            <Ionicons color={colors.muted} name="images-outline" size={36} />
+          </View>
+          <Text style={styles.emptyTitle}>The ride looks empty</Text>
+          <Text style={styles.emptyMessage}>
+            Nobody’s posted yet. First one to drop a photo owns the bragging rights.
+          </Text>
+        </View>
       )}
 
       <CommentsModal
@@ -202,6 +228,22 @@ export function RideOverview({
 }
 
 const styles = StyleSheet.create({
+  archivedBanner: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  archivedBannerText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '700',
+  },
   headerRow: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm },
   headerText: { flex: 1, gap: spacing.xs },
   nextLabel: { color: colors.primary, fontSize: 18, fontWeight: '700' },
@@ -209,4 +251,32 @@ const styles = StyleSheet.create({
   code: { fontWeight: '800', letterSpacing: 1 },
   // Cancels ScrollScreen's horizontal padding so feed photos run edge-to-edge.
   feed: { marginHorizontal: -spacing.lg },
+  emptyFeed: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xxl,
+  },
+  emptyIconWrap: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 28,
+    height: 56,
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+    width: 56,
+  },
+  emptyTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  emptyMessage: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
+    maxWidth: 260,
+    textAlign: 'center',
+  },
 });

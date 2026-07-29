@@ -133,24 +133,25 @@ export function CommentsModal({
               <View key={comment.id} style={styles.comment}>
                 <Avatar profile={comment.profile} size={30} />
                 <View style={styles.commentText}>
-                  <Text style={styles.commentBody}>
-                    <Text style={styles.author}>
-                      {formatProfileName(comment.profile)}{' '}
+                  <View style={styles.commentHeader}>
+                    <Text style={styles.author}>{formatProfileName(comment.profile)}</Text>
+                    <Text style={styles.commentTime}>
+                      {formatCommentTime(comment.created_at)}
                     </Text>
-                    {comment.content}
-                  </Text>
-                  <View style={styles.commentMeta}>
-                    <Text style={styles.commentTime}>{formatCommentTime(comment.created_at)}</Text>
-                    {comment.user_id === user?.id ? (
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => confirmDelete(comment.id)}
-                      >
-                        <Text style={styles.delete}>Delete</Text>
-                      </Pressable>
-                    ) : null}
                   </View>
+                  <Text style={styles.commentBody}>{comment.content}</Text>
                 </View>
+                {comment.user_id === user?.id ? (
+                  <Pressable
+                    accessibilityLabel="Delete comment"
+                    accessibilityRole="button"
+                    hitSlop={8}
+                    onPress={() => confirmDelete(comment.id)}
+                    style={styles.deleteButton}
+                  >
+                    <Ionicons color={colors.danger} name="trash-outline" size={18} />
+                  </Pressable>
+                ) : null}
               </View>
             ))
           ) : (
@@ -181,12 +182,18 @@ export function CommentsModal({
             accessibilityLabel="Post comment"
             accessibilityRole="button"
             disabled={!content.trim() || createComment.isPending}
+            hitSlop={8}
             onPress={() => void submit()}
+            style={styles.sendButton}
           >
             {createComment.isPending ? (
               <ActivityIndicator color={colors.primary} size="small" />
             ) : (
-              <Text style={[styles.post, !content.trim() && styles.postDisabled]}>Post</Text>
+              <Ionicons
+                color={content.trim() ? colors.primary : colors.muted}
+                name="send"
+                size={20}
+              />
             )}
           </Pressable>
         </View>
@@ -210,13 +217,18 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: 17, fontWeight: '800' },
   list: { gap: spacing.md, padding: spacing.lg },
   spinner: { paddingTop: spacing.lg },
-  comment: { flexDirection: 'row', gap: spacing.sm },
-  commentText: { flex: 1, gap: spacing.xxs },
-  commentBody: { color: colors.textSoft, fontSize: 14, lineHeight: 20 },
-  commentMeta: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
+  comment: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm },
+  commentText: { flex: 1, gap: spacing.xxs, minWidth: 0 },
+  commentHeader: {
+    alignItems: 'baseline',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
   author: { color: colors.text, fontSize: 14, fontWeight: '700' },
   commentTime: { color: colors.muted, fontSize: 12 },
-  delete: { color: colors.danger, fontSize: 12, fontWeight: '700' },
+  commentBody: { color: colors.textSoft, fontSize: 14, lineHeight: 20 },
+  deleteButton: { marginTop: 2, padding: spacing.xxs },
   inputRow: {
     alignItems: 'flex-end',
     borderTopColor: colors.border,
@@ -233,6 +245,11 @@ const styles = StyleSheet.create({
     maxHeight: 100,
     paddingVertical: spacing.sm,
   },
-  post: { color: colors.primary, fontSize: 15, fontWeight: '800', paddingVertical: spacing.sm },
-  postDisabled: { color: colors.muted },
+  sendButton: {
+    alignItems: 'center',
+    height: 36,
+    justifyContent: 'center',
+    marginBottom: 4,
+    width: 36,
+  },
 });

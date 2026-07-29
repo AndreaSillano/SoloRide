@@ -29,7 +29,14 @@ export const RIDE_FORM_DEFAULTS: Readonly<RideFormValues> = {
   description: '',
   startDate: '',
   endDate: '',
+  neverEnds: false,
   notificationTime: '09:00',
   weekdays: [],
   strictSchedule: true,
 };
+
+/** Max people in a single Ride (including the creator). */
+export const MAX_RIDE_MEMBERS = 16;
+
+/** Max non-archived, non-expired Rides a user can belong to at once. */
+export const MAX_LIVE_RIDES_PER_USER = 4;

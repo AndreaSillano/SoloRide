@@ -1,10 +1,12 @@
 import { useHeaderHeight } from '@react-navigation/elements';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { PropsWithChildren, ReactElement, ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Image,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
@@ -16,6 +18,7 @@ import {
   type RefreshControlProps,
   type StyleProp,
   type TextInputProps,
+  type ViewStyle,
   View,
 } from 'react-native';import { SafeAreaView, useSafeAreaInsets, type Edge } from 'react-native-safe-area-context';
 
@@ -44,7 +47,7 @@ function useSafeHeaderHeight() {
 }
 
 /** Extra room above the keyboard so fields aren't flush against it. */
-const KEYBOARD_CLEARANCE = spacing.lg;
+const KEYBOARD_CLEARANCE = spacing.lg; 
 
 export function Screen({
   children,
@@ -55,22 +58,28 @@ export function Screen({
   const edges: Edge[] = headerHeight > 0 ? ['left', 'right'] : ['top', 'left', 'right'];
 
   return (
-    <SafeAreaView edges={edges} style={styles.safeArea}>
-      <ScrollView
-        automaticallyAdjustKeyboardInsets
-        contentContainerStyle={[
-          styles.screen,
-          headerHeight > 0 && { paddingTop: headerHeight + spacing.xxs },
-          { paddingBottom: spacing.xxl + insets.bottom + KEYBOARD_CLEARANCE },
-          centered && styles.centered,
-        ]}
-        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-        keyboardShouldPersistTaps="handled"
-        style={styles.flex}
-      >
-        {children}
-      </ScrollView>
-    </SafeAreaView>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={styles.flex}
+    >
+      <SafeAreaView edges={edges} style={styles.safeArea}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.screen,
+            headerHeight > 0 && { paddingTop: headerHeight + spacing.xxs },
+            { paddingBottom: spacing.xxl + insets.bottom },
+            centered && styles.centered,
+          ]}
+          contentInset={{ bottom: KEYBOARD_CLEARANCE }}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          keyboardShouldPersistTaps="handled"
+          scrollIndicatorInsets={{ bottom: KEYBOARD_CLEARANCE }}
+          style={styles.flex}
+        >
+          {children}
+        </ScrollView>
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -86,22 +95,28 @@ export function ScrollScreen({
   const edges: Edge[] = headerHeight > 0 ? ['left', 'right'] : ['top', 'left', 'right'];
 
   return (
-    <SafeAreaView edges={edges} style={styles.safeArea}>
-      <ScrollView
-        automaticallyAdjustKeyboardInsets
-        contentContainerStyle={[
-          styles.scrollContent,
-          headerHeight > 0 && { paddingTop: headerHeight + spacing.xxs },
-          { paddingBottom: spacing.lg + insets.bottom + KEYBOARD_CLEARANCE },
-          contentStyle,
-        ]}
-        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-        keyboardShouldPersistTaps="handled"
-        style={styles.flex}
-      >
-        {children}
-      </ScrollView>
-    </SafeAreaView>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={styles.flex}
+    >
+      <SafeAreaView edges={edges} style={styles.safeArea}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            headerHeight > 0 && { paddingTop: headerHeight + spacing.xxs },
+            { paddingBottom: spacing.lg + insets.bottom },
+            contentStyle,
+          ]}
+          contentInset={{ bottom: KEYBOARD_CLEARANCE }}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          keyboardShouldPersistTaps="handled"
+          scrollIndicatorInsets={{ bottom: KEYBOARD_CLEARANCE }}
+          style={styles.flex}
+        >
+          {children}
+        </ScrollView>
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -122,26 +137,32 @@ export function FixedHeaderScreen({
   const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
-      {/* Elevated above the ScrollView so absolutely-positioned dropdowns
-          rendered inside `header` can overlay the scrolling content below. */}
-      <View style={styles.fixedHeader}>{header}</View>
-      <ScrollView
-        automaticallyAdjustKeyboardInsets
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: spacing.lg + insets.bottom + KEYBOARD_CLEARANCE },
-          contentStyle,
-        ]}
-        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={refreshControl}
-        style={styles.flex}
-      >
-        {children}
-      </ScrollView>
-      {overlay}
-    </SafeAreaView>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={styles.flex}
+    >
+      <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
+        {/* Elevated above the ScrollView so absolutely-positioned dropdowns
+            rendered inside `header` can overlay the scrolling content below. */}
+        <View style={styles.fixedHeader}>{header}</View>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: spacing.lg + insets.bottom },
+            contentStyle,
+          ]}
+          contentInset={{ bottom: KEYBOARD_CLEARANCE }}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={refreshControl}
+          scrollIndicatorInsets={{ bottom: KEYBOARD_CLEARANCE }}
+          style={styles.flex}
+        >
+          {children}
+        </ScrollView>
+        {overlay}
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -167,8 +188,15 @@ export function Eyebrow({ children }: PropsWithChildren) {
   return <Text style={styles.eyebrow}>{children}</Text>;
 }
 
-export function Heading({ children }: PropsWithChildren) {
-  return <Text style={styles.heading}>{children}</Text>;
+export function Heading({
+  children,
+  numberOfLines,
+}: PropsWithChildren<{ numberOfLines?: number }>) {
+  return (
+    <Text ellipsizeMode="tail" numberOfLines={numberOfLines} style={styles.heading}>
+      {children}
+    </Text>
+  );
 }
 
 export function Body({
@@ -304,6 +332,66 @@ export function StatePanel({
         </Button>
       ) : null}
     </Card>
+  );
+}
+
+/** Soft pulsing placeholder block — use to sketch layouts while data loads. */
+export function Skeleton({ style }: { style?: StyleProp<ViewStyle> }) {
+  const opacity = useRef(new Animated.Value(0.45)).current;
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 700,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0.45,
+          duration: 700,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [opacity]);
+
+  return <Animated.View style={[styles.skeleton, { opacity }, style]} />;
+}
+
+/** Centered loading copy without a card/panel chrome. */
+export function CenteredBusy({ message }: { message: string }) {
+  return (
+    <View style={styles.centeredBusy}>
+      <Text style={styles.centeredBusyText}>{message}</Text>
+    </View>
+  );
+}
+
+/** Feed-shaped skeleton for ride / photo loading states. */
+export function RideFeedSkeleton({ count = 2 }: { count?: number }) {
+  return (
+    <View style={styles.rideSkeleton}>
+      {Array.from({ length: count }, (_, index) => (
+        <View key={index} style={styles.feedItem}>
+          <View style={styles.feedHeader}>
+            <Skeleton style={styles.skeletonAvatar} />
+            <View style={styles.feedHeaderText}>
+              <Skeleton style={styles.skeletonAuthor} />
+              <Skeleton style={styles.skeletonMeta} />
+            </View>
+            <Skeleton style={styles.skeletonTime} />
+          </View>
+          <Skeleton style={styles.skeletonImage} />
+          <View style={styles.feedActions}>
+            <Skeleton style={styles.skeletonAction} />
+          </View>
+          <Skeleton style={styles.skeletonCaption} />
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -508,7 +596,7 @@ export function FeedPost({
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
-  flex: { flex: 1 },
+  flex: { flex: 1},
   fixedHeader: { position: 'relative', zIndex: 20 },
   screen: {
     flexGrow: 1,
@@ -583,6 +671,39 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   stateTitle: { color: colors.text, fontSize: 19, fontWeight: '800', textAlign: 'center' },
+  skeleton: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.xs,
+  },
+  centeredBusy: {
+    alignItems: 'center',
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xxl,
+  },
+  centeredBusyText: {
+    color: colors.muted,
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  rideSkeleton: {
+    marginHorizontal: -spacing.lg,
+  },
+  skeletonAvatar: { borderRadius: 17, height: 34, width: 34 },
+  skeletonAuthor: { borderRadius: radius.pill, height: 12, width: 110 },
+  skeletonMeta: { borderRadius: radius.pill, height: 10, marginTop: 4, width: 72 },
+  skeletonTime: { borderRadius: radius.pill, height: 10, width: 28 },
+  skeletonImage: { aspectRatio: 1, borderRadius: 0, width: '100%' },
+  skeletonAction: { borderRadius: radius.pill, height: 22, width: 22 },
+  skeletonCaption: {
+    borderRadius: radius.pill,
+    height: 12,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.xs,
+    width: '55%',
+  },
   weekdays: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   weekday: {
     alignItems: 'center',

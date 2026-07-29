@@ -359,7 +359,7 @@ export default function CameraScreen() {
                   style={({ pressed }) => [styles.rideDropdownTrigger, pressed && styles.pressed]}
                 >
                   <View style={styles.rideDropdownTriggerText}>
-                    <Text numberOfLines={1} style={styles.rideName}>
+                    <Text ellipsizeMode="tail" numberOfLines={1} style={styles.rideName}>
                       {selectedRide?.name ?? 'Choose a Ride'}
                     </Text>
                     {selectedRide ? (
@@ -371,16 +371,13 @@ export default function CameraScreen() {
                             : styles.rideBadgeOptional,
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.rideBadgeText,
-                            selectedRide.isRequiredToday
-                              ? styles.rideBadgeTextDue
-                              : styles.rideBadgeTextOptional,
-                          ]}
-                        >
-                          {selectedRide.isRequiredToday ? 'Due today' : 'Optional'}
-                        </Text>
+                        <Ionicons
+                          color={
+                            selectedRide.isRequiredToday ? colors.accent : colors.muted
+                          }
+                          name={selectedRide.isRequiredToday ? 'camera' : 'camera-outline'}
+                          size={14}
+                        />
                       </View>
                     ) : null}
                   </View>
@@ -641,8 +638,11 @@ function RideOption({
   selected: boolean;
   onPress: () => void;
 }) {
+  const statusLabel = ride.isRequiredToday ? 'Photo due today' : 'Optional today';
+
   return (
     <Pressable
+      accessibilityLabel={`${ride.name}, ${statusLabel}`}
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [
@@ -651,13 +651,20 @@ function RideOption({
         pressed && styles.pressed,
       ]}
     >
-      <View style={styles.rideOptionText}>
-        <Text numberOfLines={1} style={styles.rideName}>
-          {ride.name}
-        </Text>
-        <Text style={ride.isRequiredToday ? styles.rideDue : styles.rideOptional}>
-          {ride.isRequiredToday ? 'Due today' : 'Optional today'}
-        </Text>
+      <Text ellipsizeMode="tail" numberOfLines={1} style={styles.rideName}>
+        {ride.name}
+      </Text>
+      <View
+        style={[
+          styles.rideStatusChip,
+          ride.isRequiredToday ? styles.rideBadgeDue : styles.rideBadgeOptional,
+        ]}
+      >
+        <Ionicons
+          color={ride.isRequiredToday ? colors.accent : colors.muted}
+          name={ride.isRequiredToday ? 'camera' : 'camera-outline'}
+          size={16}
+        />
       </View>
       {selected ? <Ionicons color={colors.primary} name="checkmark" size={18} /> : null}
     </Pressable>
@@ -803,20 +810,23 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   rideOptionSelected: { backgroundColor: colors.primarySoft },
-  rideOptionText: { flex: 1, gap: 2 },
-  rideName: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  rideDue: { color: colors.accentPressed, fontSize: 12, fontWeight: '700' },
-  rideOptional: { color: colors.muted, fontSize: 12, fontWeight: '600' },
-  rideBadge: {
+  rideName: { color: colors.text, flex: 1, fontSize: 16, fontWeight: '700' },
+  rideStatusChip: {
+    alignItems: 'center',
     borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
+    height: 28,
+    justifyContent: 'center',
+    width: 28,
+  },
+  rideBadge: {
+    alignItems: 'center',
+    borderRadius: radius.pill,
+    height: 26,
+    justifyContent: 'center',
+    width: 26,
   },
   rideBadgeDue: { backgroundColor: colors.accentSoft },
   rideBadgeOptional: { backgroundColor: colors.surfaceMuted },
-  rideBadgeText: { fontSize: 11, fontWeight: '700' },
-  rideBadgeTextDue: { color: colors.accentPressed },
-  rideBadgeTextOptional: { color: colors.muted },
   description: { minHeight: 88, paddingTop: spacing.md, textAlignVertical: 'top' },
   locationBlock: { gap: spacing.xs },
   locationInputRow: {

@@ -15,7 +15,7 @@ export type NotificationRide = {
   id: string;
   name: string;
   startDate: string;
-  endDate: string;
+  endDate: string | null;
   weekdays: readonly number[];
   notificationTime: string;
   /** Defaults to strict for Rides created before schedule modes existed. */
@@ -140,12 +140,15 @@ export function getRideDatesInRange(
   through: Date,
 ): string[] {
   const rideStart = parseLocalDate(ride.startDate);
-  const rideEnd = parseLocalDate(ride.endDate);
-  if (!rideStart || !rideEnd || rideStart.getTime() > rideEnd.getTime()) return [];
+  if (!rideStart) return [];
+  const rideEnd = ride.endDate ? parseLocalDate(ride.endDate) : null;
+  if (rideEnd && rideStart.getTime() > rideEnd.getTime()) return [];
 
   const weekdays = new Set(ride.weekdays.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6));
   let cursor = startOfLocalDay(from);
-  const last = startOfLocalDay(through).getTime() < rideEnd.getTime() ? startOfLocalDay(through) : rideEnd;
+  const throughDay = startOfLocalDay(through);
+  const last =
+    rideEnd && rideEnd.getTime() < throughDay.getTime() ? rideEnd : throughDay;
   if (cursor.getTime() < rideStart.getTime()) cursor = rideStart;
 
   const dates: string[] = [];

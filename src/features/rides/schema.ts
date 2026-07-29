@@ -32,13 +32,14 @@ export const rideFormSchema = z
       .string()
       .trim()
       .min(1, 'Ride name is required.')
-      .max(100, 'Ride name must be 100 characters or less.'),
+      .max(20, 'Ride name must be 20 characters or less.'),
     description: z
       .string()
       .trim()
-      .max(2000, 'Description must be 2,000 characters or less.'),
+      .max(30, 'Description must be 30 characters or less.'),
     startDate: dateSchema,
-    endDate: dateSchema,
+    endDate: z.string(),
+    neverEnds: z.boolean().default(false),
     notificationTime: z
       .string()
       .trim()
@@ -50,11 +51,18 @@ export const rideFormSchema = z
     strictSchedule: z.boolean().default(true),
   })
   .superRefine((values, context) => {
-    if (
-      isCalendarDate(values.startDate) &&
-      isCalendarDate(values.endDate) &&
-      values.endDate < values.startDate
-    ) {
+    if (values.neverEnds) return;
+
+    if (!isCalendarDate(values.endDate)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['endDate'],
+        message: 'Enter a valid end date, or turn on Never ends.',
+      });
+      return;
+    }
+
+    if (isCalendarDate(values.startDate) && values.endDate < values.startDate) {
       context.addIssue({
         code: 'custom',
         path: ['endDate'],

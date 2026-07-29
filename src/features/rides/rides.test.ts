@@ -31,6 +31,7 @@ describe('Ride form validation', () => {
       description: '  Be ready  ',
       startDate: '2026-07-01',
       endDate: '2026-07-31',
+      neverEnds: false,
       notificationTime: '09:30',
       weekdays: [1, 3, 5],
     });
@@ -40,6 +41,20 @@ describe('Ride form validation', () => {
     expect(result.strictSchedule).toBe(true);
   });
 
+  it('allows open-ended rides without an end date', () => {
+    const result = rideFormSchema.parse({
+      name: 'Forever Ride',
+      description: '',
+      startDate: '2026-07-01',
+      endDate: '',
+      neverEnds: true,
+      notificationTime: '09:00',
+      weekdays: [1],
+    });
+
+    expect(result.neverEnds).toBe(true);
+  });
+
   it('rejects impossible dates, reversed ranges, and duplicate weekdays', () => {
     expect(
       rideFormSchema.safeParse({
@@ -47,6 +62,7 @@ describe('Ride form validation', () => {
         description: '',
         startDate: '2026-02-30',
         endDate: '2026-02-01',
+        neverEnds: false,
         notificationTime: '25:00',
         weekdays: [1, 1],
       }).success,

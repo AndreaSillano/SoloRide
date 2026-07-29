@@ -6,6 +6,8 @@ export type RideErrorCode =
   | 'expired'
   | 'archived'
   | 'duplicate'
+  | 'full'
+  | 'live_limit'
   | 'not_found'
   | 'forbidden'
   | 'validation'
@@ -17,6 +19,8 @@ const ERROR_MESSAGES: Record<RideErrorCode, string> = {
   expired: 'This Ride has already ended.',
   archived: 'This Ride has been archived.',
   duplicate: 'You are already a member of this Ride.',
+  full: 'This Ride is full (16 riders max).',
+  live_limit: 'You can only be in 4 active Rides at a time.',
   not_found: 'We could not find that Ride.',
   forbidden: 'You do not have permission to do that.',
   validation: 'The Ride details are not valid.',
@@ -75,6 +79,12 @@ export function mapRideError(error: unknown): RideProductError {
   if (text.includes('archived')) {
     return new RideProductError('archived', undefined, { cause: error });
   }
+  if (text.includes('full') || text.includes('16')) {
+    return new RideProductError('full', undefined, { cause: error });
+  }
+  if (text.includes('4 active') || text.includes('4 live')) {
+    return new RideProductError('live_limit', undefined, { cause: error });
+  }
   if (text.includes('code') && (text.includes('invalid') || text.includes('not found'))) {
     return new RideProductError('invalid_code', undefined, { cause: error });
   }
@@ -83,6 +93,20 @@ export function mapRideError(error: unknown): RideProductError {
   }
   if (text.includes('date') || text.includes('schedule') || databaseCode === '22023') {
     return new RideProductError('validation', undefined, { cause: error });
+  }
+  if (text.includes('archive the ride before') || text.includes('creator cannot leave')) {
+    return new RideProductError(
+      'forbidden',
+      'Archive this Ride before the owner can leave.',
+      { cause: error },
+    );
+  }
+  if (text.includes('last member must delete') || text.includes('only be deleted when')) {
+    return new RideProductError(
+      'validation',
+      'You are the last member — delete the Ride permanently instead.',
+      { cause: error },
+    );
   }
   if (text.includes('permission') || text.includes('creator') || databaseCode === '42501') {
     return new RideProductError('forbidden', undefined, { cause: error });

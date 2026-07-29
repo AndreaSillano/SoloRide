@@ -11,6 +11,7 @@ import {
 import {
   archiveRide,
   createRide,
+  deleteRide,
   fetchPostedTodayStatus,
   fetchRide,
   fetchRideMembers,
@@ -20,6 +21,7 @@ import {
   joinRideByCode,
   leaveRide,
   previewRideByCode,
+  unarchiveRide,
   updateRide,
 } from './api';
 
@@ -206,10 +208,33 @@ export function useLeaveRide(userId?: string | null) {
   });
 }
 
+export function useDeleteRide(userId?: string | null) {
+  const queryClient = useQueryClient();
+  const invalidate = useInvalidateRideQueries(userId);
+
+  return useMutation({
+    mutationFn: deleteRide,
+    onSuccess: async (_result, rideId) => {
+      await invalidate(rideId);
+      queryClient.removeQueries({ queryKey: queryKeys.ride(rideId) });
+      queryClient.removeQueries({ queryKey: queryKeys.rideMembers(rideId) });
+      queryClient.removeQueries({ queryKey: rideQueryKeys.schedule(rideId) });
+    },
+  });
+}
+
 export function useArchiveRide(userId?: string | null) {
   const invalidate = useInvalidateRideQueries(userId);
   return useMutation({
     mutationFn: archiveRide,
+    onSuccess: (ride) => invalidate(ride.id),
+  });
+}
+
+export function useUnarchiveRide(userId?: string | null) {
+  const invalidate = useInvalidateRideQueries(userId);
+  return useMutation({
+    mutationFn: unarchiveRide,
     onSuccess: (ride) => invalidate(ride.id),
   });
 }

@@ -8,6 +8,7 @@ import {
   Body,
   Button,
   Card,
+  CenteredBusy,
   ErrorBanner,
   Heading,
   ScrollScreen,
@@ -20,12 +21,15 @@ import {
   useSoloRideNotifications,
 } from '@/features/notifications';
 import {
+  MAX_RIDE_MEMBERS,
   rideFormSchema,
   useArchiveRide,
+  useDeleteRide,
   useLeaveRide,
   useRide,
   useRideMembers,
   useRideSchedule,
+  useUnarchiveRide,
   useUpdateRide,
   type RideFormValues,
 } from '@/features/rides';
@@ -37,6 +41,7 @@ const EMPTY_FORM: RideFormValues = {
   description: '',
   startDate: '',
   endDate: '',
+  neverEnds: false,
   notificationTime: '09:00',
   weekdays: [],
   strictSchedule: true,
@@ -51,11 +56,23 @@ function formatRideDate(isoDate: string) {
   });
 }
 
+function formatCreatedOn(isoDate: string) {
+  return new Date(isoDate).toLocaleDateString([], {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
 function formatNotificationTime(value: string) {
   const [hours = '0', minutes = '0'] = value.slice(0, 5).split(':');
   const date = new Date();
   date.setHours(Number(hours), Number(minutes), 0, 0);
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function formatMemberRole(role: string) {
+  return role === 'creator' ? 'Owner' : 'Member';
 }
 
 export default function RideSettingsScreen() {
@@ -66,7 +83,9 @@ export default function RideSettingsScreen() {
   const members = useRideMembers(rideId);
   const updateRide = useUpdateRide(user?.id);
   const archiveRide = useArchiveRide(user?.id);
+  const unarchiveRide = useUnarchiveRide(user?.id);
   const leaveRide = useLeaveRide(user?.id);
+  const deleteRide = useDeleteRide(user?.id);
   const notifications = useSoloRideNotifications(user?.id ?? null);
   const [form, setForm] = useState<RideFormValues>(EMPTY_FORM);
   const [initializedRideId, setInitializedRideId] = useState<string | null>(null);
@@ -79,7 +98,8 @@ export default function RideSettingsScreen() {
       name: ride.data.name,
       description: ride.data.description ?? '',
       startDate: ride.data.start_date,
-      endDate: ride.data.end_date,
+      endDate: ride.data.end_date ?? '',
+      neverEnds: ride.data.end_date === null,
       notificationTime: ride.data.notification_time.slice(0, 5),
       weekdays: schedule.data.map((day) => day.weekday),
       strictSchedule: ride.data.strict_schedule,
@@ -116,7 +136,8 @@ export default function RideSettingsScreen() {
             .mutateAsync(rideId)
             .then(async () => {
               await notifications.onRideLeftOrArchived(rideId).catch(() => []);
-              router.replace('/');
+              setInitializedRideId(null);
+              setSaved(false);
             })
             .catch((cause: unknown) =>
               setError(cause instanceof Error ? cause.message : 'The Ride could not be archived.'),
@@ -126,32 +147,94 @@ export default function RideSettingsScreen() {
     ]);
   };
 
-  const confirmLeave = () => {
-    Alert.alert('Leave this Ride?', 'You will lose access to its private photos.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Leave',
-        style: 'destructive',
-        onPress: () => {
-          setError(null);
-          void leaveRide
-            .mutateAsync(rideId)
-            .then(async () => {
-              await notifications.onRideLeftOrArchived(rideId).catch(() => []);
-              router.replace('/');
-            })
-            .catch((cause: unknown) =>
-              setError(cause instanceof Error ? cause.message : 'You could not leave the Ride.'),
-            );
+  const confirmRestore = () => {
+    Alert.alert(
+      'Restore this Ride?',
+      'It will become live again. If it had already ended, it will reopen with no end date.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Restore',
+          onPress: () => {
+            setError(null);
+            void unarchiveRide
+              .mutateAsync(rideId)
+              .then(() => {
+                requestNotificationRefresh();
+                setInitializedRideId(null);
+                setSaved(false);
+              })
+              .catch((cause: unknown) =>
+                setError(
+                  cause instanceof Error ? cause.message : 'The Ride could not be restored.',
+                ),
+              );
+          },
         },
-      },
-    ]);
+      ],
+    );
+  };
+
+  const exitRide = async () => {
+    await notifications.onRideLeftOrArchived(rideId).catch(() => []);
+    router.replace('/');
+  };
+
+  const confirmLeave = () => {
+    const creatorLeaving = ride.data?.creator_id === user?.id;
+    Alert.alert(
+      'Leave this Ride?',
+      creatorLeaving
+        ? 'Ownership will pass to the next member. You will lose access to its private photos.'
+        : 'You will lose access to its private photos.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: () => {
+            setError(null);
+            void leaveRide
+              .mutateAsync(rideId)
+              .then(() => exitRide())
+              .catch((cause: unknown) =>
+                setError(cause instanceof Error ? cause.message : 'You could not leave the Ride.'),
+              );
+          },
+        },
+      ],
+    );
+  };
+
+  const confirmDelete = () => {
+    Alert.alert(
+      'Delete this Ride permanently?',
+      'Photos, comments, and the join code will be gone forever. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete forever',
+          style: 'destructive',
+          onPress: () => {
+            setError(null);
+            void deleteRide
+              .mutateAsync(rideId)
+              .then(() => exitRide())
+              .catch((cause: unknown) =>
+                setError(
+                  cause instanceof Error ? cause.message : 'The Ride could not be deleted.',
+                ),
+              );
+          },
+        },
+      ],
+    );
   };
 
   if (ride.isPending || schedule.isPending) {
     return (
       <ScrollScreen>
-        <StatePanel loading message="Loading Ride settings…" />
+        <CenteredBusy message="Loading Ride settings…" />
       </ScrollScreen>
     );
   }
@@ -173,6 +256,13 @@ export default function RideSettingsScreen() {
 
   const isCreator = ride.data.creator_id === user?.id;
   const scheduledWeekdays = schedule.data?.map((day) => day.weekday) ?? [];
+  const memberCount = members.data?.length ?? 0;
+  const isLastMember = memberCount === 1;
+  const dangerBusy =
+    archiveRide.isPending ||
+    leaveRide.isPending ||
+    deleteRide.isPending ||
+    unarchiveRide.isPending;
 
   return (
     <ScrollScreen>
@@ -181,7 +271,8 @@ export default function RideSettingsScreen() {
         <View style={styles.detailBlock}>
           <Body muted>{ride.data.is_archived ? 'Archived Ride window' : 'Ride window'}</Body>
           <Text style={styles.detailValue}>
-            {formatRideDate(ride.data.start_date)} – {formatRideDate(ride.data.end_date)}
+            {formatRideDate(ride.data.start_date)}
+            {ride.data.end_date ? ` – ${formatRideDate(ride.data.end_date)}` : ' · Never ends'}
           </Text>
         </View>
         <View style={styles.detailBlock}>
@@ -239,10 +330,12 @@ export default function RideSettingsScreen() {
           ) : null}
         </>
       ) : (
-        <Body muted>Only the Ride creator can change the schedule and details.</Body>
+        <Body muted>Only the Ride owner can change the schedule and details.</Body>
       )}
 
-      <SectionTitle>Members</SectionTitle>
+      <SectionTitle>
+        Members · {members.isPending ? '…' : `${memberCount} / ${MAX_RIDE_MEMBERS}`}
+      </SectionTitle>
       {members.isPending ? (
         <Body muted>Loading members…</Body>
       ) : members.isError ? (
@@ -257,10 +350,19 @@ export default function RideSettingsScreen() {
             <Text style={styles.memberName}>
               {formatProfileName(member.profile, 'Member')}
             </Text>
-            <Text style={styles.role}>{member.role}</Text>
+            <Text style={styles.role}>{formatMemberRole(member.role)}</Text>
           </View>
         ))
       )}
+      {!members.isPending && !members.isError ? (
+        <Body muted>
+          {memberCount >= MAX_RIDE_MEMBERS
+            ? 'This Ride is full.'
+            : `${MAX_RIDE_MEMBERS - memberCount} spot${
+                MAX_RIDE_MEMBERS - memberCount === 1 ? '' : 's'
+              } left.`}
+        </Body>
+      ) : null}
 
       {!ride.data.is_archived ? (
         isCreator ? (
@@ -272,7 +374,54 @@ export default function RideSettingsScreen() {
             Leave Ride
           </Button>
         )
-      ) : null}
+      ) : (
+        <View style={styles.dangerActions}>
+          {isCreator ? (
+            <Button
+              disabled={dangerBusy}
+              loading={unarchiveRide.isPending}
+              onPress={confirmRestore}
+            >
+              Restore Ride
+            </Button>
+          ) : null}
+          {isCreator && isLastMember ? (
+            <Button
+              disabled={dangerBusy}
+              loading={deleteRide.isPending}
+              variant="danger"
+              onPress={confirmDelete}
+            >
+              Delete Ride permanently
+            </Button>
+          ) : (
+            <Button
+              disabled={dangerBusy}
+              loading={leaveRide.isPending}
+              variant="danger"
+              onPress={confirmLeave}
+            >
+              Leave Ride
+            </Button>
+          )}
+          {isCreator && !isLastMember ? (
+            <Body muted>
+              Leaving transfers ownership to the next member. Delete is only available when you are
+              the last person in the Ride.
+            </Body>
+          ) : null}
+        </View>
+      )}
+
+      <Text style={styles.createdBy}>
+        Created by{' '}
+        {formatProfileName(
+          members.data?.find((member) => member.user_id === ride.data.creator_id)?.profile ??
+            members.data?.find((member) => member.role === 'creator')?.profile,
+          'Owner',
+        )}{' '}
+        — {formatCreatedOn(ride.data.created_at)}
+      </Text>
     </ScrollScreen>
   );
 }
@@ -290,5 +439,13 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   memberName: { color: colors.text, flex: 1, fontSize: 16, fontWeight: '600' },
-  role: { color: colors.muted, fontSize: 13, textTransform: 'capitalize' },
+  role: { color: colors.muted, fontSize: 13, fontWeight: '600' },
+  dangerActions: { gap: spacing.sm },
+  createdBy: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '500',
+    paddingTop: spacing.md,
+    textAlign: 'center',
+  },
 });

@@ -7,12 +7,15 @@ function byStartDate(a: UserRide, b: UserRide) {
 }
 
 function byEndDate(a: UserRide, b: UserRide) {
+  if (a.end_date === null && b.end_date === null) return 0;
+  if (a.end_date === null) return 1;
+  if (b.end_date === null) return -1;
   return a.end_date.localeCompare(b.end_date);
 }
 
 function byMostRecentlyArchived(a: UserRide, b: UserRide) {
-  const aDate = a.archived_at ?? a.end_date;
-  const bDate = b.archived_at ?? b.end_date;
+  const aDate = a.archived_at ?? a.end_date ?? a.start_date;
+  const bDate = b.archived_at ?? b.end_date ?? b.start_date;
   return bDate.localeCompare(aDate);
 }
 

@@ -18,6 +18,8 @@ import {
   requestSoloRideNotificationPermission,
 } from '@/features/notifications';
 import {
+  MAX_LIVE_RIDES_PER_USER,
+  MAX_RIDE_MEMBERS,
   rideFormSchema,
   useCreateRide,
   type Ride,
@@ -30,6 +32,7 @@ const INITIAL_VALUES: RideFormValues = {
   description: '',
   startDate: format(today, 'yyyy-MM-dd'),
   endDate: format(addDays(today, 30), 'yyyy-MM-dd'),
+  neverEnds: false,
   notificationTime: '09:00',
   weekdays: [today.getDay()],
   strictSchedule: true,
@@ -91,7 +94,10 @@ export default function CreateRideScreen() {
   return (
     <ScrollScreen>
       <Heading>Create a Ride</Heading>
-      <Body muted>Choose a simple photo rhythm for your private group.</Body>
+      <Body muted>
+        Up to {MAX_RIDE_MEMBERS} riders per Ride. You can be in {MAX_LIVE_RIDES_PER_USER} active
+        Rides at a time.
+      </Body>
       <RideForm disabled={createRide.isPending} onChange={setValues} value={values} />
       <ErrorBanner message={error} />
       <Button loading={createRide.isPending} onPress={() => void submit()}>

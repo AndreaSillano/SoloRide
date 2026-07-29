@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "SoloRide",
-    "slug": "SoloRide",
+    "slug": "soloride",
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "soloride",
@@ -21,7 +21,7 @@
       },
       "infoPlist": {
         "NSCameraUsageDescription": "SoloRide uses the camera to add photos to your rides.",
-        "NSLocationWhenInUseUsageDescription": "SoloRide uses your location while you record a ride.",
+        "NSLocationWhenInUseUsageDescription": "SoloRide uses your location to optionally tag photos with where they were taken.",
         "NSPhotoLibraryUsageDescription": "SoloRide uses your photo library to add photos to your rides."
       },
       "bundleIdentifier": "com.anonymous.SoloRide"
@@ -64,7 +64,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "SoloRide uses your location while you record a ride.",
+          "locationWhenInUsePermission": "SoloRide uses your location to optionally tag photos with where they were taken.",
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false
         }
@@ -81,6 +81,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b162b64d-8ed0-41b4-a60f-ebba66cd948e"
+      }
+    },
+    "owner": "megaandixs-team"
   }
 }

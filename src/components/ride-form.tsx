@@ -36,6 +36,15 @@ function toTimeValue(date: Date) {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
+function formatDateLabel(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return 'Choose date';
+  return dateFromValue(value, 'date').toLocaleDateString([], {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
 export function RideForm({
   value,
   onChange,
@@ -54,6 +63,11 @@ export function RideForm({
 
   const pickerMode = picker === 'notificationTime' ? 'time' : 'date';
   const pickerValue = picker ? dateFromValue(value[picker], pickerMode) : new Date();
+  const datePickerOpen = picker === 'startDate' || picker === 'endDate';
+  const timePickerOpen = picker === 'notificationTime';
+
+  const togglePicker = (field: PickerField) =>
+    setPicker((current) => (current === field ? null : field));
 
   const handlePickerChange = (event: DateTimePickerEvent, date?: Date) => {
     if (Platform.OS !== 'ios') setPicker(null);
@@ -61,40 +75,81 @@ export function RideForm({
     set(picker, picker === 'notificationTime' ? toTimeValue(date) : toDateValue(date));
   };
 
+  const pickerPanel =
+    picker ? (
+      <View style={styles.picker}>
+        <DateTimePicker
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          mode={pickerMode}
+          onChange={handlePickerChange}
+          value={pickerValue}
+        />
+        {Platform.OS === 'ios' ? (
+          <Pressable onPress={() => setPicker(null)} style={styles.done}>
+            <Text style={styles.doneText}>Done</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    ) : null;
+
   return (
     <View style={styles.form}>
-      <Field
-        autoCapitalize="sentences"
-        editable={!disabled}
-        label="Ride name"
-        maxLength={100}
-        onChangeText={(text) => set('name', text)}
-        placeholder="Morning miles"
-        value={value.name}
-      />
-      <Field
-        autoCapitalize="sentences"
-        editable={!disabled}
-        label="Description (optional)"
-        maxLength={2000}
-        multiline
-        onChangeText={(text) => set('description', text)}
-        placeholder="What are you riding toward?"
-        style={styles.description}
-        value={value.description}
-      />
+      <View style={styles.countedField}>
+        <Field
+          autoCapitalize="sentences"
+          editable={!disabled}
+          label="Ride name"
+          maxLength={20}
+          onChangeText={(text) => set('name', text)}
+          placeholder="Morning miles"
+          value={value.name}
+        />
+        <Text style={styles.charCount}>{value.name.length}/20</Text>
+      </View>
+      <View style={styles.countedField}>
+        <Field
+          autoCapitalize="sentences"
+          editable={!disabled}
+          label="Description (optional)"
+          maxLength={30}
+          multiline
+          onChangeText={(text) => set('description', text)}
+          placeholder="What are you riding toward?"
+          style={styles.description}
+          value={value.description}
+        />
+        <Text style={styles.charCount}>{value.description.length}/30</Text>
+      </View>
       <View style={styles.dateRow}>
         <PickerButton
+          active={picker === 'startDate'}
           disabled={disabled}
           label="Starts"
-          onPress={() => setPicker('startDate')}
-          value={value.startDate || 'Choose date'}
+          onPress={() => togglePicker('startDate')}
+          value={formatDateLabel(value.startDate)}
         />
         <PickerButton
-          disabled={disabled}
+          active={picker === 'endDate'}
+          disabled={disabled || value.neverEnds}
           label="Ends"
-          onPress={() => setPicker('endDate')}
-          value={value.endDate || 'Choose date'}
+          onPress={() => togglePicker('endDate')}
+          value={value.neverEnds ? 'Never' : formatDateLabel(value.endDate)}
+        />
+      </View>
+      {datePickerOpen && !value.neverEnds ? pickerPanel : null}
+      <View style={styles.scheduleMode}>
+        <View style={styles.scheduleModeText}>
+          <Text style={styles.label}>Never ends</Text>
+          <Body muted>Keep the Ride open with no end date.</Body>
+        </View>
+        <Switch
+          disabled={disabled}
+          onValueChange={(neverEnds) => {
+            set('neverEnds', neverEnds);
+            if (neverEnds && picker === 'endDate') setPicker(null);
+          }}
+          trackColor={{ true: colors.primary }}
+          value={value.neverEnds}
         />
       </View>
       <View style={styles.group}>
@@ -122,26 +177,13 @@ export function RideForm({
         </View>
       </View>
       <PickerButton
+        active={timePickerOpen}
         disabled={disabled}
         label="Notification time"
-        onPress={() => setPicker('notificationTime')}
+        onPress={() => togglePicker('notificationTime')}
         value={value.notificationTime}
       />
-      {picker ? (
-        <View style={styles.picker}>
-          <DateTimePicker
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            mode={pickerMode}
-            onChange={handlePickerChange}
-            value={pickerValue}
-          />
-          {Platform.OS === 'ios' ? (
-            <Pressable onPress={() => setPicker(null)} style={styles.done}>
-              <Text style={styles.doneText}>Done</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
+      {timePickerOpen ? pickerPanel : null}
     </View>
   );
 }
@@ -151,11 +193,13 @@ function PickerButton({
   value,
   onPress,
   disabled,
+  active = false,
 }: {
   label: string;
   value: string;
   onPress: () => void;
   disabled: boolean;
+  active?: boolean;
 }) {
   return (
     <View style={styles.pickerButtonWrap}>
@@ -166,6 +210,7 @@ function PickerButton({
         onPress={onPress}
         style={({ pressed }) => [
           styles.pickerButton,
+          active && styles.pickerButtonActive,
           pressed && styles.pressed,
           disabled && styles.disabled,
         ]}
@@ -183,6 +228,13 @@ const styles = StyleSheet.create({
   scheduleModeText: { flex: 1, gap: spacing.xxs },
   label: { color: colors.text, fontSize: 14, fontWeight: '600' },
   description: { minHeight: 92, paddingTop: spacing.md, textAlignVertical: 'top' },
+  countedField: { gap: spacing.xs },
+  charCount: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'right',
+  },
   dateRow: { flexDirection: 'row', gap: spacing.sm },
   pickerButtonWrap: { flex: 1, gap: spacing.xs },
   pickerButton: {
@@ -193,6 +245,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 48,
     paddingHorizontal: spacing.md,
+  },
+  pickerButtonActive: {
+    borderColor: colors.primary,
+    borderWidth: 1.5,
   },
   pickerButtonText: { color: colors.text, fontSize: 16 },
   picker: {

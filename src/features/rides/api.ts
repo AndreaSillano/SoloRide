@@ -66,10 +66,11 @@ function mutationParams(input: CreateRideInput) {
     p_name: values.name,
     p_description: values.description || null,
     p_start_date: values.startDate,
-    p_end_date: values.endDate,
+    p_end_date: values.neverEnds ? null : values.endDate,
     p_notification_time: values.notificationTime,
     p_weekdays: [...values.weekdays].sort((a, b) => a - b),
     p_strict_schedule: values.strictSchedule,
+    p_local_date: localDateParam(),
   };
 }
 
@@ -89,6 +90,9 @@ function normalizePreviewStatus(status: unknown): RidePreviewStatus {
       return 'expired';
     case 'archived':
       return 'archived';
+    case 'full':
+    case 'at_capacity':
+      return 'full';
     case 'duplicate':
     case 'already_member':
       return 'duplicate';
@@ -106,7 +110,7 @@ function toPreview(data: unknown): RidePreview {
     typeof raw.id === 'string' &&
     typeof raw.name === 'string' &&
     typeof raw.start_date === 'string' &&
-    typeof raw.end_date === 'string';
+    (raw.end_date === null || typeof raw.end_date === 'string');
 
   return {
     status,
@@ -116,7 +120,7 @@ function toPreview(data: unknown): RidePreview {
           name: raw.name as string,
           description: typeof raw.description === 'string' ? raw.description : null,
           start_date: raw.start_date as string,
-          end_date: raw.end_date as string,
+          end_date: typeof raw.end_date === 'string' ? raw.end_date : null,
           member_count: typeof raw.member_count === 'number' ? raw.member_count : 0,
         }
       : null,
@@ -227,8 +231,22 @@ export async function leaveRide(rideId: string): Promise<void> {
   if (error) throw mapRideError(error);
 }
 
+export async function deleteRide(rideId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_ride', { p_ride_id: rideId });
+  if (error) throw mapRideError(error);
+}
+
 export async function archiveRide(rideId: string): Promise<Ride> {
   const { data, error } = await supabase.rpc('archive_ride', { p_ride_id: rideId });
+  if (error) throw mapRideError(error);
+  return unwrapRide(data);
+}
+
+export async function unarchiveRide(rideId: string): Promise<Ride> {
+  const { data, error } = await supabase.rpc('unarchive_ride', {
+    p_ride_id: rideId,
+    p_local_date: localDateParam(),
+  });
   if (error) throw mapRideError(error);
   return unwrapRide(data);
 }

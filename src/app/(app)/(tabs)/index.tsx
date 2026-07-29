@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCurrentUser } from '@/auth/auth-context';
 import { RideCard } from '@/components/ride-card';
 import { RideOverview } from '@/components/ride-overview';
-import { FixedHeaderScreen, StatePanel } from '@/components/ui';
+import { FixedHeaderScreen, RideFeedSkeleton, StatePanel } from '@/components/ui';
 import { useRideFeed } from '@/features/posts';
 import { groupUserRides, useSelectedRide, useUserRides } from '@/features/rides';
 import { queryKeys } from '@/lib/queryKeys';
@@ -109,7 +109,7 @@ export default function HomeScreen() {
             onPress={() => toggleMenu('switcher')}
             style={({ pressed }) => [styles.switcherTrigger, pressed && styles.pressed]}
           >
-            <Text numberOfLines={1} style={styles.switcherText}>
+            <Text ellipsizeMode="tail" numberOfLines={1} style={styles.switcherText}>
               {rides.isPending ? 'Loading…' : (selectedRide?.name ?? 'Your Rides')}
             </Text>
             {hasRides ? (
@@ -240,7 +240,7 @@ export default function HomeScreen() {
       }
     >
       {rides.isPending || !isReady ? (
-        <StatePanel loading message="Loading your Rides…" />
+        <RideFeedSkeleton />
       ) : rides.isError ? (
         <StatePanel
           actionLabel="Try again"
@@ -258,9 +258,13 @@ export default function HomeScreen() {
           title="Your first Ride starts here"
         />
       ) : selectedRideId ? (
-        <RideOverview compact rideId={selectedRideId} showHeading={false} />
+        refreshing ? (
+          <RideFeedSkeleton />
+        ) : (
+          <RideOverview compact rideId={selectedRideId} showHeading={false} />
+        )
       ) : (
-        <StatePanel loading message="Preparing your feed…" />
+        <RideFeedSkeleton count={1} />
       )}
     </FixedHeaderScreen>
   );

@@ -7,7 +7,7 @@ export type Ride = {
   code: string;
   creator_id: string;
   start_date: string;
-  end_date: string;
+  end_date: string | null;
   notification_time: string;
   strict_schedule: boolean;
   is_archived: boolean;
@@ -46,6 +46,7 @@ export type RideFormValues = {
   description: string;
   startDate: string;
   endDate: string;
+  neverEnds: boolean;
   notificationTime: string;
   weekdays: number[];
   strictSchedule: boolean;
@@ -63,7 +64,8 @@ export type RidePreviewStatus =
   | 'upcoming'
   | 'expired'
   | 'archived'
-  | 'duplicate';
+  | 'duplicate'
+  | 'full';
 
 export type RidePreviewDetails = Pick<
   Ride,

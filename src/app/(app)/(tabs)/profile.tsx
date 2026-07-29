@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -29,6 +30,11 @@ import {
   useSoloRideNotifications,
   type SoloRidePermissionStatus,
 } from '@/features/notifications';
+import {
+  getForegroundLocationPermission,
+  requestForegroundLocationPermission,
+  type AppPermissionStatus,
+} from '@/features/permissions';
 import { ProfileDataError, useRemoveAvatar, useUpdateAvatar } from '@/features/profile';
 import { groupUserRides, useUserRides } from '@/features/rides';
 import { colors, radius, spacing } from '@/theme';
@@ -43,27 +49,44 @@ export default function ProfileScreen() {
   const [cameraPermission, requestCameraPermission, getCameraPermission] =
     useCameraPermissions();
   const [permission, setPermission] = useState<SoloRidePermissionStatus>('undetermined');
+  const [locationStatus, setLocationStatus] = useState<AppPermissionStatus>('undetermined');
+  const [locationCanAskAgain, setLocationCanAskAgain] = useState(true);
   const [alertsEnabled, setAlertsEnabled] = useState(true);
   const [prefsReady, setPrefsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'logout' | 'toggle' | 'camera' | 'avatar' | null>(null);
+  const [busy, setBusy] = useState<
+    'logout' | 'toggle' | 'camera' | 'location' | 'avatar' | null
+  >(null);
 
   const groups = useMemo(() => groupUserRides(rides.data ?? []), [rides.data]);
   const username = profile?.username ?? null;
   const avatarBusy = busy === 'avatar' || updateAvatar.isPending || removeAvatar.isPending;
   const cameraGranted = Boolean(cameraPermission?.granted);
   const cameraBlocked = cameraPermission?.granted === false && cameraPermission.canAskAgain === false;
+  const locationGranted = locationStatus === 'granted';
+  const locationBlocked = locationStatus === 'denied' && !locationCanAskAgain;
+
+  const refreshLocationPermission = async () => {
+    const next = await getForegroundLocationPermission();
+    setLocationStatus(next.status);
+    setLocationCanAskAgain(next.canAskAgain);
+  };
 
   useEffect(() => {
     void notifications.getPermission().then(setPermission);
+    void refreshLocationPermission();
   }, [notifications]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void getCameraPermission();
+      if (state === 'active') {
+        void getCameraPermission();
+        void refreshLocationPermission();
+        void notifications.getPermission().then(setPermission);
+      }
     });
     return () => sub.remove();
-  }, [getCameraPermission]);
+  }, [getCameraPermission, notifications]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -196,6 +219,44 @@ export default function ProfileScreen() {
     }
   };
 
+  const toggleLocation = async (next: boolean) => {
+    if (busy === 'location') return;
+    setBusy('location');
+    setError(null);
+    try {
+      if (next) {
+        if (locationBlocked) {
+          await Linking.openSettings();
+          return;
+        }
+        const result = await requestForegroundLocationPermission();
+        setLocationStatus(result.status);
+        setLocationCanAskAgain(result.canAskAgain);
+        if (result.status !== 'granted') {
+          setError(
+            result.canAskAgain === false
+              ? 'Location access is blocked for SoloRide. Enable it in system Settings.'
+              : 'Location access was not granted.',
+          );
+        }
+        return;
+      }
+      Alert.alert(
+        'Turn off location?',
+        'SoloRide can’t revoke location access itself. You can disable it in system Settings.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+        ],
+      );
+    } catch {
+      setError('Location permission could not be updated.');
+    } finally {
+      setBusy(null);
+      void refreshLocationPermission();
+    }
+  };
+
   const toggleAlerts = async (next: boolean) => {
     if (!user?.id || busy === 'toggle') return;
     setBusy('toggle');
@@ -238,6 +299,19 @@ export default function ProfileScreen() {
     }
   };
 
+  const openRidesList = () => {
+    router.push('/your-rides');
+  };
+
+  const rideSummary = useMemo(() => {
+    const parts = [
+      groups.active.length ? `${groups.active.length} active` : null,
+      groups.upcoming.length ? `${groups.upcoming.length} upcoming` : null,
+      groups.archived.length ? `${groups.archived.length} archived` : null,
+    ].filter(Boolean);
+    return parts.length ? parts.join(' · ') : 'No Rides yet';
+  }, [groups]);
+
   return (
     <ScrollScreen>
       <View style={styles.identity}>
@@ -271,21 +345,30 @@ export default function ProfileScreen() {
         </Button>
       ) : null}
 
-      {!rides.isPending && rides.data ? (
-        <Text style={styles.rideSummary}>
-          {[
-            `${groups.active.length} active Ride${groups.active.length === 1 ? '' : 's'}`,
-            groups.upcoming.length
-              ? `${groups.upcoming.length} upcoming`
-              : null,
-            groups.archived.length
-              ? `${groups.archived.length} archived`
-              : null,
-          ]
-            .filter(Boolean)
-            .join(' · ')}
-        </Text>
-      ) : null}
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Your Rides</Text>
+        <Pressable
+          accessibilityHint="Opens a list of all your Rides"
+          accessibilityRole="button"
+          onPress={openRidesList}
+          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+        >
+          <View style={styles.rowIcon}>
+            <Ionicons color={colors.primary} name="images-outline" size={20} />
+          </View>
+          <View style={styles.rowBody}>
+            <Text style={styles.rowTitle}>
+              {rides.isPending
+                ? 'Loading…'
+                : `${rides.data?.length ?? 0} Ride${(rides.data?.length ?? 0) === 1 ? '' : 's'}`}
+            </Text>
+            <Text style={styles.rowSubtitle}>
+              {rides.isPending ? 'Checking your Rides…' : rideSummary}
+            </Text>
+          </View>
+          <Ionicons color={colors.muted} name="chevron-forward" size={18} />
+        </Pressable>
+      </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Permissions</Text>
@@ -314,6 +397,28 @@ export default function ProfileScreen() {
           ) : (
             <ActivityIndicator color={colors.primary} style={styles.toggleSpinner} />
           )}
+        </View>
+        <View style={styles.row}>
+          <View style={styles.rowIcon}>
+            <Ionicons color={colors.primary} name="location-outline" size={20} />
+          </View>
+          <View style={styles.rowBody}>
+            <Text style={styles.rowTitle}>Location</Text>
+            <Text style={styles.rowSubtitle}>
+              Optionally tag photos with where they were taken.
+            </Text>
+            {locationBlocked ? (
+              <Button variant="secondary" onPress={() => void Linking.openSettings()}>
+                Open system Settings
+              </Button>
+            ) : null}
+          </View>
+          <Switch
+            disabled={busy === 'location'}
+            onValueChange={(value) => void toggleLocation(value)}
+            trackColor={{ false: colors.borderStrong, true: colors.primary }}
+            value={locationGranted}
+          />
         </View>
         <View style={styles.row}>
           <View style={styles.rowIcon}>
@@ -393,12 +498,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 15,
     fontWeight: '500',
-    textAlign: 'center',
-  },
-  rideSummary: {
-    color: colors.textSoft,
-    fontSize: 14,
-    fontWeight: '600',
     textAlign: 'center',
   },
   section: { gap: spacing.xs },

@@ -19,7 +19,7 @@ export type Ride = {
   code: string;
   creator_id: string;
   start_date: string;
-  end_date: string;
+  end_date: string | null;
   notification_time: string;
   is_archived: boolean;
   created_at: string;

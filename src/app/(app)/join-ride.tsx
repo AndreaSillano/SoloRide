@@ -16,6 +16,8 @@ import {
   requestSoloRideNotificationPermission,
 } from '@/features/notifications';
 import {
+  MAX_LIVE_RIDES_PER_USER,
+  MAX_RIDE_MEMBERS,
   rideCodeSchema,
   useJoinRideByCode,
   usePreviewRideByCode,
@@ -26,8 +28,9 @@ const STATUS_MESSAGES: Record<Exclude<RidePreviewStatus, 'available'>, string> =
   invalid: 'That code does not match a Ride. Check all 8 characters.',
   upcoming: 'This Ride is upcoming and cannot be joined yet.',
   expired: 'This Ride has ended and can no longer be joined.',
-  archived: 'The creator archived this Ride.',
+  archived: 'The owner archived this Ride.',
   duplicate: 'You are already a member of this Ride.',
+  full: `This Ride is full (${MAX_RIDE_MEMBERS} riders max).`,
 };
 
 export default function JoinRideScreen() {
@@ -68,7 +71,10 @@ export default function JoinRideScreen() {
   return (
     <ScrollScreen>
       <Heading>Join a Ride</Heading>
-      <Body muted>Your code only reveals basic Ride details until you confirm.</Body>
+      <Body muted>
+        Your code only reveals basic Ride details until you confirm. You can be in{' '}
+        {MAX_LIVE_RIDES_PER_USER} active Rides at a time.
+      </Body>
       <Field
         autoCapitalize="characters"
         autoCorrect={false}
@@ -94,14 +100,16 @@ export default function JoinRideScreen() {
       {result ? (
         result.status === 'available' && result.ride ? (
           <Card>
-            <Heading>{result.ride.name}</Heading>
+            <Heading numberOfLines={1}>{result.ride.name}</Heading>
             {result.ride.description ? <Body>{result.ride.description}</Body> : null}
             <Body muted>
-              {new Date(`${result.ride.start_date}T12:00:00`).toLocaleDateString()} –{' '}
-              {new Date(`${result.ride.end_date}T12:00:00`).toLocaleDateString()}
+              {new Date(`${result.ride.start_date}T12:00:00`).toLocaleDateString()}
+              {result.ride.end_date
+                ? ` – ${new Date(`${result.ride.end_date}T12:00:00`).toLocaleDateString()}`
+                : ' · Never ends'}
             </Body>
             <Body muted>
-              {result.ride.member_count} {result.ride.member_count === 1 ? 'member' : 'members'}
+              {result.ride.member_count} / {MAX_RIDE_MEMBERS} riders
             </Body>
             <Button loading={join.isPending} onPress={() => void confirmJoin()}>
               Confirm join

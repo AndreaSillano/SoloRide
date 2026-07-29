@@ -14,7 +14,7 @@ export const DATE_FORMAT = 'yyyy-MM-dd';
 
 export type RideWindow = {
   startDate: string;
-  endDate: string;
+  endDate: string | null;
   weekdays: number[];
 };
 
@@ -29,13 +29,15 @@ export function getWeekRange(date = new Date()) {
 
 export function isRideActive(
   startDate: string,
-  endDate: string,
+  endDate: string | null,
   archived: boolean,
   now = new Date(),
 ) {
   if (archived) return false;
   const today = startOfDay(now);
-  return !isBefore(today, parseISO(startDate)) && !isAfter(today, parseISO(endDate));
+  if (isBefore(today, parseISO(startDate))) return false;
+  if (endDate && isAfter(today, parseISO(endDate))) return false;
+  return true;
 }
 
 export function isRideUpcoming(startDate: string, archived: boolean, now = new Date()) {
@@ -50,9 +52,10 @@ export function getScheduledDates(
 ) {
   const result: string[] = [];
   const rideStart = parseISO(ride.startDate);
-  const rideEnd = parseISO(ride.endDate);
+  const rideEnd = ride.endDate ? parseISO(ride.endDate) : null;
   let cursor = startOfDay(from);
-  const finalDate = isBefore(through, rideEnd) ? startOfDay(through) : rideEnd;
+  const finalDate =
+    rideEnd && isBefore(rideEnd, startOfDay(through)) ? rideEnd : startOfDay(through);
 
   if (isBefore(cursor, rideStart)) cursor = rideStart;
 
@@ -67,15 +70,16 @@ export function getScheduledDates(
 }
 
 export function getNextScheduledDate(ride: RideWindow, now = new Date()) {
-  return getScheduledDates(ride, now, parseISO(ride.endDate), 1)[0] ?? null;
+  const through = ride.endDate ? parseISO(ride.endDate) : addDays(startOfDay(now), 366);
+  return getScheduledDates(ride, now, through, 1)[0] ?? null;
 }
 
 export function getScheduledDateForPost(ride: RideWindow, now = new Date()) {
   const today = startOfDay(now);
-  const inRange =
-    !isBefore(today, parseISO(ride.startDate)) && !isAfter(today, parseISO(ride.endDate));
+  const started = !isBefore(today, parseISO(ride.startDate));
+  const notEnded = !ride.endDate || !isAfter(today, parseISO(ride.endDate));
 
-  if (!inRange || !ride.weekdays.includes(today.getDay())) return null;
+  if (!started || !notEnded || !ride.weekdays.includes(today.getDay())) return null;
   return format(today, DATE_FORMAT);
 }
 
