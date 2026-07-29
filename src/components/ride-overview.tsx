@@ -167,7 +167,8 @@ export function RideOverview({
           </Button>
         </View>
       ) : null}
-      {data.description ? <Body>{data.description}</Body> : null}
+      {/* Home (compact) pins the description under the fixed ride header instead. */}
+      {!compact && data.description ? <Body>{data.description}</Body> : null}
 
       {!compact ? (
         <>

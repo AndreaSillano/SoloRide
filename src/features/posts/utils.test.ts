@@ -282,11 +282,11 @@ describe('post data utilities', () => {
 
     expect(getReactionCount(post)).toBe(5);
     expect(getReactionSummary(post)).toEqual({
-      scores: [3, -1, 2],
+      scores: [2, -1, 3],
       hasMore: true,
     });
     expect(getReactionSummary(post, 10)).toEqual({
-      scores: [1, -2, 3, -1, 2],
+      scores: [2, -1, 3, -2, 1],
       hasMore: false,
     });
     expect(getOwnReactionScore(post, userId)).toBe(1);

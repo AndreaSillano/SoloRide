@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const STORAGE_KEY_PREFIX = 'soloride:notifications-enabled:';
+// v2 drops a prior key that could be written to "off" while OS permission was
+// still undetermined during the sign-in permission prompts.
+const STORAGE_KEY_PREFIX = 'soloride:notifications-enabled:v2:';
 
 /** App-level opt-in on top of OS permission. Defaults to on so first-time
  * grants still schedule reminders and register for social push. */

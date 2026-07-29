@@ -17,6 +17,7 @@ import { useCurrentUser } from '@/auth/auth-context';
 import { RideCard } from '@/components/ride-card';
 import { RideOverview } from '@/components/ride-overview';
 import { FixedHeaderScreen, RideFeedSkeleton, StatePanel } from '@/components/ui';
+import { requestNotificationRefresh } from '@/features/notifications';
 import { useRideFeed } from '@/features/posts';
 import {
   groupUserRides,
@@ -98,6 +99,7 @@ export default function HomeScreen() {
         );
       }
       await Promise.all(tasks);
+      requestNotificationRefresh();
     } finally {
       setRefreshing(false);
     }
@@ -113,7 +115,12 @@ export default function HomeScreen() {
           style={[styles.overlay, { height: windowHeight }]}
         />
       ) : null}
-      <View style={styles.headerRow}>
+      <View
+        style={[
+          styles.headerRow,
+          selectedRide?.description ? styles.headerRowWithDescription : null,
+        ]}
+      >
         <View style={styles.switcherWrap}>
           <Pressable
             accessibilityLabel={
@@ -235,6 +242,11 @@ export default function HomeScreen() {
           </View>
         </View>
       </View>
+      {selectedRide?.description ? (
+        <Text numberOfLines={2} style={styles.rideDescription}>
+          {selectedRide.description}
+        </Text>
+      ) : null}
     </>
   );
 
@@ -293,8 +305,21 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xs,
+    zIndex: 2,
   },
-  switcherWrap: { flex: 1, position: 'relative' },
+  headerRowWithDescription: {
+    paddingBottom: spacing.xxs,
+  },
+  rideDescription: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: '500',
+    lineHeight: 18,
+    paddingBottom: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    zIndex: 0,
+  },
+  switcherWrap: { flex: 1, position: 'relative', zIndex: 2 },
   switcherTrigger: {
     alignItems: 'center',
     alignSelf: 'flex-start',
@@ -333,13 +358,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     left: 0,
-    marginTop: spacing.xs,
+    marginTop: spacing.xxs,
     maxHeight: 380,
     overflow: 'hidden',
     position: 'absolute',
     right: 0,
     top: '100%',
+    zIndex: 3,
     ...shadows.floating,
+    elevation: 8,
   },
   switcherPanelContent: { gap: spacing.sm, padding: spacing.sm },
   groupLabel: {
@@ -366,7 +393,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.sm,
     borderWidth: StyleSheet.hairlineWidth,
-    marginTop: spacing.xs,
+    marginTop: spacing.xxs,
     minWidth: 190,
     overflow: 'hidden',
     position: 'absolute',

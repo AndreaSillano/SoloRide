@@ -44,7 +44,7 @@ function RequestPermissionsOnSignIn() {
     if (!nextId || previous === nextId) return;
     if (previous !== null) return;
 
-    void requestCoreAppPermissions();
+    void requestCoreAppPermissions(nextId);
   }, [user?.id]);
 
   return null;

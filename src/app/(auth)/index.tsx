@@ -15,6 +15,7 @@ import { useAuth } from '@/auth/auth-context';
 import { loginSchema, registerSchema, type LoginValues, type RegisterValues } from '@/auth/schemas';
 import { ErrorBanner, Field, Screen } from '@/components/ui';
 import { envConfigurationError } from '@/lib/env';
+import { haptics } from '@/lib/haptics';
 import { colors, radius, shadows, spacing } from '@/theme';
 
 const MAX_FAILED_ATTEMPTS = 3;
@@ -52,7 +53,9 @@ function LoginForm() {
     setSubmitError(null);
     try {
       await login(username, password);
+      haptics.success();
     } catch {
+      haptics.error();
       const next = failedAttempts + 1;
       setFailedAttempts(next);
       setSubmitError('That username or password is not correct.');
@@ -247,12 +250,12 @@ export default function AuthLandingScreen() {
     <Screen centered>
       {/* Brand header — compact on Sign up so the taller form stays centered */}
       <View style={[styles.hero, isRegister && styles.heroCompact]}>
-        <View style={styles.logoWrap}>
+        <View style={[styles.logoWrap, isRegister && styles.logoWrapCompact]}>
           <Image
             accessibilityLabel="SoloRide"
-            source={require('../../../assets/iconRide.png')}
-            style={[styles.logo, isRegister && styles.logoCompact]}
             resizeMode="contain"
+            source={require('../../../assets/iconRide.png')}
+            style={styles.logo}
           />
         </View>
         <Text style={[styles.brandName, isRegister && styles.brandNameCompact]}>SoloRide</Text>
@@ -299,10 +302,19 @@ const styles = StyleSheet.create({
   heroCompact: { gap: spacing.xs, paddingBottom: 0 },
   logoWrap: {
     borderRadius: radius.lg,
+    height: 100,
     overflow: 'hidden',
+    width: 100,
   },
-  logo: { width: 100, height: 100 },
-  logoCompact: { width: 72, height: 72 },
+  logoWrapCompact: {
+    borderRadius: radius.md,
+    height: 64,
+    width: 64,
+  },
+  logo: {
+    height: '100%',
+    width: '100%',
+  },
   brandName: {
     color: colors.text,
     fontSize: 28,

@@ -84,7 +84,7 @@ export function ReactionBurst({
     >
       <MaterialIcons
         color={colors.white}
-        name={score > 0 ? 'thumb-up' : 'thumb-down'}
+        name={score > 0 ? 'thumb-up-off-alt' : 'thumb-down-off-alt'}
         size={burstSizeForScore(score)}
         style={styles.icon}
       />

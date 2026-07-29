@@ -38,13 +38,23 @@ export function getReactionSummary(
   });
   const newestFirst = reactions.map((reaction) => reaction.score);
   const hasMore = newestFirst.length > maximum;
-  // Left = older of the shown set, right = newest (front of the stack).
-  const scores = newestFirst.slice(0, maximum).reverse();
+  // Left = newest (front of the stack), right = older of the shown set.
+  const scores = newestFirst.slice(0, maximum);
   return { scores, hasMore };
 }
 
 export function getReactionCount(post: Pick<PostRecord, 'post_reactions'>) {
   return post.post_reactions?.length ?? 0;
+}
+
+/** Net reaction sentiment: sum of all scores on the post. */
+export function getReactionScoreSum(post: Pick<PostRecord, 'post_reactions'>) {
+  return (post.post_reactions ?? []).reduce((total, reaction) => {
+    if (typeof reaction?.score !== 'number' || !isValidReactionScore(reaction.score)) {
+      return total;
+    }
+    return total + reaction.score;
+  }, 0);
 }
 
 export function getOwnReactionScore(

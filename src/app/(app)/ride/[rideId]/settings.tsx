@@ -1,6 +1,7 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Alert, Share, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, RefreshControl, Share, StyleSheet, Text, View } from 'react-native';
 
 import { useCurrentUser } from '@/auth/auth-context';
 import { RideForm } from '@/components/ride-form';
@@ -31,10 +32,13 @@ import {
   useRideSchedule,
   useUnarchiveRide,
   useUpdateRide,
+  type Ride,
   type RideFormValues,
+  type RideScheduleDay,
 } from '@/features/rides';
 import { formatProfileName } from '@/features/posts';
 import { haptics } from '@/lib/haptics';
+import { queryKeys } from '@/lib/queryKeys';
 import { colors, spacing } from '@/theme';
 
 const EMPTY_FORM: RideFormValues = {
@@ -47,6 +51,19 @@ const EMPTY_FORM: RideFormValues = {
   weekdays: [],
   strictSchedule: true,
 };
+
+function formFromRide(ride: Ride, schedule: RideScheduleDay[]): RideFormValues {
+  return {
+    name: ride.name,
+    description: ride.description ?? '',
+    startDate: ride.start_date,
+    endDate: ride.end_date ?? '',
+    neverEnds: ride.end_date === null,
+    notificationTime: ride.notification_time.slice(0, 5),
+    weekdays: schedule.map((day) => day.weekday),
+    strictSchedule: ride.strict_schedule,
+  };
+}
 
 function formatRideDate(isoDate: string) {
   return new Date(`${isoDate}T12:00:00`).toLocaleDateString([], {
@@ -79,6 +96,7 @@ function formatMemberRole(role: string) {
 export default function RideSettingsScreen() {
   const { rideId } = useLocalSearchParams<{ rideId: string }>();
   const { user } = useCurrentUser();
+  const queryClient = useQueryClient();
   const ride = useRide(rideId);
   const schedule = useRideSchedule(rideId);
   const members = useRideMembers(rideId);
@@ -92,21 +110,55 @@ export default function RideSettingsScreen() {
   const [initializedRideId, setInitializedRideId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const notifiedRideId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!ride.data || !schedule.data || initializedRideId === ride.data.id) return;
-    setForm({
-      name: ride.data.name,
-      description: ride.data.description ?? '',
-      startDate: ride.data.start_date,
-      endDate: ride.data.end_date ?? '',
-      neverEnds: ride.data.end_date === null,
-      notificationTime: ride.data.notification_time.slice(0, 5),
-      weekdays: schedule.data.map((day) => day.weekday),
-      strictSchedule: ride.data.strict_schedule,
-    });
+    setForm(formFromRide(ride.data, schedule.data));
     setInitializedRideId(ride.data.id);
   }, [initializedRideId, ride.data, schedule.data]);
+
+  // Replan local notifications once the loaded ride is available on this screen.
+  useEffect(() => {
+    if (!ride.data || notifiedRideId.current === ride.data.id) return;
+    notifiedRideId.current = ride.data.id;
+    requestNotificationRefresh();
+  }, [ride.data]);
+
+  const applyFormFromQueries = () => {
+    if (!ride.data || !schedule.data) return;
+    setForm(formFromRide(ride.data, schedule.data));
+    setInitializedRideId(ride.data.id);
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      const [rideResult, scheduleResult] = await Promise.all([
+        ride.refetch(),
+        schedule.refetch(),
+        members.refetch(),
+        queryClient.invalidateQueries({ queryKey: ['rides-due-today'] }),
+        ...(user?.id
+          ? [queryClient.invalidateQueries({ queryKey: queryKeys.rides(user.id) })]
+          : []),
+      ]);
+      const freshRide = rideResult.data;
+      const freshSchedule = scheduleResult.data;
+      if (freshRide && freshSchedule) {
+        setForm(formFromRide(freshRide, freshSchedule));
+        setInitializedRideId(freshRide.id);
+      } else {
+        applyFormFromQueries();
+      }
+      setSaved(false);
+      requestNotificationRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const save = async () => {
     const parsed = rideFormSchema.safeParse(form);
@@ -118,6 +170,14 @@ export default function RideSettingsScreen() {
     setSaved(false);
     try {
       await updateRide.mutateAsync({ rideId, ...parsed.data });
+      const [rideResult, scheduleResult] = await Promise.all([
+        ride.refetch(),
+        schedule.refetch(),
+      ]);
+      if (rideResult.data && scheduleResult.data) {
+        setForm(formFromRide(rideResult.data, scheduleResult.data));
+        setInitializedRideId(rideResult.data.id);
+      }
       requestNotificationRefresh();
       haptics.success();
       setSaved(true);
@@ -248,20 +308,27 @@ export default function RideSettingsScreen() {
 
   if (ride.isPending || schedule.isPending) {
     return (
-      <ScrollScreen>
+      <ScrollScreen
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+        }
+      >
         <CenteredBusy message="Loading Ride settings…" />
       </ScrollScreen>
     );
   }
   if (ride.isError || schedule.isError || !ride.data) {
     return (
-      <ScrollScreen>
+      <ScrollScreen
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+        }
+      >
         <StatePanel
           actionLabel="Try again"
           message="Ride settings could not load."
           onAction={() => {
-            void ride.refetch();
-            void schedule.refetch();
+            void onRefresh();
           }}
           title="Settings unavailable"
         />
@@ -280,7 +347,11 @@ export default function RideSettingsScreen() {
     unarchiveRide.isPending;
 
   return (
-    <ScrollScreen>
+    <ScrollScreen
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+      }
+    >
       <Heading>Ride settings</Heading>
       <Card>
         <View style={styles.detailBlock}>

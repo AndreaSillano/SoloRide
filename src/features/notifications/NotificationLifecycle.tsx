@@ -10,7 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { DATE_FORMAT, getWeekRange } from '@/utils/schedule';
 import { format } from 'date-fns';
 
-import type { NotificationRide, PostedRideDate } from './planner';
+import { isSoloRideNotificationData, type NotificationRide, type PostedRideDate } from './planner';
 import { getNotificationsEnabled } from './preferences';
 import {
   isSocialNotificationData,
@@ -38,12 +38,44 @@ Notifications.setNotificationHandler({
   }),
 });
 
+function openHome(rideId?: string) {
+  try {
+    if (rideId) {
+      router.replace({
+        pathname: '/',
+        params: { selectRideId: rideId },
+      });
+      return;
+    }
+    router.replace('/');
+  } catch {
+    // Last-resort navigation if replace with params fails.
+    try {
+      router.replace('/');
+    } catch {
+      // Ignore — the app is already open.
+    }
+  }
+}
+
+/** Open the matching Ride when possible; otherwise land on home. */
 function openFromNotificationData(data: unknown) {
-  if (!isSocialNotificationData(data)) return;
-  router.replace({
-    pathname: '/',
-    params: { selectRideId: data.rideId },
-  });
+  if (isSocialNotificationData(data)) {
+    openHome(data.rideId);
+    return;
+  }
+  if (isSoloRideNotificationData(data)) {
+    openHome(data.rideId);
+    return;
+  }
+  if (data && typeof data === 'object') {
+    const rideId = (data as Record<string, unknown>).rideId;
+    if (typeof rideId === 'string' && rideId.length > 0) {
+      openHome(rideId);
+      return;
+    }
+  }
+  openHome();
 }
 
 async function loadNotificationPlan(userId: string) {
@@ -180,7 +212,11 @@ export function NotificationLifecycle() {
       const responseId = response.notification.request.identifier;
       if (lastHandledResponseId.current === responseId) return;
       lastHandledResponseId.current = responseId;
-      openFromNotificationData(response.notification.request.content.data);
+      try {
+        openFromNotificationData(response.notification.request.content.data);
+      } catch {
+        openHome();
+      }
     };
 
     const responseSub = Notifications.addNotificationResponseReceivedListener(handleResponse);

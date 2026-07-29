@@ -72,13 +72,13 @@ export function ReactionsModal({
                 </View>
                 <MaterialIcons
                   color={colors.text}
-                  name={reaction.score > 0 ? 'thumb-up' : 'thumb-down'}
+                  name={reaction.score > 0 ? 'thumb-up-off-alt' : 'thumb-down-off-alt'}
                   size={reactionScoreToSize(reaction.score)}
                 />
               </View>
             ))
           ) : (
-            <Body muted>No reactions yet. Double-tap a photo to react.</Body>
+            <Body muted>No reactions yet. Double-tap or long-press a photo to react.</Body>
           )}
         </ScrollView>
       </SafeAreaView>

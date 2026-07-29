@@ -2,12 +2,13 @@ import { useHeaderHeight } from '@react-navigation/elements';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { PropsWithChildren, ReactElement, ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
   Image,
   KeyboardAvoidingView,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -30,15 +31,21 @@ import {
   getCommentCount,
   formatProfileName,
   getReactionCount,
-  getReactionSummary,
-  reactionScoreToSize,
+  getReactionScoreSum,
+  // getReactionSummary,
+  // reactionScoreToSize,
   useSignedPostImage,
   type PostRecord,
 } from '@/features/posts';
+import { haptics } from '@/lib/haptics';
 import { colors, radius, shadows, spacing } from '@/theme';
 
 import { ReactionBurst } from './reaction-burst';
-import { ScalePicker } from './scale-picker';
+import {
+  clampReactionScore,
+  reactionScoreFromSwipe,
+  ScalePicker,
+} from './scale-picker';
 
 type AvatarProfile =
   | {
@@ -70,6 +77,9 @@ export function Screen({
   const headerHeight = useSafeHeaderHeight();
   const insets = useSafeAreaInsets();
   const edges: Edge[] = headerHeight > 0 ? ['left', 'right'] : ['top', 'left', 'right'];
+  // Offset the ScrollView frame itself (not just content padding) so taps in the
+  // transparent Stack header band reach the back button instead of this view.
+  const headerOffset = headerHeight > 0 ? headerHeight + spacing.xxs : 0;
 
   return (
     <KeyboardAvoidingView
@@ -80,7 +90,6 @@ export function Screen({
         <ScrollView
           contentContainerStyle={[
             styles.screen,
-            headerHeight > 0 && { paddingTop: headerHeight + spacing.xxs },
             { paddingBottom: spacing.xxl + insets.bottom },
             centered && styles.centered,
           ]}
@@ -88,7 +97,7 @@ export function Screen({
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
           scrollIndicatorInsets={{ bottom: KEYBOARD_CLEARANCE }}
-          style={styles.flex}
+          style={[styles.flex, headerOffset > 0 && { marginTop: headerOffset }]}
         >
           {children}
         </ScrollView>
@@ -101,14 +110,19 @@ export function ScrollScreen({
   children,
   contentStyle,
   onScroll,
+  refreshControl,
 }: PropsWithChildren<{
   contentStyle?: StyleProp<import('react-native').ViewStyle>;
   keyboardVerticalOffset?: number;
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  refreshControl?: ReactElement<RefreshControlProps>;
 }>) {
   const headerHeight = useSafeHeaderHeight();
   const insets = useSafeAreaInsets();
   const edges: Edge[] = headerHeight > 0 ? ['left', 'right'] : ['top', 'left', 'right'];
+  // Offset the ScrollView frame itself (not just content padding) so taps in the
+  // transparent Stack header band reach the back button instead of this view.
+  const headerOffset = headerHeight > 0 ? headerHeight + spacing.xxs : 0;
 
   return (
     <KeyboardAvoidingView
@@ -119,7 +133,6 @@ export function ScrollScreen({
         <ScrollView
           contentContainerStyle={[
             styles.scrollContent,
-            headerHeight > 0 && { paddingTop: headerHeight + spacing.xxs },
             { paddingBottom: spacing.lg + insets.bottom },
             contentStyle,
           ]}
@@ -127,9 +140,10 @@ export function ScrollScreen({
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
           onScroll={onScroll}
+          refreshControl={refreshControl}
           scrollEventThrottle={onScroll ? 16 : undefined}
           scrollIndicatorInsets={{ bottom: KEYBOARD_CLEARANCE }}
-          style={styles.flex}
+          style={[styles.flex, headerOffset > 0 && { marginTop: headerOffset }]}
         >
           {children}
         </ScrollView>
@@ -557,7 +571,7 @@ export function FeedPost({
 }: {
   post: PostRecord;
   onPress: () => void;
-  /** Double-tap the photo: open the reaction scale picker. */
+  /** Double-tap or long-press the photo: open the reaction scale picker. */
   onDoubleTapImage?: () => void;
   /** Opens the full reaction list modal. */
   onPressReactions?: () => void;
@@ -574,51 +588,66 @@ export function FeedPost({
   const author = formatProfileName(post.profile);
   const commentCount = getCommentCount(post);
   const reactionCount = getReactionCount(post);
-  const { scores: reactionSummary, hasMore: hasMoreReactions } = getReactionSummary(post);
+  const reactionSum = getReactionScoreSum(post);
+  // Reaction stack (temporarily hidden):
+  // const { scores: reactionSummary, hasMore: hasMoreReactions } = getReactionSummary(post);
   const remaining = formatRemainingTime(post.expires_at);
   const lastTapAt = useRef(0);
   const singleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdActiveRef = useRef(false);
+  const holdStartScoreRef = useRef(0);
+  const holdScoreRef = useRef(0);
+  const ownScoreRef = useRef(ownReactionScore);
+  const openPickerRef = useRef(onDoubleTapImage);
+  const selectRef = useRef(onSelectReaction);
+  const closePickerRef = useRef(onCloseReactionPicker);
+  const pickerVisibleRef = useRef(reactionPickerVisible);
+  const [holdPreviewScore, setHoldPreviewScore] = useState<number | null>(null);
   const [burstScore, setBurstScore] = useState<number | null>(null);
   /** Second tap must land within this window to count as a double-tap. */
   const DOUBLE_TAP_MS = 350;
   /** Slightly longer than the double-tap window so a late second tap still wins. */
   const SINGLE_TAP_DELAY_MS = 370;
+  const LONG_PRESS_MS = 380;
+  const MOVE_CANCEL_PX = 12;
+
+  ownScoreRef.current = ownReactionScore;
+  openPickerRef.current = onDoubleTapImage;
+  selectRef.current = onSelectReaction;
+  closePickerRef.current = onCloseReactionPicker;
+  pickerVisibleRef.current = reactionPickerVisible;
+
+  const clearLongPressTimer = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const clearSingleTapTimer = () => {
+    if (singleTapTimer.current) {
+      clearTimeout(singleTapTimer.current);
+      singleTapTimer.current = null;
+    }
+  };
 
   useEffect(() => {
     return () => {
-      if (singleTapTimer.current) clearTimeout(singleTapTimer.current);
+      clearSingleTapTimer();
+      clearLongPressTimer();
     };
   }, []);
 
-  const handleImagePress = () => {
-    if (reactionPickerVisible) {
-      onCloseReactionPicker?.();
-      return;
+  useEffect(() => {
+    if (!reactionPickerVisible && holdPreviewScore != null && !holdActiveRef.current) {
+      setHoldPreviewScore(null);
     }
-    if (!onDoubleTapImage) return;
-
-    const now = Date.now();
-    if (lastTapAt.current > 0 && now - lastTapAt.current < DOUBLE_TAP_MS) {
-      if (singleTapTimer.current) {
-        clearTimeout(singleTapTimer.current);
-        singleTapTimer.current = null;
-      }
-      lastTapAt.current = 0;
-      onDoubleTapImage();
-      return;
-    }
-
-    // Single tap on the photo does nothing — comments open only from the
-    // comment icon / "Add a comment" row.
-    lastTapAt.current = now;
-    if (singleTapTimer.current) clearTimeout(singleTapTimer.current);
-    singleTapTimer.current = setTimeout(() => {
-      singleTapTimer.current = null;
-      lastTapAt.current = 0;
-    }, SINGLE_TAP_DELAY_MS);
-  };
+  }, [holdPreviewScore, reactionPickerVisible]);
 
   const handlePickerSelect = (score: number) => {
+    holdActiveRef.current = false;
+    setHoldPreviewScore(null);
     onCloseReactionPicker?.();
     if (score !== 0) {
       setBurstScore(score);
@@ -626,13 +655,104 @@ export function FeedPost({
     onSelectReaction?.(score);
   };
 
+  const photoPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        // Capture touches on the photo so a long-press can continue into a swipe
+        // without lifting. Yield to the feed ScrollView until the hold activates.
+        onStartShouldSetPanResponder: () => Boolean(openPickerRef.current),
+        onPanResponderTerminationRequest: () => !holdActiveRef.current,
+        onShouldBlockNativeResponder: () => holdActiveRef.current,
+        onPanResponderGrant: () => {
+          clearLongPressTimer();
+          if (pickerVisibleRef.current && !holdActiveRef.current) {
+            return;
+          }
+          longPressTimer.current = setTimeout(() => {
+            longPressTimer.current = null;
+            if (!openPickerRef.current) return;
+            const start = clampReactionScore(ownScoreRef.current ?? 0);
+            holdActiveRef.current = true;
+            holdStartScoreRef.current = start;
+            holdScoreRef.current = start;
+            setHoldPreviewScore(start);
+            clearSingleTapTimer();
+            lastTapAt.current = 0;
+            haptics.light();
+            if (!pickerVisibleRef.current) {
+              openPickerRef.current();
+            }
+          }, LONG_PRESS_MS);
+        },
+        onPanResponderMove: (_, gesture) => {
+          if (!holdActiveRef.current) {
+            if (Math.abs(gesture.dx) > MOVE_CANCEL_PX || Math.abs(gesture.dy) > MOVE_CANCEL_PX) {
+              clearLongPressTimer();
+            }
+            return;
+          }
+          const next = reactionScoreFromSwipe(holdStartScoreRef.current, gesture.dx);
+          if (next !== holdScoreRef.current) {
+            holdScoreRef.current = next;
+            setHoldPreviewScore(next);
+            haptics.selection();
+          }
+        },
+        onPanResponderRelease: () => {
+          clearLongPressTimer();
+          if (holdActiveRef.current) {
+            const score = holdScoreRef.current;
+            holdActiveRef.current = false;
+            setHoldPreviewScore(null);
+            closePickerRef.current?.();
+            if (score !== 0) {
+              setBurstScore(score);
+            }
+            selectRef.current?.(score);
+            return;
+          }
+
+          if (pickerVisibleRef.current) {
+            closePickerRef.current?.();
+            return;
+          }
+          if (!openPickerRef.current) return;
+
+          const now = Date.now();
+          if (lastTapAt.current > 0 && now - lastTapAt.current < DOUBLE_TAP_MS) {
+            clearSingleTapTimer();
+            lastTapAt.current = 0;
+            openPickerRef.current();
+            return;
+          }
+
+          lastTapAt.current = now;
+          clearSingleTapTimer();
+          singleTapTimer.current = setTimeout(() => {
+            singleTapTimer.current = null;
+            lastTapAt.current = 0;
+          }, SINGLE_TAP_DELAY_MS);
+        },
+        onPanResponderTerminate: () => {
+          clearLongPressTimer();
+          if (holdActiveRef.current) {
+            holdActiveRef.current = false;
+            setHoldPreviewScore(null);
+            closePickerRef.current?.();
+          }
+        },
+      }),
+    [],
+  );
+
   const reactionOverlay = (
     <>
       {onSelectReaction && onCloseReactionPicker ? (
         <ScalePicker
+          interactive={holdPreviewScore == null}
           onClose={onCloseReactionPicker}
           onSelect={handlePickerSelect}
-          selectedScore={ownReactionScore}
+          selectedScore={holdPreviewScore ?? ownReactionScore}
           visible={reactionPickerVisible}
         />
       ) : null}
@@ -642,27 +762,69 @@ export function FeedPost({
     </>
   );
 
-  const summaryScores =
-    reactionSummary.length > 0
-      ? reactionSummary
-      : ownReactionScore != null
-        ? [ownReactionScore]
-        : [];
+  // Reaction stack (temporarily hidden):
+  // const summaryScores =
+  //   reactionSummary.length > 0
+  //     ? reactionSummary
+  //     : ownReactionScore != null
+  //       ? [ownReactionScore]
+  //       : [];
+
+  const commentLabel =
+    commentCount === 0
+      ? 'Add a comment'
+      : commentCount === 1
+        ? 'View 1 comment'
+        : `View all ${commentCount} comments`;
 
   const actionsRow = (
     <View style={styles.feedActions}>
       <Pressable
-        accessibilityLabel="View comments"
+        accessibilityLabel={commentLabel}
         accessibilityRole="button"
         hitSlop={10}
         onPress={onPress}
-        style={({ pressed }) => pressed && styles.pressed}
+        style={({ pressed }) => [styles.feedCommentAction, pressed && styles.pressed]}
       >
-        <Ionicons color={colors.text} name="chatbubble-outline" size={23} />
+        <Ionicons
+          color={commentCount > 0 ? colors.textSoft : colors.muted}
+          name="chatbubble-outline"
+          size={23}
+        />
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.feedViewCommentsInline,
+            commentCount > 0 ? styles.feedViewCommentsActive : null,
+          ]}
+        >
+          {commentLabel}
+        </Text>
       </Pressable>
 
       <View style={styles.feedActionsSpacer} />
 
+      <Pressable
+        accessibilityLabel={
+          reactionCount === 0
+            ? 'No reactions yet'
+            : reactionCount === 1
+              ? 'View 1 reaction'
+              : `View all ${reactionCount} reactions`
+        }
+        accessibilityRole="button"
+        hitSlop={10}
+        onPress={onPressReactions}
+        style={({ pressed }) => pressed && styles.pressed}
+      >
+        <MaterialIcons
+          color={reactionCount > 0 ? colors.text : colors.muted}
+          name={reactionSum <= -1 ? 'thumb-down-off-alt' : 'thumb-up-off-alt'}
+          size={24}
+        />
+      </Pressable>
+
+      {/* Reaction stack — temporarily hidden; single thumb opens the reactions modal.
       <Pressable
         accessibilityLabel={
           reactionCount === 0
@@ -680,18 +842,21 @@ export function FeedPost({
           <View style={styles.feedReactionStack}>
             {summaryScores.map((score, index) => {
               const size = reactionScoreToSize(score);
+              const stackCount = summaryScores.length;
+              const opacity =
+                stackCount <= 1 ? 1 : 1 - (0.5 * index) / (stackCount - 1);
               return (
                 <View
                   key={`${score}-${index}`}
                   style={[
                     styles.feedReactionIconWrap,
                     index > 0 ? styles.feedReactionOverlap : null,
-                    { zIndex: index + 1 },
+                    { opacity, zIndex: stackCount - index },
                   ]}
                 >
                   <MaterialIcons
                     color={colors.text}
-                    name={score > 0 ? 'thumb-up' : 'thumb-down'}
+                    name={score > 0 ? 'thumb-up-off-alt' : 'thumb-down-off-alt'}
                     size={size}
                   />
                 </View>
@@ -702,7 +867,7 @@ export function FeedPost({
                 style={[
                   styles.feedReactionMoreText,
                   styles.feedReactionOverlap,
-                  { zIndex: summaryScores.length + 1 },
+                  { opacity: 0.4, zIndex: 0 },
                 ]}
               >
                 +
@@ -713,19 +878,20 @@ export function FeedPost({
           <MaterialIcons color={colors.muted} name="thumb-up-off-alt" size={24} />
         )}
       </Pressable>
+      */}
     </View>
   );
 
   if (post.is_temporary) {
     return (
       <View style={styles.feedItemTemporary}>
-        <View style={styles.tempPhotoWrap}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={handleImagePress}
+        <View style={styles.tempPhotoWrap} {...photoPanResponder.panHandlers}>
+          <View
+            accessibilityHint="Double-tap or long-press to react"
+            accessibilityRole="imagebutton"
           >
             <PostImage aspectRatio={3 / 4} post={post} style={styles.tempPhoto} />
-          </Pressable>
+          </View>
           <View style={styles.tempOverlay} pointerEvents="box-none">
             <Avatar profile={post.profile} size={34} />
             <View style={styles.feedHeaderText}>
@@ -769,16 +935,6 @@ export function FeedPost({
             {post.description}
           </Text>
         ) : null}
-
-        <Pressable accessibilityRole="button" onPress={onPress}>
-          <Text style={styles.feedViewComments}>
-            {commentCount === 0
-              ? 'Add a comment'
-              : commentCount === 1
-                ? 'View 1 comment'
-                : `View all ${commentCount} comments`}
-          </Text>
-        </Pressable>
       </View>
     );
   }
@@ -814,13 +970,13 @@ export function FeedPost({
         ) : null}
       </View>
 
-      <View style={styles.feedImageWrap}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={handleImagePress}
+      <View style={styles.feedImageWrap} {...photoPanResponder.panHandlers}>
+        <View
+          accessibilityHint="Double-tap or long-press to react"
+          accessibilityRole="imagebutton"
         >
-          <PostImage post={post} style={styles.feedImage} />
-        </Pressable>
+          <PostImage aspectRatio={3 / 4} post={post} style={styles.feedImage} />
+        </View>
         {reactionOverlay}
       </View>
 
@@ -832,16 +988,6 @@ export function FeedPost({
           {post.description}
         </Text>
       ) : null}
-
-      <Pressable accessibilityRole="button" onPress={onPress}>
-        <Text style={styles.feedViewComments}>
-          {commentCount === 0
-            ? 'Add a comment'
-            : commentCount === 1
-              ? 'View 1 comment'
-              : `View all ${commentCount} comments`}
-        </Text>
-      </Pressable>
     </View>
   );
 }
@@ -947,7 +1093,7 @@ const styles = StyleSheet.create({
   skeletonAuthor: { borderRadius: radius.pill, height: 12, width: 110 },
   skeletonMeta: { borderRadius: radius.pill, height: 10, marginTop: 4, width: 72 },
   skeletonTime: { borderRadius: radius.pill, height: 10, width: 28 },
-  skeletonImage: { aspectRatio: 1, borderRadius: 0, width: '100%' },
+  skeletonImage: { aspectRatio: 3 / 4, borderRadius: 0, width: '100%' },
   skeletonAction: { borderRadius: radius.pill, height: 22, width: 22 },
   skeletonCaption: {
     borderRadius: radius.pill,
@@ -1004,7 +1150,7 @@ const styles = StyleSheet.create({
   feedLocation: { color: colors.muted, fontSize: 12 },
   feedTime: { color: colors.muted, fontSize: 12 },
   feedDelete: { paddingLeft: spacing.xs },
-  feedImage: { aspectRatio: 1 },
+  feedImage: { aspectRatio: 3 / 4 },
   feedImageWrap: {
     overflow: 'hidden',
     position: 'relative',
@@ -1052,21 +1198,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: spacing.md,
+    paddingBottom: spacing.xs,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
+    paddingTop: spacing.md,
   },
   feedActionsSpacer: { flex: 1 },
+  feedCommentAction: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexShrink: 1,
+    gap: spacing.xs,
+    maxWidth: '78%',
+  },
   feedReactions: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: spacing.xxs,
+    gap: spacing.xs,
   },
   feedReactionStack: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     flexDirection: 'row',
   },
   feedReactionOverlap: {
-    marginLeft: -8,
+    marginLeft: -0,
   },
   feedReactionIconWrap: {
     alignItems: 'center',
@@ -1087,11 +1241,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.xs,
   },
-  feedViewComments: {
+  feedViewCommentsInline: {
     color: colors.muted,
+    flexShrink: 1,
     fontSize: 13,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.xs,
+    fontWeight: '500',
+  },
+  feedViewCommentsActive: {
+    color: colors.textSoft,
   },
   button: {
     alignItems: 'center',

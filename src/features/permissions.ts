@@ -4,6 +4,7 @@ import * as Location from 'expo-location';
 import {
   requestNotificationRefresh,
   requestSoloRideNotificationPermission,
+  setNotificationsEnabled,
 } from '@/features/notifications';
 
 export type AppPermissionStatus = 'granted' | 'denied' | 'undetermined' | 'unavailable';
@@ -59,10 +60,16 @@ export async function requestForegroundLocationPermission(): Promise<{
 /**
  * Ask for camera, location, and notifications in sequence after auth.
  * Failures are swallowed so a denied prompt never blocks sign-in.
+ * A successful notification grant turns Ride alerts on for this account.
  */
-export async function requestCoreAppPermissions() {
+export async function requestCoreAppPermissions(userId?: string | null) {
   await Camera.requestCameraPermissionsAsync().catch(() => undefined);
   await requestForegroundLocationPermission().catch(() => undefined);
-  await requestSoloRideNotificationPermission().catch(() => undefined);
+  const notificationStatus = await requestSoloRideNotificationPermission().catch(
+    () => 'unavailable' as const,
+  );
+  if (userId && notificationStatus === 'granted') {
+    await setNotificationsEnabled(userId, true).catch(() => undefined);
+  }
   requestNotificationRefresh();
 }

@@ -7,6 +7,7 @@ export {
   getCommentCount,
   getOwnReactionScore,
   getReactionCount,
+  getReactionScoreSum,
   getReactionSummary,
   formatProfileName,
   isValidReactionScore,

@@ -47,6 +47,17 @@ const TAB_BAR_CLEARANCE = 56;
 type Tool = 'text' | 'pen';
 type Point = { x: number; y: number };
 type Stroke = { color: string; width: number; points: Point[] };
+type HistoryEntry =
+  | { type: 'addStroke'; stroke: Stroke }
+  | { type: 'clearStrokes'; strokes: Stroke[] }
+  | { type: 'addText' }
+  | {
+      type: 'clearText';
+      text: string;
+      offset: Point;
+      fontSize: number;
+      color: (typeof PALETTE)[number];
+    };
 
 type PhotoTextEditorProps = {
   imageUri: string;
@@ -89,6 +100,7 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [liveStroke, setLiveStroke] = useState<Stroke | null>(null);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [busy, setBusy] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,6 +117,10 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
   inkColorRef.current = inkColor;
   strokeWidthRef.current = strokeWidth;
   liveStrokeRef.current = liveStroke;
+
+  const pushHistory = (entry: HistoryEntry) => {
+    setHistory((current) => [...current, entry]);
+  };
 
   const penGesture = useMemo(
     () =>
@@ -136,6 +152,7 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
           const current = liveStrokeRef.current;
           if (current && current.points.length > 1) {
             setStrokes((existing) => [...existing, current]);
+            setHistory((existing) => [...existing, { type: 'addStroke', stroke: current }]);
           }
           liveStrokeRef.current = null;
           setLiveStroke(null);
@@ -211,6 +228,7 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
     if (!hasText) {
       setHasText(true);
       setOverlayText('');
+      pushHistory({ type: 'addText' });
     } else {
       setFocused(true);
     }
@@ -231,13 +249,57 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
 
   const clearActive = () => {
     if (tool === 'pen') {
+      if (strokes.length === 0) return;
+      pushHistory({ type: 'clearStrokes', strokes });
       setStrokes([]);
       setLiveStroke(null);
       return;
     }
+    if (!hasText) return;
+    pushHistory({
+      type: 'clearText',
+      text: overlayText,
+      offset,
+      fontSize,
+      color: inkColor,
+    });
     dismissKeyboard();
     setHasText(false);
     setOverlayText('');
+  };
+
+  const undo = () => {
+    setHistory((current) => {
+      if (current.length === 0) return current;
+      const next = [...current];
+      const entry = next.pop();
+      if (!entry) return current;
+
+      switch (entry.type) {
+        case 'addStroke':
+          setStrokes((existing) => existing.slice(0, -1));
+          setLiveStroke(null);
+          break;
+        case 'clearStrokes':
+          setStrokes(entry.strokes);
+          setLiveStroke(null);
+          break;
+        case 'addText':
+          dismissKeyboard();
+          setHasText(false);
+          setOverlayText('');
+          break;
+        case 'clearText':
+          setHasText(true);
+          setOverlayText(entry.text);
+          setOffset(entry.offset);
+          setFontSize(entry.fontSize);
+          setInkColor(entry.color);
+          setTool('text');
+          break;
+      }
+      return next;
+    });
   };
 
   const confirm = async () => {
@@ -378,26 +440,32 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
         <Pressable
           accessibilityLabel="Text tool"
           accessibilityRole="button"
+          accessibilityState={{ selected: tool === 'text' }}
           onPress={selectTextTool}
           style={({ pressed }) => [
             styles.toolButton,
-            tool === 'text' && styles.toolButtonActive,
+            tool === 'text' ? styles.toolButtonActive : styles.toolButtonIdle,
             pressed && styles.pressed,
           ]}
         >
-          <Text style={styles.toolAa}>Aa</Text>
+          <Text style={[styles.toolAa, tool === 'text' && styles.toolLabelActive]}>Aa</Text>
         </Pressable>
         <Pressable
           accessibilityLabel="Pen tool"
           accessibilityRole="button"
+          accessibilityState={{ selected: tool === 'pen' }}
           onPress={selectPenTool}
           style={({ pressed }) => [
             styles.toolButton,
-            tool === 'pen' && styles.toolButtonActive,
+            tool === 'pen' ? styles.toolButtonActive : styles.toolButtonIdle,
             pressed && styles.pressed,
           ]}
         >
-          <Ionicons color={colors.white} name="pencil" size={18} />
+          <Ionicons
+            color={tool === 'pen' ? colors.white : 'rgba(255,255,255,0.55)'}
+            name={tool === 'pen' ? 'pencil' : 'pencil-outline'}
+            size={18}
+          />
         </Pressable>
         <Pressable
           accessibilityLabel="Smaller"
@@ -414,6 +482,19 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
           style={({ pressed }) => [styles.toolButton, pressed && styles.pressed]}
         >
           <Text style={[styles.toolGlyph, styles.toolGlyphLarge]}>A</Text>
+        </Pressable>
+        <Pressable
+          accessibilityLabel="Undo"
+          accessibilityRole="button"
+          disabled={history.length === 0 || busy}
+          onPress={undo}
+          style={({ pressed }) => [
+            styles.toolButton,
+            history.length === 0 && styles.toolButtonDisabled,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Ionicons color={colors.white} name="arrow-undo-outline" size={20} />
         </Pressable>
       </View>
 
@@ -524,15 +605,33 @@ const styles = StyleSheet.create({
   toolButton: {
     alignItems: 'center',
     backgroundColor: 'rgba(15,22,18,0.5)',
+    borderColor: 'transparent',
     borderRadius: radius.pill,
-    height: 42,
+    borderWidth: 2,
+    height: 44,
     justifyContent: 'center',
-    width: 42,
+    width: 44,
+  },
+  toolButtonIdle: {
+    backgroundColor: 'rgba(15,22,18,0.35)',
+    opacity: 0.72,
   },
   toolButtonActive: {
     backgroundColor: colors.primary,
+    borderColor: 'rgba(255,255,255,0.95)',
+    transform: [{ scale: 1.08 }],
   },
-  toolAa: { color: colors.white, fontSize: 15, fontWeight: '800' },
+  toolButtonDisabled: {
+    opacity: 0.35,
+  },
+  toolAa: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  toolLabelActive: {
+    color: colors.white,
+  },
   toolGlyph: { color: colors.white, fontWeight: '800' },
   toolGlyphSmall: { fontSize: 13 },
   toolGlyphLarge: { fontSize: 20 },

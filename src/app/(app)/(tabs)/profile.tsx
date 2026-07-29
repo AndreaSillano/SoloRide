@@ -78,6 +78,7 @@ export default function ProfileScreen() {
     'logout' | 'toggle' | 'camera' | 'location' | 'avatar' | null
   >(null);
   const awaitingNotificationSettings = useRef(false);
+  const previousPermission = useRef<SoloRidePermissionStatus | null>(null);
 
   const groups = useMemo(() => groupUserRides(rides.data ?? []), [rides.data]);
   const username = profile?.username ?? null;
@@ -94,9 +95,8 @@ export default function ProfileScreen() {
   };
 
   useEffect(() => {
-    void notifications.getPermission().then(setPermission);
     void refreshLocationPermission();
-  }, [notifications]);
+  }, []);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
@@ -104,15 +104,27 @@ export default function ProfileScreen() {
       void getCameraPermission();
       void refreshLocationPermission();
       void notifications.getPermission().then(async (next) => {
+        const previous = previousPermission.current;
+        previousPermission.current = next;
         setPermission(next);
-        if (next === 'granted' && awaitingNotificationSettings.current) {
+
+        // Fresh OS grant (including return from Settings) → turn Ride alerts on.
+        // Skip the first null→status read so an intentional in-app off stays off.
+        if (
+          next === 'granted' &&
+          (awaitingNotificationSettings.current ||
+            (previous !== null && previous !== 'granted'))
+        ) {
           awaitingNotificationSettings.current = false;
           setAlertsEnabled(true);
           await setNotificationsEnabled(user.id, true);
           requestNotificationRefresh();
           return;
         }
-        if (next !== 'granted') {
+
+        // Only clear the in-app preference when OS permission is explicitly
+        // denied — not while it is still undetermined (e.g. mid sign-in prompts).
+        if (next === 'denied') {
           const enabled = await getNotificationsEnabled(user.id);
           if (!enabled) return;
           setAlertsEnabled(false);
@@ -127,19 +139,26 @@ export default function ProfileScreen() {
   useEffect(() => {
     if (!user?.id) {
       setPrefsReady(false);
+      previousPermission.current = null;
       return;
     }
     let cancelled = false;
     setPrefsReady(false);
-    void getNotificationsEnabled(user.id).then((enabled) => {
+    void (async () => {
+      const [enabled, nextPermission] = await Promise.all([
+        getNotificationsEnabled(user.id),
+        notifications.getPermission(),
+      ]);
       if (cancelled) return;
+      previousPermission.current = nextPermission;
+      setPermission(nextPermission);
       setAlertsEnabled(enabled);
       setPrefsReady(true);
-    });
+    })();
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
+  }, [notifications, user?.id]);
 
   const pickAvatar = async () => {
     setError(null);

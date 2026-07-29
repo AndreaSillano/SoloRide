@@ -764,6 +764,7 @@ export default function CameraScreen() {
         <CameraView
           active={focused}
           facing={facing}
+          mirror={facing === 'front'}
           ref={camera}
           style={StyleSheet.absoluteFill}
         />

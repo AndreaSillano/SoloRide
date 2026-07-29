@@ -11,16 +11,21 @@ import { haptics } from '@/lib/haptics';
 import { colors, spacing } from '@/theme';
 
 const SCORES = [-3, -2, -1, 0, 1, 2, 3] as const;
-const STEP_WIDTH = 56;
-const TRACK_WIDTH = STEP_WIDTH * SCORES.length;
+export const REACTION_STEP_WIDTH = 56;
+const TRACK_WIDTH = REACTION_STEP_WIDTH * SCORES.length;
 const SWIPE_THRESHOLD = 10;
 /** Keep the overlay open briefly after a swipe so the selection is readable. */
 const SWIPE_CONFIRM_DELAY_MS = 110;
 
 type WindowRect = { x: number; y: number; width: number; height: number };
 
-function clampScore(value: number) {
+export function clampReactionScore(value: number) {
   return Math.max(-3, Math.min(3, Math.round(value)));
+}
+
+/** Map horizontal drag distance onto the -3..+3 reaction scale. */
+export function reactionScoreFromSwipe(startScore: number, dx: number) {
+  return clampReactionScore(startScore + dx / REACTION_STEP_WIDTH);
 }
 
 function iconSizeForScore(score: number) {
@@ -39,7 +44,7 @@ function opacityForScore(score: number, active: boolean) {
 }
 
 function scoreAtTrackX(xInTrack: number) {
-  const index = Math.floor(xInTrack / STEP_WIDTH);
+  const index = Math.floor(xInTrack / REACTION_STEP_WIDTH);
   return SCORES[Math.max(0, Math.min(SCORES.length - 1, index))] ?? 0;
 }
 
@@ -61,13 +66,16 @@ export function ScalePicker({
   selectedScore,
   onSelect,
   onClose,
+  /** When false, parent owns the finger (long-press → swipe without lifting). */
+  interactive = true,
 }: {
   visible: boolean;
   selectedScore?: number | null;
   onSelect: (score: number) => void;
   onClose: () => void;
+  interactive?: boolean;
 }) {
-  const initial = clampScore(selectedScore ?? 0);
+  const initial = clampReactionScore(selectedScore ?? 0);
   const [activeScore, setActiveScore] = useState(initial);
   const activeScoreRef = useRef(activeScore);
   const startScoreRef = useRef(initial);
@@ -87,7 +95,7 @@ export function ScalePicker({
       clearConfirmTimer();
       return;
     }
-    const next = clampScore(selectedScore ?? 0);
+    const next = clampReactionScore(selectedScore ?? 0);
     setActiveScore(next);
     activeScoreRef.current = next;
     startScoreRef.current = next;
@@ -103,7 +111,7 @@ export function ScalePicker({
 
   const confirm = (score: number) => {
     clearConfirmTimer();
-    onSelectRef.current(clampScore(score));
+    onSelectRef.current(clampReactionScore(score));
     onCloseRef.current();
   };
 
@@ -137,7 +145,7 @@ export function ScalePicker({
             didSwipeRef.current = true;
           }
           if (!didSwipeRef.current) return;
-          const next = clampScore(startScoreRef.current + gesture.dx / STEP_WIDTH);
+          const next = reactionScoreFromSwipe(startScoreRef.current, gesture.dx);
           if (next !== activeScoreRef.current) {
             activeScoreRef.current = next;
             setActiveScore(next);
@@ -181,7 +189,11 @@ export function ScalePicker({
   if (!visible) return null;
 
   return (
-    <View {...panResponder.panHandlers} style={styles.overlay}>
+    <View
+      {...(interactive ? panResponder.panHandlers : {})}
+      pointerEvents={interactive ? 'auto' : 'none'}
+      style={styles.overlay}
+    >
       <View pointerEvents="box-none" style={styles.center}>
         <View ref={trackRef} style={styles.track}>
           {SCORES.map((score) => {
@@ -215,7 +227,7 @@ export function ScalePicker({
                 ) : (
                   <MaterialIcons
                     color={colors.white}
-                    name={score > 0 ? 'thumb-up' : 'thumb-down'}
+                    name={score > 0 ? 'thumb-up-off-alt' : 'thumb-down-off-alt'}
                     size={size}
                     style={{ opacity }}
                   />
@@ -252,7 +264,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 72,
     justifyContent: 'center',
-    width: STEP_WIDTH,
+    width: REACTION_STEP_WIDTH,
   },
   cellActive: {
     transform: [{ scale: 1.08 }],

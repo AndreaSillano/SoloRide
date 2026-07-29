@@ -48,6 +48,44 @@ export type ReconciliationPlan = {
   keepIdentifiers: string[];
 };
 
+function pickCopy(variants: readonly { title: string; body: string }[]) {
+  return variants[Math.floor(Math.random() * variants.length)]!;
+}
+
+function mainReminderCopy(rideName: string) {
+  return pickCopy([
+    {
+      title: `${rideName} is live`,
+      body: 'One photo. One moment. Share today’s Ride with your people.',
+    },
+    {
+      title: `Time for ${rideName}`,
+      body: 'Drop today’s photo — one real moment is enough.',
+    },
+    {
+      title: `${rideName} is calling`,
+      body: 'Your Ride is waiting. Capture something and post it.',
+    },
+  ]);
+}
+
+function lateReminderCopy(rideName: string) {
+  return pickCopy([
+    {
+      title: `Still time for ${rideName}`,
+      body: 'The day isn’t over — capture something real and post it.',
+    },
+    {
+      title: `Last call for ${rideName}`,
+      body: 'You’ve still got time. One photo keeps the streak alive.',
+    },
+    {
+      title: `${rideName} isn’t done`,
+      body: 'Don’t leave today empty — post before the day slips away.',
+    },
+  ]);
+}
+
 export type PlanNotificationsInput = {
   userId: string;
   rides: readonly NotificationRide[];
@@ -211,12 +249,13 @@ export function planSoloRideNotifications({
           scheduledDate,
           userId,
         };
+        const mainCopy = mainReminderCopy(ride.name);
         plans.push({
           key: notificationKey(data),
           data,
           triggerAt,
-          title: `${ride.name} is live`,
-          body: 'One photo. One moment. Share today’s Ride with your people.',
+          title: mainCopy.title,
+          body: mainCopy.body,
         });
       }
 
@@ -235,12 +274,13 @@ export function planSoloRideNotifications({
             scheduledDate,
             userId,
           };
+          const lateCopy = lateReminderCopy(ride.name);
           plans.push({
             key: notificationKey(data),
             data,
             triggerAt: reminderAt,
-            title: `Still time for ${ride.name}`,
-            body: 'The day isn’t over — capture something real and post it.',
+            title: lateCopy.title,
+            body: lateCopy.body,
           });
         }
       }
