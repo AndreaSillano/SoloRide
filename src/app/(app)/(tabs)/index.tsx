@@ -18,7 +18,12 @@ import { RideCard } from '@/components/ride-card';
 import { RideOverview } from '@/components/ride-overview';
 import { FixedHeaderScreen, RideFeedSkeleton, StatePanel } from '@/components/ui';
 import { useRideFeed } from '@/features/posts';
-import { groupUserRides, useSelectedRide, useUserRides } from '@/features/rides';
+import {
+  groupUserRides,
+  useRidesDueToday,
+  useSelectedRide,
+  useUserRides,
+} from '@/features/rides';
 import { queryKeys } from '@/lib/queryKeys';
 import { colors, radius, shadows, spacing } from '@/theme';
 
@@ -31,10 +36,16 @@ export default function HomeScreen() {
   const rides = useUserRides(user?.id);
   const { selectedRideId, selectRide, isReady } = useSelectedRide(rides.data, user?.id);
   const feed = useRideFeed(selectedRideId);
+  const due = useRidesDueToday(user?.id);
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [menu, setMenu] = useState<MenuState>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const selectedNeedsPublication = Boolean(
+    due.data?.postableRides.some(
+      (ride) => ride.id === selectedRideId && ride.isRequiredToday,
+    ),
+  );
 
   // Lets other screens (join/create Ride) hand off which Ride should become
   // selected once we land back on this tab, e.g. `router.replace({ pathname:
@@ -105,14 +116,28 @@ export default function HomeScreen() {
       <View style={styles.headerRow}>
         <View style={styles.switcherWrap}>
           <Pressable
+            accessibilityLabel={
+              selectedNeedsPublication
+                ? `${selectedRide?.name ?? 'Your Rides'}, photo due today`
+                : undefined
+            }
             accessibilityRole="button"
             disabled={!hasRides}
             onPress={() => toggleMenu('switcher')}
             style={({ pressed }) => [styles.switcherTrigger, pressed && styles.pressed]}
           >
-            <Text ellipsizeMode="tail" numberOfLines={1} style={styles.switcherText}>
-              {rides.isPending ? 'Loading…' : (selectedRide?.name ?? 'Your Rides')}
-            </Text>
+            <View style={styles.switcherTitleWrap}>
+              <Text ellipsizeMode="tail" numberOfLines={1} style={styles.switcherText}>
+                {rides.isPending ? 'Loading…' : (selectedRide?.name ?? 'Your Rides')}
+              </Text>
+              {selectedNeedsPublication ? (
+                <View
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                  style={styles.dueBadge}
+                />
+              ) : null}
+            </View>
             {hasRides ? (
               <Ionicons
                 color={colors.text}
@@ -146,19 +171,6 @@ export default function HomeScreen() {
                   <>
                     <Text style={styles.groupLabel}>Upcoming</Text>
                     {groups.upcoming.map((ride) => (
-                      <RideCard
-                        key={ride.id}
-                        onPress={() => handleSelectRide(ride.id)}
-                        ride={ride}
-                        userId={user?.id}
-                      />
-                    ))}
-                  </>
-                ) : null}
-                {groups.archived.length ? (
-                  <>
-                    <Text style={styles.groupLabel}>Archived</Text>
-                    {groups.archived.map((ride) => (
                       <RideCard
                         key={ride.id}
                         onPress={() => handleSelectRide(ride.id)}
@@ -296,6 +308,24 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '800',
     letterSpacing: -0.4,
+  },
+  switcherTitleWrap: {
+    flexShrink: 1,
+    position: 'relative',
+  },
+  dueBadge: {
+    backgroundColor: colors.accent,
+    borderRadius: radius.pill,
+    height: 8,
+    position: 'absolute',
+    right: -8,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 5,
+    elevation: 4,
+    top: -1,
+    width: 8,
   },
   switcherPanel: {
     backgroundColor: colors.surface,
