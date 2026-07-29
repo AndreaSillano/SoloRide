@@ -4,7 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 
 import { useCurrentUser } from '@/auth/auth-context';
@@ -26,8 +26,8 @@ import {
   POST_IMAGE_URL_TTL_SECONDS,
 } from './utils';
 
-/** How close to the bottom (px) before the next page is requested. */
-const FEED_LOAD_MORE_THRESHOLD_PX = 720;
+/** Only request the next page when the user is this close to the bottom. */
+const FEED_LOAD_MORE_THRESHOLD_PX = 180;
 
 export function useRideFeed(rideId: string | null | undefined) {
   const { user } = useCurrentUser();
@@ -44,13 +44,33 @@ export function useRideFeed(rideId: string | null | undefined) {
     [query.data],
   );
 
+  // Prevents chaining page fetches while images are still measuring and the
+  // viewport stays "near the bottom" — older posts should just append once.
+  const lockedUntilContentHeight = useRef(0);
+  const lastOffsetY = useRef(0);
+
+  useEffect(() => {
+    lockedUntilContentHeight.current = 0;
+    lastOffsetY.current = 0;
+  }, [rideId]);
+
   const loadMoreIfNearEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (!query.hasNextPage || query.isFetchingNextPage) return;
     const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+    const scrollingDown = contentOffset.y >= lastOffsetY.current;
+    lastOffsetY.current = contentOffset.y;
+    if (!scrollingDown) return;
+    if (!query.hasNextPage || query.isFetchingNextPage) return;
+    // Wait until the previous page has actually lengthened the feed.
+    if (contentSize.height <= lockedUntilContentHeight.current) return;
+
     const distanceFromEnd =
       contentSize.height - (contentOffset.y + layoutMeasurement.height);
     if (distanceFromEnd > FEED_LOAD_MORE_THRESHOLD_PX) return;
-    void query.fetchNextPage();
+
+    lockedUntilContentHeight.current = contentSize.height;
+    void query.fetchNextPage().then((result) => {
+      if (result.isError) lockedUntilContentHeight.current = 0;
+    });
   };
 
   return {
