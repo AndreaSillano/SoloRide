@@ -8,6 +8,7 @@ import {
 import {
   buildPostAudioPath,
   buildPostImagePath,
+  buildPostVideoPath,
   formatLocationLabel,
   getOwnReactionScore,
   getReactionCount,
@@ -34,6 +35,12 @@ describe('post data utilities', () => {
   it('builds the private audio path required by the backend', () => {
     expect(buildPostAudioPath(rideId, userId, postId)).toBe(
       `${rideId}/${userId}/${postId}.m4a`,
+    );
+  });
+
+  it('builds the private video path required by the backend', () => {
+    expect(buildPostVideoPath(rideId, userId, postId)).toBe(
+      `${rideId}/${userId}/${postId}.mp4`,
     );
   });
 
@@ -171,6 +178,55 @@ describe('post data utilities', () => {
     expect(result.success).toBe(false);
   });
 
+  it('accepts a video post with its thumbnail and duration', () => {
+    const result = createPostInputSchema.parse({
+      rideIds: [rideId],
+      imageUri: 'file:///thumbnail.jpg',
+      videoUri: 'file:///clip.mp4',
+      videoDurationMs: 12_000,
+      scheduledDate: '2026-07-28',
+    });
+
+    expect(result.videoUri).toBe('file:///clip.mp4');
+    expect(result.videoDurationMs).toBe(12_000);
+  });
+
+  it('rejects a video without its recorded duration', () => {
+    const result = createPostInputSchema.safeParse({
+      rideIds: [rideId],
+      imageUri: 'file:///thumbnail.jpg',
+      videoUri: 'file:///clip.mp4',
+      scheduledDate: '2026-07-28',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects videos longer than the recording cap', () => {
+    const result = createPostInputSchema.safeParse({
+      rideIds: [rideId],
+      imageUri: 'file:///thumbnail.jpg',
+      videoUri: 'file:///clip.mp4',
+      videoDurationMs: 20_000,
+      scheduledDate: '2026-07-28',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a post carrying both a voice note and a video', () => {
+    const result = createPostInputSchema.safeParse({
+      rideIds: [rideId],
+      imageUri: 'file:///thumbnail.jpg',
+      audioUri: 'file:///note.m4a',
+      videoUri: 'file:///clip.mp4',
+      videoDurationMs: 5_000,
+      scheduledDate: '2026-07-28',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it('maps duplicate and offline failures to actionable errors', () => {
     expect(mapDatabaseError({ code: '23505' }, 'fallback').code).toBe(
       'DUPLICATE_POST',
@@ -181,6 +237,12 @@ describe('post data utilities', () => {
         'fallback',
       ).code,
     ).toBe('TEMPORARY_LIMIT');
+    expect(
+      mapDatabaseError(
+        { code: 'P0001', message: 'Daily video limit reached (max 2 per day)' },
+        'fallback',
+      ).code,
+    ).toBe('VIDEO_DAILY_LIMIT');
     expect(
       mapUploadError(new TypeError('Network request failed')).code,
     ).toBe('NETWORK');

@@ -27,12 +27,15 @@ import {
   getRideFeedPage,
   getSignedPostImage,
   getSignedPostAudio,
+  getSignedPostVideo,
+  getTodayVideoPostCount,
   removeReaction,
   upsertReaction,
 } from './service';
 import {
   POST_IMAGE_URL_EXPIRY_SAFETY_MS,
   POST_IMAGE_URL_TTL_SECONDS,
+  POST_VIDEO_MAX_PER_DAY,
 } from './utils';
 
 /** Only request the next page when the user is this close to the bottom. */
@@ -141,6 +144,39 @@ export function useSignedPostAudio(audioPath: string | null | undefined) {
   });
 }
 
+export function useSignedPostVideo(videoPath: string | null | undefined) {
+  const { user } = useCurrentUser();
+  return useQuery({
+    queryKey: ['post-video', videoPath ?? ''] as const,
+    queryFn: () => getSignedPostVideo(videoPath ?? ''),
+    enabled: Boolean(videoPath && user?.id),
+    staleTime:
+      POST_IMAGE_URL_TTL_SECONDS * 1000 - POST_IMAGE_URL_EXPIRY_SAFETY_MS,
+    gcTime: POST_IMAGE_URL_TTL_SECONDS * 1000,
+  });
+}
+
+export function useTodayVideoPostCount() {
+  const { user } = useCurrentUser();
+  return useQuery({
+    queryKey: ['today-video-count', user?.id ?? ''] as const,
+    queryFn: getTodayVideoPostCount,
+    enabled: Boolean(user?.id),
+    staleTime: 30_000,
+  });
+}
+
+export function useCanPostVideoToday() {
+  const count = useTodayVideoPostCount();
+  const used = count.data ?? 0;
+  return {
+    ...count,
+    used,
+    remaining: Math.max(0, POST_VIDEO_MAX_PER_DAY - used),
+    canPost: used < POST_VIDEO_MAX_PER_DAY,
+  };
+}
+
 export function useCreatePost() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -164,6 +200,7 @@ export function useCreatePost() {
       }
       void queryClient.invalidateQueries({ queryKey: ['rides-due-today'] });
       void queryClient.invalidateQueries({ queryKey: ['camera-rides'] });
+      void queryClient.invalidateQueries({ queryKey: ['today-video-count'] });
     },
   });
 }
@@ -196,6 +233,7 @@ export function useDeletePost() {
       });
       void queryClient.invalidateQueries({ queryKey: ['rides-due-today'] });
       void queryClient.invalidateQueries({ queryKey: ['camera-rides'] });
+      void queryClient.invalidateQueries({ queryKey: ['today-video-count'] });
     },
   });
 }

@@ -2,6 +2,7 @@ export type PostDataErrorCode =
   | 'AUTH_REQUIRED'
   | 'DUPLICATE_POST'
   | 'TEMPORARY_LIMIT'
+  | 'VIDEO_DAILY_LIMIT'
   | 'INVALID_INPUT'
   | 'NETWORK'
   | 'IMAGE_PROCESSING'
@@ -56,6 +57,16 @@ export function mapDatabaseError(error: unknown, fallback: string): PostDataErro
     return new PostDataError(
       'DUPLICATE_POST',
       'You already posted for this scheduled day.',
+      { cause: error },
+    );
+  }
+  if (
+    details.code === 'P0001' &&
+    message.toLowerCase().includes('daily video limit')
+  ) {
+    return new PostDataError(
+      'VIDEO_DAILY_LIMIT',
+      'You can only share 2 videos per day. Try again tomorrow.',
       { cause: error },
     );
   }

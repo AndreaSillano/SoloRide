@@ -9,6 +9,19 @@ export const POST_IMAGE_URL_TTL_SECONDS = 60 * 60;
 export const POST_IMAGE_URL_EXPIRY_SAFETY_MS = 60_000;
 /** Max voice-note length while recording on publish. */
 export const POST_AUDIO_MAX_DURATION_MS = 30_000;
+/** Max in-app video recording length; keeps uploads fast on cellular. */
+export const POST_VIDEO_MAX_DURATION_MS = 15_000;
+/** Long-edge cap for compressed upload (hard size control). */
+export const POST_VIDEO_MAX_LONG_EDGE = 720;
+/**
+ * Target video bitrate after compression (~0.8 Mbps).
+ * At ≤15s this keeps clips around 1–2 MB with H.264 + AAC.
+ */
+export const POST_VIDEO_TARGET_BITRATE = 800_000;
+/** Soft ceiling after compression; reject outliers that still balloon storage. */
+export const POST_VIDEO_MAX_BYTES = 3 * 1024 * 1024;
+/** Max video posts a user may publish per calendar day (UTC). */
+export const POST_VIDEO_MAX_PER_DAY = 2;
 /** Post / camera frame aspect (width ÷ height). Portrait 3∶4. */
 export const POST_IMAGE_ASPECT_RATIO = 3 / 4;
 
@@ -150,6 +163,10 @@ export function buildPostImagePath(rideId: string, userId: string, postId: strin
 
 export function buildPostAudioPath(rideId: string, userId: string, postId: string) {
   return `${rideId}/${userId}/${postId}.m4a`;
+}
+
+export function buildPostVideoPath(rideId: string, userId: string, postId: string) {
+  return `${rideId}/${userId}/${postId}.mp4`;
 }
 
 /** Format seconds as m:ss for recorders and players. */

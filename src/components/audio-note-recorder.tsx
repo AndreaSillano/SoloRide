@@ -38,6 +38,8 @@ type PublishAudioFooterProps = {
   publishLoading: boolean;
   publishLabel: string;
   onPublish: () => void;
+  /** Hides the voice-note control — video posts carry their own audio. */
+  hideMic?: boolean;
 };
 
 export function PublishAudioFooter({
@@ -47,6 +49,7 @@ export function PublishAudioFooter({
   publishLoading,
   publishLabel,
   onPublish,
+  hideMic = false,
 }: PublishAudioFooterProps) {
   const recorder = useAudioRecorder(VOICE_NOTE_RECORDING);
   const recorderState = useAudioRecorderState(recorder, 100);
@@ -242,33 +245,35 @@ export function PublishAudioFooter({
         </View>
       )}
 
-      <Pressable
-        accessibilityLabel="Hold to record voice note"
-        accessibilityRole="button"
-        disabled={publishLoading}
-        // Keep the gesture alive while sliding left off the mic.
-        hitSlop={
-          isRecording
-            ? { top: 48, bottom: 48, left: 280, right: 48 }
-            : { top: 8, bottom: 8, left: 8, right: 8 }
-        }
-        onPressIn={onMicPressIn}
-        onPressOut={onMicPressOut}
-        onTouchMove={onMicTouchMove}
-        style={({ pressed }) => [
-          styles.micButton,
-          isRecording && styles.micButtonRecording,
-          willCancel && styles.micButtonCancel,
-          hasNote && styles.micButtonHasNote,
-          (pressed || publishLoading) && styles.pressed,
-        ]}
-      >
-        <Ionicons
-          color={micIconColor}
-          name={willCancel ? 'trash-outline' : 'mic'}
-          size={22}
-        />
-      </Pressable>
+      {hideMic ? null : (
+        <Pressable
+          accessibilityLabel="Hold to record voice note"
+          accessibilityRole="button"
+          disabled={publishLoading}
+          // Keep the gesture alive while sliding left off the mic.
+          hitSlop={
+            isRecording
+              ? { top: 48, bottom: 48, left: 280, right: 48 }
+              : { top: 8, bottom: 8, left: 8, right: 8 }
+          }
+          onPressIn={onMicPressIn}
+          onPressOut={onMicPressOut}
+          onTouchMove={onMicTouchMove}
+          style={({ pressed }) => [
+            styles.micButton,
+            isRecording && styles.micButtonRecording,
+            willCancel && styles.micButtonCancel,
+            hasNote && styles.micButtonHasNote,
+            (pressed || publishLoading) && styles.pressed,
+          ]}
+        >
+          <Ionicons
+            color={micIconColor}
+            name={willCancel ? 'trash-outline' : 'mic'}
+            size={22}
+          />
+        </Pressable>
+      )}
     </View>
   );
 }

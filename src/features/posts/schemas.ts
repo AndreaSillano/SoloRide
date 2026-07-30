@@ -57,6 +57,18 @@ export const postSchema = z.object({
     .max(512)
     .nullish()
     .transform((value) => value ?? null),
+  video_path: z
+    .string()
+    .min(1)
+    .max(512)
+    .nullish()
+    .transform((value) => value ?? null),
+  video_duration_ms: z
+    .number()
+    .int()
+    .positive()
+    .nullish()
+    .transform((value) => value ?? null),
   description: z.string().nullable(),
   latitude: nullableCoordinate(-90, 90),
   longitude: nullableCoordinate(-180, 180),
@@ -91,11 +103,14 @@ export const reactionSchema = z.object({
   profile: embeddedProfileSchema,
 });
 
+/** Cover photo, or the generated thumbnail frame when the post is a video. */
 export const createPostInputSchema = z
   .object({
     rideIds: z.array(uuidSchema).min(1, 'Choose at least one Ride.'),
     imageUri: z.string().min(1, 'Choose an image first.'),
     audioUri: z.string().min(1).optional().nullable(),
+    videoUri: z.string().min(1).optional().nullable(),
+    videoDurationMs: z.number().int().positive().max(15_000).optional().nullable(),
     description: nullableTrimmedString(50),
     latitude: z.number().min(-90).max(90).optional().nullable(),
     longitude: z.number().min(-180).max(180).optional().nullable(),
@@ -109,6 +124,20 @@ export const createPostInputSchema = z
         code: 'custom',
         message: 'Latitude and longitude must be provided together.',
         path: ['latitude'],
+      });
+    }
+    if (Boolean(value.videoUri) !== (value.videoDurationMs != null)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'A video needs its duration recorded alongside it.',
+        path: ['videoUri'],
+      });
+    }
+    if (value.videoUri && value.audioUri) {
+      context.addIssue({
+        code: 'custom',
+        message: 'A post can carry a voice note or a video, not both.',
+        path: ['audioUri'],
       });
     }
     const uniqueRideIds = new Set(value.rideIds);
@@ -126,11 +155,20 @@ export const createPostInputSchema = z
         path: ['rideIds'],
       });
     }
+    if (value.videoUri && uniqueRideIds.size > 1) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Videos can only be shared to one Ride.',
+        path: ['rideIds'],
+      });
+    }
   })
   .transform((value) => ({
     ...value,
     rideIds: [...new Set(value.rideIds)],
     audioUri: value.audioUri?.trim() || null,
+    videoUri: value.videoUri?.trim() || null,
+    videoDurationMs: value.videoUri?.trim() ? (value.videoDurationMs ?? null) : null,
     latitude: value.latitude ?? null,
     longitude: value.longitude ?? null,
     isTemporary: value.isTemporary ?? false,

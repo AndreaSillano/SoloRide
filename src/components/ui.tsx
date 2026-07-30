@@ -42,6 +42,7 @@ import { colors, radius, shadows, spacing } from '@/theme';
 
 import { ReactionBurst } from './reaction-burst';
 import { FeedAudioNote } from './feed-audio-note';
+import { FeedVideoPlay } from './feed-video-play';
 import {
   clampReactionScore,
   reactionScoreFromSwipe,
@@ -847,6 +848,12 @@ export function FeedPost({
             >
               <PostImage aspectRatio={POST_IMAGE_ASPECT_RATIO} post={post} style={styles.tempPhoto} />
             </View>
+            {post.video_path ? (
+              <FeedVideoPlay
+                durationMs={post.video_duration_ms}
+                videoPath={post.video_path}
+              />
+            ) : null}
             <View style={styles.tempOverlay} pointerEvents="box-none">
               <Avatar profile={post.profile} size={34} />
               <View style={styles.feedHeaderText}>
@@ -878,14 +885,18 @@ export function FeedPost({
               <View
                 style={[
                   styles.tempTimerBadge,
-                  post.audio_path ? styles.tempTimerBadgeAboveAudio : null,
+                  post.audio_path && !post.video_path
+                    ? styles.tempTimerBadgeAboveAudio
+                    : null,
                 ]}
                 pointerEvents="none"
               >
                 <Text style={styles.tempTimerText}>{remaining}</Text>
               </View>
             ) : null}
-            {post.audio_path ? <FeedAudioNote audioPath={post.audio_path} /> : null}
+            {!post.video_path && post.audio_path ? (
+              <FeedAudioNote audioPath={post.audio_path} />
+            ) : null}
             {reactionOverlay}
           </View>
           {reactionSticker}
@@ -944,7 +955,11 @@ export function FeedPost({
           >
             <PostImage aspectRatio={POST_IMAGE_ASPECT_RATIO} post={post} style={styles.feedImage} />
           </View>
-          {post.audio_path ? <FeedAudioNote audioPath={post.audio_path} /> : null}
+          {post.video_path ? (
+            <FeedVideoPlay durationMs={post.video_duration_ms} videoPath={post.video_path} />
+          ) : post.audio_path ? (
+            <FeedAudioNote audioPath={post.audio_path} />
+          ) : null}
           {reactionOverlay}
         </View>
         {reactionSticker}
@@ -1152,6 +1167,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
     top: 0,
+    zIndex: 5,
   },
   tempAuthor: { color: colors.white, fontSize: 14, fontWeight: '800' },
   tempMeta: { color: 'rgba(255,255,255,0.82)', fontSize: 12, fontWeight: '600' },
@@ -1163,6 +1179,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xxs,
     position: 'absolute',
+    zIndex: 5,
   },
   tempTimerBadgeAboveAudio: {
     bottom: spacing.sm + 52,

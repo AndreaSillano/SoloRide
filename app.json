@@ -2,7 +2,7 @@
   "expo": {
     "name": "SoloRide",
     "slug": "soloride",
-    "version": "1.0.1",
+    "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "soloride",
     "icon": "./assets/icon.png",
@@ -33,7 +33,7 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "versionCode": 2,
+      "versionCode": 3,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.ACCESS_COARSE_LOCATION",
@@ -53,7 +53,8 @@
         "expo-camera",
         {
           "cameraPermission": "SoloRide uses the camera to add photos to your rides.",
-          "recordAudioAndroid": false
+          "microphonePermission": "SoloRide uses the microphone to record sound with your videos.",
+          "recordAudioAndroid": true
         }
       ],
       [
@@ -88,7 +89,8 @@
           "recordAudioAndroid": true
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

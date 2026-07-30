@@ -1,14 +1,16 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Linking,
   Platform,
   Pressable,
   StyleSheet,
+  Text,
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,20 +23,30 @@ import {
 } from '@/components/ui';
 import {
   cropImageToPostAspect,
+  deleteLocalMediaFile,
+  deleteLocalMediaFiles,
+  formatAudioDuration,
+  generatePostVideoThumbnail,
   getPostCaptureFramePadding,
   getPostFrameSize,
   POST_CAPTURE_TAB_BAR_CLEARANCE,
+  POST_VIDEO_MAX_DURATION_MS,
+  POST_VIDEO_MAX_PER_DAY,
   subscribeCaptureRetake,
+  useCanPostVideoToday,
 } from '@/features/posts';
 import { useCameraRides } from '@/features/rides';
 import { haptics } from '@/lib/haptics';
-import { colors, spacing } from '@/theme';
+import { colors, radius, spacing } from '@/theme';
 
 type Facing = 'back' | 'front';
+type CaptureMode = 'photo' | 'video';
 
 /** Native tab bar sits above the home indicator; safe-area bottom alone
  * doesn't clear the bar when chrome is absolutely positioned. */
 const TAB_BAR_CLEARANCE = POST_CAPTURE_TAB_BAR_CLEARANCE;
+/** Recordings shorter than this are treated as an accidental tap. */
+const MIN_VIDEO_RECORD_MS = 500;
 
 export default function CameraScreen() {
   const {
@@ -49,35 +61,66 @@ export default function CameraScreen() {
   const { user } = useCurrentUser();
   const insets = useSafeAreaInsets();
   const cameraRides = useCameraRides(user?.id);
+  const videoQuota = useCanPostVideoToday();
   const [permission, requestPermission, getPermission] = useCameraPermissions();
+  const [micPermission, requestMicPermission] = useMicrophonePermissions();
   const camera = useRef<CameraView>(null);
+  /** Keeps the preview up while permission is re-checked on focus (avoids a flash). */
+  const cameraGrantedRef = useRef(false);
+  if (permission?.granted) cameraGrantedRef.current = true;
+  else if (permission && !permission.granted) cameraGrantedRef.current = false;
   const [focused, setFocused] = useState(true);
   const [facing, setFacing] = useState<Facing>('back');
+  const [mode, setMode] = useState<CaptureMode>('photo');
+  const [torchOn, setTorchOn] = useState(false);
   const [draftUri, setDraftUri] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'capture' | 'gallery' | null>(null);
+  const [busy, setBusy] = useState<'capture' | 'gallery' | 'video' | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+  const recordingStartRef = useRef(0);
+  const elapsedIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const activeRides = useMemo(() => cameraRides.data ?? [], [cameraRides.data]);
+  const cameraAllowed = permission?.granted === true || cameraGrantedRef.current;
 
   useFocusEffect(
     useCallback(() => {
       setFocused(true);
-      // Permission may have been granted during sign-in onboarding via
-      // requestCoreAppPermissions(); refresh so this tab picks that up.
-      void getPermission();
-      return () => setFocused(false);
+      // Only re-query when we don't already know it's granted — calling
+      // getPermission() every focus can briefly clear status and flash the
+      // "Camera access" panel when returning from publish.
+      if (!cameraGrantedRef.current) {
+        void getPermission();
+      }
+      return () => {
+        setFocused(false);
+        setTorchOn(false);
+      };
     }, [getPermission]),
   );
 
   const resetCapture = useCallback(() => {
-    setDraftUri(null);
+    setDraftUri((current) => {
+      deleteLocalMediaFile(current);
+      return null;
+    });
     setError(null);
   }, []);
 
   // Retake from publish clears the draft immediately so the pop reveals the
   // camera, not the editor, under the native back animation.
   useEffect(() => subscribeCaptureRetake(resetCapture), [resetCapture]);
+
+  const stopElapsedTimer = useCallback(() => {
+    if (elapsedIntervalRef.current) {
+      clearInterval(elapsedIntervalRef.current);
+      elapsedIntervalRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => stopElapsedTimer, [stopElapsedTimer]);
 
   useEffect(() => {
     if (retake !== '1') return;
@@ -97,8 +140,12 @@ export default function CameraScreen() {
       const photo = await camera.current.takePictureAsync({ quality: 0.9 });
       if (photo?.uri) {
         const framedUri = await cropImageToPostAspect(photo.uri);
+        if (framedUri !== photo.uri) deleteLocalMediaFile(photo.uri);
+        setDraftUri((previous) => {
+          if (previous && previous !== framedUri) deleteLocalMediaFile(previous);
+          return framedUri;
+        });
         haptics.medium();
-        setDraftUri(framedUri);
       }
     } catch {
       haptics.error();
@@ -127,9 +174,14 @@ export default function CameraScreen() {
         quality: 0.9,
       });
       if (!result.canceled && result.assets[0]?.uri) {
-        const framedUri = await cropImageToPostAspect(result.assets[0].uri);
+        const sourceUri = result.assets[0].uri;
+        const framedUri = await cropImageToPostAspect(sourceUri);
+        if (framedUri !== sourceUri) deleteLocalMediaFile(sourceUri);
+        setDraftUri((previous) => {
+          if (previous && previous !== framedUri) deleteLocalMediaFile(previous);
+          return framedUri;
+        });
         haptics.light();
-        setDraftUri(framedUri);
       }
     } catch {
       haptics.error();
@@ -148,6 +200,100 @@ export default function CameraScreen() {
         ...(preferredRideId ? { rideId: preferredRideId } : {}),
       },
     });
+  };
+
+  const openPublishVideo = (videoUri: string, thumbnailUri: string, durationMs: number) => {
+    router.push({
+      pathname: '/publish',
+      params: {
+        imageUri: thumbnailUri,
+        videoUri,
+        videoDurationMs: String(durationMs),
+        ...(preferredRideId ? { rideId: preferredRideId } : {}),
+      },
+    });
+  };
+
+  const startRecording = async () => {
+    if (!camera.current || busy || isRecording) return;
+    if (!videoQuota.canPost) {
+      Alert.alert(
+        'Daily video limit',
+        `You can only share ${POST_VIDEO_MAX_PER_DAY} videos per day. Try again tomorrow.`,
+      );
+      return;
+    }
+    setError(null);
+    try {
+      const currentMic = micPermission?.granted ? micPermission : await requestMicPermission();
+      if (!currentMic.granted) {
+        haptics.error();
+        setError('Microphone access is needed to record video with sound.');
+        return;
+      }
+
+      recordingStartRef.current = Date.now();
+      setElapsedMs(0);
+      setIsRecording(true);
+      haptics.medium();
+      stopElapsedTimer();
+      elapsedIntervalRef.current = setInterval(() => {
+        setElapsedMs(Date.now() - recordingStartRef.current);
+      }, 100);
+
+      const result = await camera.current.recordAsync({
+        maxDuration: POST_VIDEO_MAX_DURATION_MS / 1000,
+      });
+
+      stopElapsedTimer();
+      setIsRecording(false);
+      const durationMs = Math.min(
+        Date.now() - recordingStartRef.current,
+        POST_VIDEO_MAX_DURATION_MS,
+      );
+
+      if (!result?.uri) return;
+      if (durationMs < MIN_VIDEO_RECORD_MS) {
+        deleteLocalMediaFile(result.uri);
+        haptics.light();
+        return;
+      }
+
+      setBusy('video');
+      try {
+        const thumbnailUri = await generatePostVideoThumbnail(result.uri);
+        haptics.medium();
+        openPublishVideo(result.uri, thumbnailUri, durationMs);
+      } catch {
+        deleteLocalMediaFiles(result.uri);
+        haptics.error();
+        setError('The video could not be prepared. Please try again.');
+      } finally {
+        setBusy(null);
+      }
+    } catch {
+      stopElapsedTimer();
+      setIsRecording(false);
+      haptics.error();
+      setError('The camera could not record a video. Please try again.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (!isRecording) return;
+    camera.current?.stopRecording();
+  };
+
+  const onShutterPress = () => {
+    if (mode === 'photo') {
+      void takePhoto();
+      return;
+    }
+    if (isRecording) {
+      stopRecording();
+      return;
+    }
+    void startRecording();
   };
 
   const askForCamera = async () => {
@@ -228,13 +374,16 @@ export default function CameraScreen() {
                 : null,
             ]}
           >
-            {permission?.granted && focused ? (
+            {cameraAllowed ? (
               <CameraView
                 active={focused}
+                enableTorch={mode === 'photo' && facing === 'back' && torchOn}
                 facing={facing}
                 mirror={facing === 'front'}
+                mode={mode === 'photo' ? 'picture' : 'video'}
                 ref={camera}
                 style={styles.cameraPreview}
+                videoQuality="720p"
               />
             ) : (
               <View style={styles.cameraFallback}>
@@ -264,13 +413,37 @@ export default function CameraScreen() {
         style={styles.cameraChrome}
       >
         <View pointerEvents="box-none" style={styles.topBar}>
+          {mode === 'photo' && facing === 'back' ? (
+            <Pressable
+              accessibilityLabel={torchOn ? 'Turn flashlight off' : 'Turn flashlight on'}
+              accessibilityRole="button"
+              disabled={!cameraAllowed}
+              hitSlop={10}
+              onPress={() => {
+                setTorchOn((current) => !current);
+                haptics.selection();
+              }}
+              style={({ pressed }) => [pressed && styles.pressed]}
+            >
+              <Ionicons
+                color={colors.white}
+                name={torchOn ? 'flash' : 'flash-outline'}
+                size={26}
+              />
+            </Pressable>
+          ) : (
+            <View style={styles.topBarSpacer} />
+          )}
           <Pressable
             accessibilityLabel="Flip camera"
             accessibilityRole="button"
-            disabled={!permission?.granted}
+            disabled={!cameraAllowed || isRecording}
             hitSlop={10}
-            onPress={() => setFacing((current) => (current === 'back' ? 'front' : 'back'))}
-            style={({ pressed }) => pressed && styles.pressed}
+            onPress={() => {
+              setTorchOn(false);
+              setFacing((current) => (current === 'back' ? 'front' : 'back'));
+            }}
+            style={({ pressed }) => [pressed && styles.pressed, isRecording && styles.disabled]}
           >
             <Ionicons color={colors.white} name="camera-reverse-outline" size={28} />
           </Pressable>
@@ -283,37 +456,110 @@ export default function CameraScreen() {
             { paddingBottom: Math.max(insets.bottom, spacing.md) + TAB_BAR_CLEARANCE },
           ]}
         >
-          <Pressable
-            accessibilityLabel="Choose from gallery"
-            accessibilityRole="button"
-            disabled={busy === 'gallery'}
-            onPress={() => void chooseFromGallery()}
-            style={({ pressed }) => [styles.galleryButton, pressed && styles.pressed]}
-          >
-            {busy === 'gallery' ? (
-              <ActivityIndicator color={colors.white} />
-            ) : (
-              <Ionicons color={colors.white} name="images-outline" size={26} />
-            )}
-          </Pressable>
-
-          <Pressable
-            accessibilityLabel="Take photo"
-            accessibilityRole="button"
-            disabled={!permission?.granted || busy === 'capture'}
-            onPress={() => void takePhoto()}
-            style={({ pressed }) => [
-              styles.shutterOuter,
-              pressed && styles.pressed,
-              (!permission?.granted || busy === 'capture') && styles.disabled,
-            ]}
-          >
-            <View style={styles.shutterInner}>
-              {busy === 'capture' ? <ActivityIndicator color={colors.primary} /> : null}
+          {isRecording ? (
+            <View style={styles.recordingTimer}>
+              <View style={styles.recordingDot} />
+              <Text style={styles.recordingTimerText}>
+                {formatAudioDuration(elapsedMs / 1000)} /{' '}
+                {formatAudioDuration(POST_VIDEO_MAX_DURATION_MS / 1000)}
+              </Text>
             </View>
-          </Pressable>
+          ) : (
+            <View style={styles.modeRow}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy != null}
+                onPress={() => {
+                  setTorchOn(false);
+                  setMode('photo');
+                }}
+                style={({ pressed }) => [
+                  styles.modeChip,
+                  mode === 'photo' && styles.modeChipSelected,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={[styles.modeChipText, mode === 'photo' && styles.modeChipTextSelected]}>
+                  Photo
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy != null}
+                onPress={() => {
+                  if (!videoQuota.canPost) {
+                    Alert.alert(
+                      'Daily video limit',
+                      `You can only share ${POST_VIDEO_MAX_PER_DAY} videos per day. Try again tomorrow.`,
+                    );
+                    return;
+                  }
+                  setTorchOn(false);
+                  setMode('video');
+                }}
+                style={({ pressed }) => [
+                  styles.modeChip,
+                  mode === 'video' && styles.modeChipSelected,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={[styles.modeChipText, mode === 'video' && styles.modeChipTextSelected]}>
+                  Video
+                </Text>
+              </Pressable>
+            </View>
+          )}
 
-          <View style={styles.galleryButton} />
+          <View style={styles.shutterRow}>
+            {mode === 'photo' ? (
+              <Pressable
+                accessibilityLabel="Choose from gallery"
+                accessibilityRole="button"
+                disabled={busy === 'gallery'}
+                onPress={() => void chooseFromGallery()}
+                style={({ pressed }) => [styles.galleryButton, pressed && styles.pressed]}
+              >
+                {busy === 'gallery' ? (
+                  <ActivityIndicator color={colors.white} />
+                ) : (
+                  <Ionicons color={colors.white} name="images-outline" size={26} />
+                )}
+              </Pressable>
+            ) : (
+              <View style={styles.galleryButton} />
+            )}
+
+            <Pressable
+              accessibilityLabel={
+                mode === 'photo' ? 'Take photo' : isRecording ? 'Stop recording' : 'Record video'
+              }
+              accessibilityRole="button"
+              disabled={!cameraAllowed || busy === 'capture' || busy === 'video'}
+              onPress={onShutterPress}
+              style={({ pressed }) => [
+                styles.shutterOuter,
+                mode === 'video' && styles.shutterOuterVideo,
+                isRecording && styles.shutterOuterRecording,
+                pressed && styles.pressed,
+                (!cameraAllowed || busy === 'capture' || busy === 'video') &&
+                  styles.disabled,
+              ]}
+            >
+              <View
+                style={[
+                  styles.shutterInner,
+                  mode === 'video' && styles.shutterInnerVideo,
+                  isRecording && styles.shutterInnerRecording,
+                ]}
+              >
+                {busy === 'capture' || busy === 'video' ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : null}
+              </View>
+            </Pressable>
+
+            <View style={styles.galleryButton} />
+          </View>
         </View>
       </SafeAreaView>
 
@@ -363,16 +609,68 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   topBar: {
-    alignItems: 'flex-end',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-  },
-  bottomBar: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+  },
+  topBarSpacer: {
+    height: 28,
+    width: 28,
+  },
+  bottomBar: {
+    alignItems: 'center',
+    gap: spacing.xl,
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.md,
+  },
+  modeRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  modeChip: {
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  modeChipSelected: {
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+  },
+  modeChipText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  modeChipTextSelected: { color: colors.white },
+  recordingTimer: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  recordingDot: {
+    backgroundColor: colors.danger,
+    borderRadius: radius.pill,
+    height: 8,
+    width: 8,
+  },
+  recordingTimerText: {
+    color: colors.white,
+    fontSize: 14,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '700',
+  },
+  shutterRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
   },
   galleryButton: {
     alignItems: 'center',
@@ -389,6 +687,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 80,
   },
+  shutterOuterVideo: {
+    borderColor: colors.danger,
+  },
+  shutterOuterRecording: {
+    borderColor: colors.danger,
+  },
   shutterInner: {
     alignItems: 'center',
     backgroundColor: colors.white,
@@ -396,6 +700,14 @@ const styles = StyleSheet.create({
     height: 64,
     justifyContent: 'center',
     width: 64,
+  },
+  shutterInnerVideo: {
+    backgroundColor: colors.danger,
+  },
+  shutterInnerRecording: {
+    borderRadius: 12,
+    height: 32,
+    width: 32,
   },
   errorOverlay: {
     left: spacing.lg,

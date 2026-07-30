@@ -9,6 +9,7 @@ import {
 } from './errors';
 import { preparePostAudio } from './audio';
 import { preparePostImage } from './image';
+import { preparePostVideo } from './video';
 import {
   commentSchema,
   createCommentInputSchema,
@@ -29,6 +30,7 @@ import {
 import {
   buildPostAudioPath,
   buildPostImagePath,
+  buildPostVideoPath,
   isValidReactionScore,
   POST_IMAGE_BUCKET,
   POST_IMAGE_URL_TTL_SECONDS,
@@ -36,7 +38,8 @@ import {
 } from './utils';
 
 const POST_SELECT = `
-  id, ride_id, user_id, image_path, audio_path, description, latitude, longitude,
+  id, ride_id, user_id, image_path, audio_path, video_path, video_duration_ms,
+  description, latitude, longitude,
   location_name, scheduled_date, is_temporary, expires_at, created_at, updated_at,
   profile:profiles!posts_user_id_fkey(id, username, display_name, avatar_url),
   comments(count),
@@ -183,6 +186,30 @@ async function requireUserId() {
   return data.user.id;
 }
 
+/** Start of the current UTC calendar day (matches the DB daily video cap). */
+function startOfUtcDayIso() {
+  const now = new Date();
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  ).toISOString();
+}
+
+/** How many video posts the signed-in user has created today (UTC). */
+export async function getTodayVideoPostCount(): Promise<number> {
+  const userId = await requireUserId();
+  const { count, error } = await supabase
+    .from('posts')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .not('video_path', 'is', null)
+    .gte('created_at', startOfUtcDayIso());
+
+  if (error) {
+    throw mapDatabaseError(error, 'Could not check today\'s video limit.');
+  }
+  return count ?? 0;
+}
+
 /** First page + each scroll page of the Ride photo feed. */
 export const RIDE_FEED_PAGE_SIZE = 8;
 
@@ -314,6 +341,36 @@ export async function getSignedPostAudio(
   };
 }
 
+export async function getSignedPostVideo(
+  videoPath: string,
+  expiresInSeconds = POST_IMAGE_URL_TTL_SECONDS,
+): Promise<SignedPostImage> {
+  if (!videoPath || expiresInSeconds <= 0) {
+    throw new PostDataError('INVALID_INPUT', 'The video request is invalid.');
+  }
+
+  const requestedAt = Date.now();
+  const { data, error } = await supabase.storage
+    .from(POST_MEDIA_BUCKET)
+    .createSignedUrl(videoPath, expiresInSeconds);
+
+  if (error) {
+    if (String(error.message).toLowerCase().includes('network')) {
+      throw mapUploadError(error);
+    }
+    throw new PostDataError(
+      'STORAGE',
+      'The private video could not be opened.',
+      { cause: error },
+    );
+  }
+
+  return {
+    url: data.signedUrl,
+    expiresAt: requestedAt + expiresInSeconds * 1000,
+  };
+}
+
 export async function createPost(input: CreatePostInput): Promise<PostRecord[]> {
   const parsed = createPostInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -329,6 +386,10 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord[]> 
   const audioBytes = parsed.data.audioUri
     ? await preparePostAudio(parsed.data.audioUri)
     : null;
+  const videoBytes = parsed.data.videoUri
+    ? await preparePostVideo(parsed.data.videoUri)
+    : null;
+  const videoDurationMs = videoBytes ? parsed.data.videoDurationMs : null;
   const isTemporary = parsed.data.isTemporary;
   const prepared = parsed.data.rideIds.map((rideId) => {
     const postId = Crypto.randomUUID();
@@ -337,6 +398,7 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord[]> 
       postId,
       imagePath: buildPostImagePath(rideId, userId, postId),
       audioPath: audioBytes ? buildPostAudioPath(rideId, userId, postId) : null,
+      videoPath: videoBytes ? buildPostVideoPath(rideId, userId, postId) : null,
     };
   });
 
@@ -366,6 +428,19 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord[]> 
         }
         uploadedPaths.push(entry.audioPath);
       }
+
+      if (videoBytes && entry.videoPath) {
+        const { error: videoUploadError } = await supabase.storage
+          .from(POST_MEDIA_BUCKET)
+          .upload(entry.videoPath, videoBytes, {
+            contentType: 'video/mp4',
+            upsert: false,
+          });
+        if (videoUploadError) {
+          throw mapUploadError(videoUploadError);
+        }
+        uploadedPaths.push(entry.videoPath);
+      }
     }
 
     // DB trigger overwrites expires_at for temps; required by check constraint.
@@ -382,6 +457,8 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord[]> 
           user_id: userId,
           image_path: entry.imagePath,
           audio_path: entry.audioPath,
+          video_path: entry.videoPath,
+          video_duration_ms: entry.videoPath ? videoDurationMs : null,
           description: parsed.data.description,
           latitude: parsed.data.latitude,
           longitude: parsed.data.longitude,
@@ -412,7 +489,7 @@ export async function deletePost(postId: string): Promise<void> {
 
   const { data, error: lookupError } = await supabase
     .from('posts')
-    .select('id, user_id, image_path, audio_path')
+    .select('id, user_id, image_path, audio_path, video_path')
     .eq('id', validPostId)
     .eq('user_id', userId)
     .single();
@@ -425,7 +502,13 @@ export async function deletePost(postId: string): Promise<void> {
     typeof data.audio_path === 'string' && data.audio_path.trim()
       ? data.audio_path
       : null;
-  const pathsToRemove = audioPath ? [imagePath, audioPath] : [imagePath];
+  const videoPath =
+    typeof data.video_path === 'string' && data.video_path.trim()
+      ? data.video_path
+      : null;
+  const pathsToRemove = [imagePath, audioPath, videoPath].filter(
+    (path): path is string => Boolean(path),
+  );
 
   // Remove files first while the caller can still resolve them. storage.remove
   // needs SELECT+DELETE; an empty result usually means RLS blocked the delete.

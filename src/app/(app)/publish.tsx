@@ -3,6 +3,7 @@ import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
+  Alert,
   Platform,
   Pressable,
   StyleSheet,
@@ -23,14 +24,19 @@ import {
   PublishAudioFooter,
 } from '@/components/audio-note-recorder';
 import { LocationPickerModal } from '@/components/location-picker-modal';
+import { PublishVideoPreview } from '@/components/publish-video-preview';
 import { RidePickerModal } from '@/components/ride-picker-modal';
 import { ErrorBanner } from '@/components/ui';
 import { useSoloRideNotifications } from '@/features/notifications';
 import {
+  deleteLocalMediaFile,
+  deleteLocalMediaFiles,
   getOptionalForegroundLocation,
   POST_IMAGE_ASPECT_RATIO,
+  POST_VIDEO_MAX_PER_DAY,
   requestCaptureRetake,
   searchLocations,
+  useCanPostVideoToday,
   useCreatePost,
   type LocationSuggestion,
 } from '@/features/posts';
@@ -49,17 +55,24 @@ const KEYBOARD_SCROLL_EXTRA = spacing.xl + spacing.md;
 export default function PublishScreen() {
   const {
     imageUri,
+    videoUri,
+    videoDurationMs: videoDurationMsParam,
     rideId: preferredRideId,
   } = useLocalSearchParams<{
     imageUri?: string;
+    videoUri?: string;
+    videoDurationMs?: string;
     rideId?: string;
   }>();
+  const hasVideo = Boolean(videoUri);
+  const videoDurationMs = videoDurationMsParam ? Number(videoDurationMsParam) : null;
   const navigation = useNavigation();
   const { user } = useCurrentUser();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const cameraRides = useCameraRides(user?.id);
   const createPost = useCreatePost();
+  const videoQuota = useCanPostVideoToday();
   const notifications = useSoloRideNotifications(user?.id ?? null);
 
   const [selectedRideIds, setSelectedRideIds] = useState<string[]>([]);
@@ -88,6 +101,8 @@ export default function PublishScreen() {
   );
   const canChoosePermanent = permanentEligible.length > 0;
   const isTemporary = !canChoosePermanent || wantTemporary;
+  /** Videos are single-Ride only (same as 24h posts) so the daily cap stays clear. */
+  const singleRideOnly = isTemporary || hasVideo;
   const selectableRides = isTemporary ? temporaryEligible : permanentEligible;
   const selectedRides = useMemo(
     () => selectableRides.filter((ride) => selectedRideIds.includes(ride.id)),
@@ -99,8 +114,10 @@ export default function PublishScreen() {
   );
   const canPublish = isTemporary
     ? canShareTemporary
-    : selectedRides.length > 0 &&
-      selectedRides.every((ride) => ride.canPublishPermanent);
+    : hasVideo
+      ? selectedRides.length === 1 && selectedRides[0]!.canPublishPermanent
+      : selectedRides.length > 0 &&
+        selectedRides.every((ride) => ride.canPublishPermanent);
 
   const defaultPermanentRideIds = useCallback(() => {
     const required = permanentEligible
@@ -157,6 +174,13 @@ export default function PublishScreen() {
       const stillValid = current.filter((id) =>
         permanentEligible.some((ride) => ride.id === id),
       );
+      if (hasVideo) {
+        if (stillValid.length) return [stillValid[0]!];
+        if (initializedRideSelection.current) return [];
+        initializedRideSelection.current = true;
+        const defaults = defaultPermanentRideIds();
+        return defaults.length ? [defaults[0]!] : [];
+      }
       if (initializedRideSelection.current) return stillValid;
       initializedRideSelection.current = true;
       return defaultPermanentRideIds();
@@ -166,6 +190,7 @@ export default function PublishScreen() {
     canChoosePermanent,
     defaultPermanentRideIds,
     defaultTemporaryRideId,
+    hasVideo,
     isTemporary,
     permanentEligible,
     temporaryEligible,
@@ -209,8 +234,12 @@ export default function PublishScreen() {
   const composeTitle = temporaryForced
     ? '24-hour share'
     : isTemporary
-      ? '24h photo'
-      : 'New photo';
+      ? hasVideo
+        ? '24h video'
+        : '24h photo'
+      : hasVideo
+        ? 'New video'
+        : 'New photo';
 
   useEffect(() => {
     navigation.setOptions({ title: composeTitle });
@@ -258,9 +287,22 @@ export default function PublishScreen() {
     setLocationSuggestions([]);
   };
 
+  const discardLocalDrafts = useCallback(() => {
+    deleteLocalMediaFiles(imageUri, videoUri, audioUri);
+  }, [audioUri, imageUri, videoUri]);
+
+  // System back / retake / post-success all leave this screen — drop cache files.
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', () => {
+      discardLocalDrafts();
+    });
+    return unsubscribe;
+  }, [discardLocalDrafts, navigation]);
+
   const retake = () => {
     // Clear the in-tab draft first, then native-pop — same animation as the
     // system back button, but landing on the camera instead of the editor.
+    // Local media is deleted via beforeRemove above.
     requestCaptureRetake();
     if (router.canGoBack()) {
       router.back();
@@ -271,13 +313,22 @@ export default function PublishScreen() {
 
   const publish = async () => {
     if (!imageUri || !primaryRide || !canPublish || !selectedRides.length) return;
+    if (hasVideo && !videoQuota.canPost) {
+      Alert.alert(
+        'Daily video limit',
+        `You can only share ${POST_VIDEO_MAX_PER_DAY} videos per day. Try again tomorrow.`,
+      );
+      return;
+    }
     setError(null);
     try {
       const typedName = locationQuery.trim() || null;
       await createPost.mutateAsync({
         rideIds: selectedRides.map((ride) => ride.id),
         imageUri,
-        audioUri,
+        audioUri: hasVideo ? null : audioUri,
+        videoUri: videoUri ?? null,
+        videoDurationMs,
         description,
         scheduledDate: primaryRide.postDate,
         isTemporary,
@@ -296,13 +347,18 @@ export default function PublishScreen() {
       }
       haptics.success();
       // Reset camera draft, then land on Rides for the published ride.
+      // beforeRemove cleans local drafts as we leave.
       router.replace({
         pathname: '/camera',
         params: { retake: '1', selectRideId: primaryRide.id },
       });
     } catch (cause) {
       haptics.error();
-      setError(cause instanceof Error ? cause.message : 'The photo could not be published.');
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : `The ${hasVideo ? 'video' : 'photo'} could not be published.`,
+      );
     }
   };
 
@@ -320,7 +376,7 @@ export default function PublishScreen() {
   };
 
   const handleRideSelect = (rideId: string) => {
-    if (isTemporary) {
+    if (singleRideOnly) {
       selectTemporaryRide(rideId);
       return;
     }
@@ -333,6 +389,11 @@ export default function PublishScreen() {
       const stillValid = current.filter((id) =>
         permanentEligible.some((ride) => ride.id === id),
       );
+      if (hasVideo) {
+        if (stillValid.length) return [stillValid[0]!];
+        const defaults = defaultPermanentRideIds();
+        return defaults.length ? [defaults[0]!] : [];
+      }
       return stillValid.length ? stillValid : defaultPermanentRideIds();
     });
   };
@@ -382,7 +443,7 @@ export default function PublishScreen() {
     isTemporary && primaryRide
       ? `${primaryRide.temporaryRemaining}/${MAX_ACTIVE_TEMPORARY_POSTS} available`
       : null;
-  const rideTriggerLabel = isTemporary
+  const rideTriggerLabel = singleRideOnly
     ? (primaryRide?.name ?? 'Choose a Ride')
     : selectedRides.length === 0
       ? 'Choose Rides'
@@ -413,12 +474,20 @@ export default function PublishScreen() {
           <View style={styles.previewBlock}>
             {isTemporary ? (
               <Text style={styles.tempPreviewHint}>
-                This photo will disappear from after 24 hours.
+                This {hasVideo ? 'video' : 'photo'} will disappear from after 24 hours.
               </Text>
             ) : null}
 
             <View style={styles.previewFrame}>
-              <Image resizeMode="contain" source={{ uri: imageUri }} style={styles.preview} />
+              {hasVideo && videoUri ? (
+                <PublishVideoPreview
+                  durationMs={videoDurationMs}
+                  thumbnailUri={imageUri}
+                  videoUri={videoUri}
+                />
+              ) : (
+                <Image resizeMode="contain" source={{ uri: imageUri }} style={styles.preview} />
+              )}
               <Pressable
                 accessibilityLabel="Retake or choose another photo"
                 accessibilityRole="button"
@@ -496,10 +565,14 @@ export default function PublishScreen() {
             <View style={styles.postToBlock}>
               <View style={styles.postToLabelRow}>
                 <Text style={styles.sectionLabel}>
-                  {isTemporary ? 'Post to' : 'Post to Rides'}
+                  {singleRideOnly ? 'Post to' : 'Post to Rides'}
                 </Text>
                 {tempAvailability ? (
                   <Text style={styles.captionMeta}>{tempAvailability}</Text>
+                ) : hasVideo ? (
+                  <Text style={styles.captionMeta}>
+                    {videoQuota.remaining}/{POST_VIDEO_MAX_PER_DAY} videos left today
+                  </Text>
                 ) : !isTemporary && permanentEligible.length > 1 ? (
                   <Text style={styles.captionMeta}>select one or more</Text>
                 ) : null}
@@ -580,10 +653,11 @@ export default function PublishScreen() {
               </View>
             </View>
 
-            {audioUri ? (
+            {audioUri && !hasVideo ? (
               <AudioNotePreview
                 durationMs={audioDurationMs}
                 onClear={() => {
+                  deleteLocalMediaFile(audioUri);
                   setAudioUri(null);
                   setAudioDurationMs(null);
                 }}
@@ -598,8 +672,10 @@ export default function PublishScreen() {
         <KeyboardStickyView offset={{ closed: 0, opened: 0 }} style={styles.composeFooterSticky}>
           <View style={[styles.composeFooter, { paddingBottom: footerPad }]}>
             <PublishAudioFooter
-              audioUri={audioUri}
+              audioUri={hasVideo ? null : audioUri}
+              hideMic={hasVideo}
               onAudioChange={(uri, durationMs) => {
+                if (!uri && audioUri) deleteLocalMediaFile(audioUri);
                 setAudioUri(uri);
                 setAudioDurationMs(durationMs);
               }}
@@ -612,7 +688,7 @@ export default function PublishScreen() {
         </KeyboardStickyView>
 
         <RidePickerModal
-          isTemporary={isTemporary}
+          isTemporary={singleRideOnly}
           onClose={() => setRidePickerOpen(false)}
           onSelect={handleRideSelect}
           rides={isTemporary ? temporaryEligible : permanentEligible}
