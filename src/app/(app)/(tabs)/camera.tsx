@@ -69,13 +69,15 @@ export default function CameraScreen() {
   const cameraGrantedRef = useRef(false);
   if (permission?.granted) cameraGrantedRef.current = true;
   else if (permission && !permission.granted) cameraGrantedRef.current = false;
-  const [focused, setFocused] = useState(true);
+  const [focused, setFocused] = useState(false);
   const [facing, setFacing] = useState<Facing>('back');
   const [mode, setMode] = useState<CaptureMode>('photo');
   const [torchOn, setTorchOn] = useState(false);
   const [draftUri, setDraftUri] = useState<string | null>(null);
   const [busy, setBusy] = useState<'capture' | 'gallery' | 'video' | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [bootingCamera, setBootingCamera] = useState(true);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
@@ -88,6 +90,9 @@ export default function CameraScreen() {
   useFocusEffect(
     useCallback(() => {
       setFocused(true);
+      // Do not clear cameraReady here — toggling `active` does not remount
+      // CameraView, so onCameraReady often never fires again and the boot
+      // spinner would spin forever when returning via the tab.
       // Only re-query when we don't already know it's granted — calling
       // getPermission() every focus can briefly clear status and flash the
       // "Camera access" panel when returning from publish.
@@ -99,6 +104,69 @@ export default function CameraScreen() {
         setTorchOn(false);
       };
     }, [getPermission]),
+  );
+
+  // If onCameraReady never arrives (common when only `active` flips), unlock
+  // controls so the tab isn't stuck behind the boot spinner.
+  useEffect(() => {
+    if (!focused || !cameraAllowed || cameraReady) return;
+    const timeout = setTimeout(() => {
+      setCameraReady(true);
+      setBootingCamera(false);
+    }, 1500);
+    return () => clearTimeout(timeout);
+  }, [cameraAllowed, cameraReady, focused]);
+
+  const markCameraBooting = useCallback(() => {
+    setCameraReady(false);
+    setBootingCamera(true);
+  }, []);
+
+  const markCameraReady = useCallback(() => {
+    setCameraReady(true);
+    setBootingCamera(false);
+  }, []);
+
+  const switchMode = useCallback(
+    async (next: CaptureMode) => {
+      if (next === mode || busy != null || isRecording) return;
+      setTorchOn(false);
+      setError(null);
+
+      if (next === 'video') {
+        if (!videoQuota.canPost) {
+          Alert.alert(
+            'Daily video limit',
+            `You can only share ${POST_VIDEO_MAX_PER_DAY} videos per day. Try again tomorrow.`,
+          );
+          return;
+        }
+        // Mic must be granted before the native video session opens — otherwise
+        // Android can hang with a frozen preview when RECORD_AUDIO is missing
+        // or when the permission prompt interrupts mid-reconfigure.
+        const currentMic = micPermission?.granted
+          ? micPermission
+          : await requestMicPermission();
+        if (!currentMic.granted) {
+          haptics.error();
+          setError('Microphone access is needed to record video with sound.');
+          return;
+        }
+      }
+
+      markCameraBooting();
+      setMode(next);
+      haptics.selection();
+    },
+    [
+      busy,
+      isRecording,
+      markCameraBooting,
+      micPermission,
+      mode,
+      requestMicPermission,
+      videoQuota.canPost,
+    ],
   );
 
   const resetCapture = useCallback(() => {
@@ -133,7 +201,7 @@ export default function CameraScreen() {
   }, [resetCapture, retake, selectRideId]);
 
   const takePhoto = async () => {
-    if (!camera.current || busy) return;
+    if (!camera.current || busy || !cameraReady) return;
     setBusy('capture');
     setError(null);
     try {
@@ -215,7 +283,7 @@ export default function CameraScreen() {
   };
 
   const startRecording = async () => {
-    if (!camera.current || busy || isRecording) return;
+    if (!camera.current || busy || isRecording || !cameraReady) return;
     if (!videoQuota.canPost) {
       Alert.alert(
         'Daily video limit',
@@ -225,13 +293,6 @@ export default function CameraScreen() {
     }
     setError(null);
     try {
-      const currentMic = micPermission?.granted ? micPermission : await requestMicPermission();
-      if (!currentMic.granted) {
-        haptics.error();
-        setError('Microphone access is needed to record video with sound.');
-        return;
-      }
-
       recordingStartRef.current = Date.now();
       setElapsedMs(0);
       setIsRecording(true);
@@ -375,16 +436,33 @@ export default function CameraScreen() {
             ]}
           >
             {cameraAllowed ? (
-              <CameraView
-                active={focused}
-                enableTorch={mode === 'photo' && facing === 'back' && torchOn}
-                facing={facing}
-                mirror={facing === 'front'}
-                mode={mode === 'photo' ? 'picture' : 'video'}
-                ref={camera}
-                style={styles.cameraPreview}
-                videoQuality="720p"
-              />
+              <>
+                <CameraView
+                  // Remount on mode/facing changes — mutating `mode` on a live
+                  // CameraView can freeze the preview in production builds.
+                  key={`${mode}-${facing}`}
+                  active={focused}
+                  enableTorch={mode === 'photo' && facing === 'back' && torchOn}
+                  facing={facing}
+                  mirror={facing === 'front'}
+                  mode={mode === 'photo' ? 'picture' : 'video'}
+                  mute={false}
+                  onCameraReady={markCameraReady}
+                  onMountError={() => {
+                    setCameraReady(false);
+                    setBootingCamera(false);
+                    setError('The camera could not start. Switch mode or try again.');
+                  }}
+                  ref={camera}
+                  style={styles.cameraPreview}
+                  videoQuality="720p"
+                />
+                {focused && bootingCamera ? (
+                  <View pointerEvents="none" style={styles.cameraBootOverlay}>
+                    <ActivityIndicator color={colors.white} size="large" />
+                  </View>
+                ) : null}
+              </>
             ) : (
               <View style={styles.cameraFallback}>
                 <StatePanel
@@ -441,6 +519,7 @@ export default function CameraScreen() {
             hitSlop={10}
             onPress={() => {
               setTorchOn(false);
+              markCameraBooting();
               setFacing((current) => (current === 'back' ? 'front' : 'back'));
             }}
             style={({ pressed }) => [pressed && styles.pressed, isRecording && styles.disabled]}
@@ -468,11 +547,8 @@ export default function CameraScreen() {
             <View style={styles.modeRow}>
               <Pressable
                 accessibilityRole="button"
-                disabled={busy != null}
-                onPress={() => {
-                  setTorchOn(false);
-                  setMode('photo');
-                }}
+                disabled={busy != null || isRecording}
+                onPress={() => void switchMode('photo')}
                 style={({ pressed }) => [
                   styles.modeChip,
                   mode === 'photo' && styles.modeChipSelected,
@@ -485,18 +561,8 @@ export default function CameraScreen() {
               </Pressable>
               <Pressable
                 accessibilityRole="button"
-                disabled={busy != null}
-                onPress={() => {
-                  if (!videoQuota.canPost) {
-                    Alert.alert(
-                      'Daily video limit',
-                      `You can only share ${POST_VIDEO_MAX_PER_DAY} videos per day. Try again tomorrow.`,
-                    );
-                    return;
-                  }
-                  setTorchOn(false);
-                  setMode('video');
-                }}
+                disabled={busy != null || isRecording}
+                onPress={() => void switchMode('video')}
                 style={({ pressed }) => [
                   styles.modeChip,
                   mode === 'video' && styles.modeChipSelected,
@@ -534,14 +600,19 @@ export default function CameraScreen() {
                 mode === 'photo' ? 'Take photo' : isRecording ? 'Stop recording' : 'Record video'
               }
               accessibilityRole="button"
-              disabled={!cameraAllowed || busy === 'capture' || busy === 'video'}
+              disabled={
+                !cameraAllowed || !cameraReady || busy === 'capture' || busy === 'video'
+              }
               onPress={onShutterPress}
               style={({ pressed }) => [
                 styles.shutterOuter,
                 mode === 'video' && styles.shutterOuterVideo,
                 isRecording && styles.shutterOuterRecording,
                 pressed && styles.pressed,
-                (!cameraAllowed || busy === 'capture' || busy === 'video') &&
+                (!cameraAllowed ||
+                  !cameraReady ||
+                  busy === 'capture' ||
+                  busy === 'video') &&
                   styles.disabled,
               ]}
             >
@@ -596,6 +667,12 @@ const styles = StyleSheet.create({
   },
   cameraPreview: {
     ...StyleSheet.absoluteFillObject,
+  },
+  cameraBootOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    justifyContent: 'center',
   },
   cameraFallback: {
     ...StyleSheet.absoluteFillObject,

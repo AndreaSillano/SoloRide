@@ -32,7 +32,10 @@ type MenuState = 'switcher' | 'create' | null;
 
 export default function HomeScreen() {
   const { user } = useCurrentUser();
-  const { selectRideId: pendingSelectRideId } = useLocalSearchParams<{ selectRideId?: string }>();
+  const { selectRideId: pendingSelectRideId, notificationOpenId } = useLocalSearchParams<{
+    selectRideId?: string;
+    notificationOpenId?: string;
+  }>();
   const queryClient = useQueryClient();
   const rides = useUserRides(user?.id);
   const { selectedRideId, selectRide, isReady } = useSelectedRide(rides.data, user?.id);
@@ -48,12 +51,12 @@ export default function HomeScreen() {
     ),
   );
 
-  // Lets other screens (join/create Ride) hand off which Ride should become
-  // selected once we land back on this tab, e.g. `router.replace({ pathname:
-  // '/', params: { selectRideId } })`.
+  // Lets other screens (join/create Ride) and notification taps hand off which
+  // Ride should become selected once we land back on this tab. notificationOpenId
+  // re-triggers selection when the same rideId is opened again from a push.
   useEffect(() => {
     if (pendingSelectRideId) selectRide(pendingSelectRideId);
-  }, [pendingSelectRideId, selectRide]);
+  }, [pendingSelectRideId, notificationOpenId, selectRide]);
 
   const groups = groupUserRides(rides.data ?? []);
   const selectedRide = rides.data?.find((ride) => ride.id === selectedRideId) ?? null;

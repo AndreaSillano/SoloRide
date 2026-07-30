@@ -1,3 +1,4 @@
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef } from 'react';
@@ -6,6 +7,7 @@ import { AppState } from 'react-native';
 import { useAuth } from '@/auth/auth-context';
 import { purgeExpiredTemporaryPosts } from '@/features/posts/service';
 import { fetchRideSchedule, fetchUserRides } from '@/features/rides/api';
+import { queryKeys } from '@/lib/queryKeys';
 import { supabase } from '@/lib/supabase';
 import { DATE_FORMAT, getWeekRange } from '@/utils/schedule';
 import { format } from 'date-fns';
@@ -38,12 +40,51 @@ Notifications.setNotificationHandler({
   }),
 });
 
+function rideIdFromNotificationData(data: unknown): string | undefined {
+  if (isSocialNotificationData(data) || isSoloRideNotificationData(data)) {
+    return data.rideId;
+  }
+  if (data && typeof data === 'object') {
+    const rideId = (data as Record<string, unknown>).rideId;
+    if (typeof rideId === 'string' && rideId.length > 0) return rideId;
+  }
+  return undefined;
+}
+
+/** Drop stale home/feed caches so the ride opened from a tap shows fresh data. */
+function invalidateQueriesForNotification(queryClient: QueryClient, data: unknown) {
+  void queryClient.invalidateQueries({ queryKey: ['rides'] });
+  void queryClient.invalidateQueries({ queryKey: ['rides-due-today'] });
+  void queryClient.invalidateQueries({ queryKey: ['camera-rides'] });
+
+  const rideId = rideIdFromNotificationData(data);
+  if (rideId) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.ridePosts(rideId) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.ride(rideId) });
+    void queryClient.invalidateQueries({ queryKey: ['ride-schedule', rideId] });
+    void queryClient.invalidateQueries({ queryKey: ['posted-status', rideId] });
+    void queryClient.invalidateQueries({ queryKey: ['week-posted-status', rideId] });
+  }
+
+  if (isSocialNotificationData(data)) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.post(data.postId) });
+    if (data.kind === 'social_comment') {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.comments(data.postId) });
+    }
+  }
+}
+
 function openHome(rideId?: string) {
   try {
     if (rideId) {
+      // notificationOpenId forces Home to re-apply selectRide even when the
+      // same rideId is already in the URL (e.g. user switched rides manually).
       router.replace({
         pathname: '/',
-        params: { selectRideId: rideId },
+        params: {
+          selectRideId: rideId,
+          notificationOpenId: String(Date.now()),
+        },
       });
       return;
     }
@@ -59,23 +100,9 @@ function openHome(rideId?: string) {
 }
 
 /** Open the matching Ride when possible; otherwise land on home. */
-function openFromNotificationData(data: unknown) {
-  if (isSocialNotificationData(data)) {
-    openHome(data.rideId);
-    return;
-  }
-  if (isSoloRideNotificationData(data)) {
-    openHome(data.rideId);
-    return;
-  }
-  if (data && typeof data === 'object') {
-    const rideId = (data as Record<string, unknown>).rideId;
-    if (typeof rideId === 'string' && rideId.length > 0) {
-      openHome(rideId);
-      return;
-    }
-  }
-  openHome();
+function openFromNotificationData(queryClient: QueryClient, data: unknown) {
+  invalidateQueriesForNotification(queryClient, data);
+  openHome(rideIdFromNotificationData(data));
 }
 
 async function loadNotificationPlan(userId: string) {
@@ -118,6 +145,7 @@ async function loadNotificationPlan(userId: string) {
 
 export function NotificationLifecycle() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const previousUserId = useRef<string | null>(null);
   const reconciling = useRef(false);
   const pendingReconcile = useRef(false);
@@ -213,10 +241,11 @@ export function NotificationLifecycle() {
       if (lastHandledResponseId.current === responseId) return;
       lastHandledResponseId.current = responseId;
       try {
-        openFromNotificationData(response.notification.request.content.data);
+        openFromNotificationData(queryClient, response.notification.request.content.data);
       } catch {
         openHome();
       }
+      void Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
     };
 
     const responseSub = Notifications.addNotificationResponseReceivedListener(handleResponse);
@@ -224,7 +253,7 @@ export function NotificationLifecycle() {
     void Notifications.getLastNotificationResponseAsync().then(handleResponse);
 
     return () => responseSub.remove();
-  }, []);
+  }, [queryClient]);
 
   return null;
 }

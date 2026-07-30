@@ -333,8 +333,10 @@ describe('post data utilities', () => {
     expect(reactionScoreToSize(1)).toBe(18);
     expect(reactionScoreToSize(-3)).toBe(36);
     expect(reactionSumToStickerSize(1)).toBe(56);
-    expect(reactionSumToStickerSize(-2)).toBe(88);
-    expect(reactionSumToStickerSize(5)).toBe(112);
+    expect(reactionSumToStickerSize(-2)).toBe(80);
+    expect(reactionSumToStickerSize(5)).toBe(152);
+    expect(reactionSumToStickerSize(10)).toBe(250);
+    expect(reactionSumToStickerSize(20)).toBe(250);
   });
 
   it('validates reaction upsert input', () => {

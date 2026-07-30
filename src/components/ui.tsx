@@ -1,5 +1,6 @@
 import { useHeaderHeight } from '@react-navigation/elements';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { Image as ExpoImage } from 'expo-image';
 import type { PropsWithChildren, ReactElement, ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -526,11 +527,14 @@ export function PostImage({
   }
 
   return (
-    <Image
+    <ExpoImage
       accessibilityLabel={`Photo by ${author}`}
-      resizeMode="contain"
-      source={{ uri: image.data.url }}
+      cachePolicy="memory-disk"
+      contentFit="contain"
+      recyclingKey={post.image_path}
+      source={{ uri: image.data.url, cacheKey: post.image_path }}
       style={[styles.photo, { aspectRatio }, style]}
+      transition={150}
     />
   );
 }
@@ -772,6 +776,16 @@ export function FeedPost({
   const reactionStickerEmoji =
     reactionCount > 0 ? reactionEmojiForScore(reactionSum <= -1 ? -1 : 1) : null;
   const reactionStickerSize = reactionSumToStickerSize(reactionSum === 0 ? 1 : reactionSum);
+  // Large emoji glyphs overhang their em-box; pad the box so the top isn't clipped.
+  const reactionStickerBox = Math.ceil(reactionStickerSize * 1.28);
+  const reactionStickerDislike = reactionSum <= -1;
+  // Hang a similar fraction of the hand off the corner as size grows.
+  const isMaxSticker = reactionStickerSize >= 240;
+  const reactionStickerBottom =
+    -Math.round(reactionStickerBox * (reactionStickerDislike ? 0.48 : 0.3)) +
+    (isMaxSticker ? 36 : 0);
+  const reactionStickerRight =
+    -Math.round(reactionStickerBox * 0.06) - (isMaxSticker ? 18 : 0);
 
   const reactionSticker =
     reactionStickerEmoji && onPressReactions ? (
@@ -786,20 +800,23 @@ export function FeedPost({
         onPress={onPressReactions}
         style={({ pressed }) => [
           styles.feedReactionSticker,
-          reactionSum <= -1
-            ? styles.feedReactionStickerDislike
-            : styles.feedReactionStickerLike,
+          {
+            bottom: reactionStickerBottom,
+            right: reactionStickerRight,
+            transform: [{ rotate: reactionStickerDislike ? '-14deg' : '14deg' }],
+          },
           pressed && styles.pressed,
         ]}
       >
         <Text
+          allowFontScaling={false}
           style={[
             styles.feedReactionStickerEmoji,
             {
               fontSize: reactionStickerSize,
-              height: reactionStickerSize + 16,
-              lineHeight: reactionStickerSize + 16,
-              width: reactionStickerSize + 16,
+              height: reactionStickerBox,
+              lineHeight: reactionStickerBox,
+              width: reactionStickerBox,
             },
           ]}
         >
@@ -1114,12 +1131,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderBottomColor: colors.border,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    overflow: 'visible',
     paddingBottom: spacing.sm,
   },
   feedItemTemporary: {
     backgroundColor: colors.background,
     borderBottomColor: colors.border,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    overflow: 'visible',
     paddingBottom: spacing.sm,
   },
   feedHeader: {
@@ -1207,23 +1226,15 @@ const styles = StyleSheet.create({
     maxWidth: '90%',
   },
   feedReactionSticker: {
-    bottom: -28,
     overflow: 'visible',
     position: 'absolute',
-    right: 0,
     zIndex: 4,
   },
-  feedReactionStickerLike: {
-    bottom: -36,
-    transform: [{ rotate: '14deg' }],
-  },
-  feedReactionStickerDislike: {
-    bottom: -60,
-    transform: [{ rotate: '-14deg' }],
-  },
   feedReactionStickerEmoji: {
+    includeFontPadding: false,
     overflow: 'visible',
     textAlign: 'center',
+    textAlignVertical: 'center',
     textShadowColor: 'rgba(0,0,0,0.28)',
     textShadowOffset: { width: 0, height: 3 },
     textShadowRadius: 6,

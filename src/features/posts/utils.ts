@@ -102,14 +102,13 @@ export function reactionEmojiForScore(score: number) {
 }
 
 /**
- * Feed sticker font size from net reaction sum — three big tiers.
- * Uses |sum| capped at 3 so a single strong vote and a pile of mild ones share bands.
+ * Feed sticker font size from net reaction sum — ten tiers up to 250.
+ * Uses |sum| so stronger net reactions grow the sticker; caps at level 10.
  */
 export function reactionSumToStickerSize(sum: number) {
-  const magnitude = Math.min(3, Math.max(1, Math.abs(sum)));
-  if (magnitude >= 3) return 124;
-  if (magnitude === 2) return 88;
-  return 56;
+  const level = Math.min(10, Math.max(1, Math.abs(sum)));
+  const sizes = [56, 80, 104, 128, 152, 176, 200, 220, 230, 240] as const;
+  return sizes[level - 1] ?? sizes[0];
 }
 
 /** Last N reaction scores for the feed stack: newest first, capped; `hasMore` when truncated. */

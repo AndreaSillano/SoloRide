@@ -61,8 +61,7 @@
         "expo-image-picker",
         {
           "photosPermission": "SoloRide uses your photo library to add photos to your rides.",
-          "cameraPermission": "SoloRide uses the camera to add photos to your rides.",
-          "microphonePermission": false
+          "cameraPermission": "SoloRide uses the camera to add photos to your rides."
         }
       ],
       [
