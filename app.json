@@ -48,6 +48,7 @@
       "bundler": "metro"
     },
     "plugins": [
+      "./plugins/withAndroidReleaseSigning",
       "expo-router",
       [
         "expo-camera",

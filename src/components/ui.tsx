@@ -749,22 +749,22 @@ export function FeedPost({
     [],
   );
 
-  const reactionOverlay = (
-    <>
-      {onSelectReaction && onCloseReactionPicker ? (
-        <ScalePicker
-          interactive={holdPreviewScore == null}
-          onClose={onCloseReactionPicker}
-          onSelect={handlePickerSelect}
-          selectedScore={holdPreviewScore ?? ownReactionScore}
-          visible={reactionPickerVisible}
-        />
-      ) : null}
-      {burstScore != null && burstScore !== 0 ? (
-        <ReactionBurst score={burstScore} onFinished={() => setBurstScore(null)} />
-      ) : null}
-    </>
-  );
+  const reactionPicker =
+    onSelectReaction && onCloseReactionPicker ? (
+      <ScalePicker
+        interactive={holdPreviewScore == null}
+        onClose={onCloseReactionPicker}
+        onSelect={handlePickerSelect}
+        selectedScore={holdPreviewScore ?? ownReactionScore}
+        visible={reactionPickerVisible}
+      />
+    ) : null;
+
+  // Render outside overflow:hidden photo wraps so the ±3 pop isn't clipped.
+  const reactionBurst =
+    burstScore != null && burstScore !== 0 ? (
+      <ReactionBurst score={burstScore} onFinished={() => setBurstScore(null)} />
+    ) : null;
 
   const commentLabel =
     commentCount === 0
@@ -914,8 +914,9 @@ export function FeedPost({
             {!post.video_path && post.audio_path ? (
               <FeedAudioNote audioPath={post.audio_path} />
             ) : null}
-            {reactionOverlay}
+            {reactionPicker}
           </View>
+          {reactionBurst}
           {reactionSticker}
         </View>
 
@@ -977,8 +978,9 @@ export function FeedPost({
           ) : post.audio_path ? (
             <FeedAudioNote audioPath={post.audio_path} />
           ) : null}
-          {reactionOverlay}
+          {reactionPicker}
         </View>
+        {reactionBurst}
         {reactionSticker}
       </View>
 

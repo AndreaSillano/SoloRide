@@ -24,6 +24,9 @@ export function ReactionBurst({
   onFinishedRef.current = onFinished;
   const emoji = reactionEmojiForScore(score);
   const size = burstSizeForScore(score);
+  // Large emoji glyphs overhang their em-box; pad so the spring/exit scale
+  // doesn't clip the top of the ±3 burst against overflow:hidden ancestors.
+  const box = Math.ceil(size * 1.32);
 
   useEffect(() => {
     opacity.setValue(0);
@@ -32,7 +35,7 @@ export function ReactionBurst({
     const animation = Animated.sequence([
       Animated.parallel([
         Animated.spring(scale, {
-          toValue: 1.15,
+          toValue: 1.12,
           friction: 5,
           tension: 120,
           useNativeDriver: true,
@@ -56,7 +59,7 @@ export function ReactionBurst({
           useNativeDriver: true,
         }),
         Animated.timing(scale, {
-          toValue: 1.35,
+          toValue: 1.22,
           duration: 320,
           useNativeDriver: true,
         }),
@@ -83,7 +86,18 @@ export function ReactionBurst({
         },
       ]}
     >
-      <Animated.Text style={[styles.emoji, { fontSize: size, lineHeight: size + 8 }]}>
+      <Animated.Text
+        allowFontScaling={false}
+        style={[
+          styles.emoji,
+          {
+            fontSize: size,
+            height: box,
+            lineHeight: box,
+            width: box,
+          },
+        ]}
+      >
         {emoji}
       </Animated.Text>
     </Animated.View>
@@ -95,9 +109,11 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
     zIndex: 6,
   },
   emoji: {
+    includeFontPadding: false,
     textAlign: 'center',
     textShadowColor: 'rgba(0,0,0,0.35)',
     textShadowOffset: { width: 0, height: 2 },
