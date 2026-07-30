@@ -18,6 +18,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { captureRef } from 'react-native-view-shot';
 
+import {
+  getPostCaptureFramePadding,
+  POST_CAPTURE_TAB_BAR_CLEARANCE,
+} from '@/features/posts/frame';
+import { getPostFrameSize } from '@/features/posts/utils';
 import { colors, radius, spacing } from '@/theme';
 
 const PALETTE = [
@@ -36,13 +41,10 @@ const PALETTE = [
   '#EC4899',
   '#06B6D4',
 ] as const;
-const MIN_FONT = 18;
-const MAX_FONT = 56;
+const MIN_FONT = 12;
+const MAX_FONT = 72;
 const DEFAULT_FONT = 32;
-const MIN_STROKE = 3;
-const MAX_STROKE = 14;
 const DEFAULT_STROKE = 5;
-const TAB_BAR_CLEARANCE = 56;
 
 type Tool = 'text' | 'pen';
 type Point = { x: number; y: number };
@@ -56,6 +58,7 @@ type HistoryEntry =
       text: string;
       offset: Point;
       fontSize: number;
+      rotation: number;
       color: (typeof PALETTE)[number];
     };
 
@@ -71,6 +74,24 @@ function pointsToPath(points: Point[]) {
   return points
     .map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x},${point.y}`)
     .join(' ');
+}
+
+function touchDistance(touches: readonly { pageX: number; pageY: number }[]) {
+  if (touches.length < 2) return 0;
+  const [a, b] = touches;
+  if (!a || !b) return 0;
+  return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
+}
+
+function touchAngle(touches: readonly { pageX: number; pageY: number }[]) {
+  if (touches.length < 2) return 0;
+  const [a, b] = touches;
+  if (!a || !b) return 0;
+  return Math.atan2(b.pageY - a.pageY, b.pageX - a.pageX);
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function isLightInk(color: string) {
@@ -94,9 +115,10 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
   const [overlayText, setOverlayText] = useState('');
   const [inkColor, setInkColor] = useState<(typeof PALETTE)[number]>(PALETTE[0]);
   const [fontSize, setFontSize] = useState(DEFAULT_FONT);
-  const [strokeWidth, setStrokeWidth] = useState(DEFAULT_STROKE);
+  const [rotation, setRotation] = useState(0);
   const [focused, setFocused] = useState(false);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [liveStroke, setLiveStroke] = useState<Stroke | null>(null);
@@ -107,15 +129,26 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
 
   const dragOrigin = useRef({ x: 0, y: 0 });
   const offsetRef = useRef(offset);
+  const fontSizeRef = useRef(fontSize);
+  const rotationRef = useRef(rotation);
+  const focusedRef = useRef(focused);
   const didDrag = useRef(false);
+  const pinching = useRef(false);
+  const pinchStart = useRef({
+    distance: 0,
+    fontSize: DEFAULT_FONT,
+    angle: 0,
+    rotation: 0,
+  });
   const inkColorRef = useRef(inkColor);
-  const strokeWidthRef = useRef(strokeWidth);
   const liveStrokeRef = useRef<Stroke | null>(null);
   const didPlaceText = useRef(false);
 
   offsetRef.current = offset;
+  fontSizeRef.current = fontSize;
+  rotationRef.current = rotation;
+  focusedRef.current = focused;
   inkColorRef.current = inkColor;
-  strokeWidthRef.current = strokeWidth;
   liveStrokeRef.current = liveStroke;
 
   const pushHistory = (entry: HistoryEntry) => {
@@ -131,7 +164,7 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
           const { locationX, locationY } = event.nativeEvent;
           const next: Stroke = {
             color: inkColorRef.current,
-            width: strokeWidthRef.current,
+            width: DEFAULT_STROKE,
             points: [{ x: locationX, y: locationY }],
           };
           liveStrokeRef.current = next;
@@ -168,14 +201,67 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
   const textDragGesture = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderTerminationRequest: () => false,
-        onPanResponderGrant: () => {
-          didDrag.current = false;
-          dragOrigin.current = offsetRef.current;
+        onStartShouldSetPanResponder: (event) =>
+          event.nativeEvent.touches.length >= 2 || !focusedRef.current,
+        onStartShouldSetPanResponderCapture: (event) =>
+          event.nativeEvent.touches.length >= 2,
+        onMoveShouldSetPanResponder: (event, gestureState) => {
+          if (event.nativeEvent.touches.length >= 2) return true;
+          if (focusedRef.current) return false;
+          return Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2;
         },
-        onPanResponderMove: (_event, gestureState) => {
+        onMoveShouldSetPanResponderCapture: (event) =>
+          event.nativeEvent.touches.length >= 2,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: (event) => {
+          didDrag.current = false;
+          pinching.current = false;
+          dragOrigin.current = offsetRef.current;
+          const touches = event.nativeEvent.touches;
+          if (touches.length >= 2) {
+            pinching.current = true;
+            pinchStart.current = {
+              distance: touchDistance(touches),
+              fontSize: fontSizeRef.current,
+              angle: touchAngle(touches),
+              rotation: rotationRef.current,
+            };
+            Keyboard.dismiss();
+            inputRef.current?.blur();
+            setFocused(false);
+          }
+        },
+        onPanResponderMove: (event, gestureState) => {
+          const touches = event.nativeEvent.touches;
+          if (touches.length >= 2) {
+            const dist = touchDistance(touches);
+            const angle = touchAngle(touches);
+            if (!pinching.current || pinchStart.current.distance <= 0) {
+              pinching.current = true;
+              pinchStart.current = {
+                distance: dist || 1,
+                fontSize: fontSizeRef.current,
+                angle,
+                rotation: rotationRef.current,
+              };
+              return;
+            }
+            const scale = dist / pinchStart.current.distance;
+            setFontSize(
+              Math.round(clamp(pinchStart.current.fontSize * scale, MIN_FONT, MAX_FONT)),
+            );
+            const deltaDeg =
+              ((angle - pinchStart.current.angle) * 180) / Math.PI;
+            setRotation(pinchStart.current.rotation + deltaDeg);
+            return;
+          }
+
+          if (pinching.current) {
+            pinching.current = false;
+            dragOrigin.current = offsetRef.current;
+            return;
+          }
+
           if (Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3) {
             didDrag.current = true;
           }
@@ -185,9 +271,14 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
           });
         },
         onPanResponderRelease: () => {
-          if (!didDrag.current) {
+          const wasPinching = pinching.current;
+          pinching.current = false;
+          if (!wasPinching && !didDrag.current && !focusedRef.current) {
             setFocused(true);
           }
+        },
+        onPanResponderTerminate: () => {
+          pinching.current = false;
         },
       }),
     [],
@@ -239,14 +330,6 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
     setTool('pen');
   };
 
-  const bumpSize = (delta: number) => {
-    if (tool === 'pen') {
-      setStrokeWidth((current) => Math.min(MAX_STROKE, Math.max(MIN_STROKE, current + delta)));
-      return;
-    }
-    setFontSize((current) => Math.min(MAX_FONT, Math.max(MIN_FONT, current + delta)));
-  };
-
   const clearActive = () => {
     if (tool === 'pen') {
       if (strokes.length === 0) return;
@@ -261,11 +344,13 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
       text: overlayText,
       offset,
       fontSize,
+      rotation,
       color: inkColor,
     });
     dismissKeyboard();
     setHasText(false);
     setOverlayText('');
+    setRotation(0);
   };
 
   const undo = () => {
@@ -288,12 +373,14 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
           dismissKeyboard();
           setHasText(false);
           setOverlayText('');
+          setRotation(0);
           break;
         case 'clearText':
           setHasText(true);
           setOverlayText(entry.text);
           setOffset(entry.offset);
           setFontSize(entry.fontSize);
+          setRotation(entry.rotation);
           setInkColor(entry.color);
           setTool('text');
           break;
@@ -338,8 +425,9 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
 
   const lightInk = isLightInk(inkColor);
   const allStrokes = liveStroke ? [...strokes, liveStroke] : strokes;
+  const framePadding = getPostCaptureFramePadding(insets);
   const topPad = Math.max(insets.top, spacing.sm);
-  const bottomPad = Math.max(insets.bottom, spacing.sm) + TAB_BAR_CLEARANCE;
+  const bottomPad = Math.max(insets.bottom, spacing.sm) + POST_CAPTURE_TAB_BAR_CLEARANCE;
   const textStyle = {
     color: inkColor,
     fontSize,
@@ -351,58 +439,92 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
   return (
     <View style={styles.root}>
       <View
-        {...(tool === 'pen' ? penGesture.panHandlers : {})}
-        collapsable={false}
-        onLayout={onCanvasLayout}
-        ref={canvas}
-        style={styles.canvas}
+        style={[
+          styles.canvasStage,
+          {
+            paddingBottom: framePadding.bottom,
+            paddingHorizontal: framePadding.horizontal,
+            paddingTop: framePadding.top,
+          },
+        ]}
       >
-        <Image resizeMode="cover" source={{ uri: imageUri }} style={StyleSheet.absoluteFill} />
-        <Svg height="100%" pointerEvents="none" style={StyleSheet.absoluteFill} width="100%">
-          {allStrokes.map((stroke, index) => (
-            <Path
-              key={`stroke-${index}`}
-              d={pointsToPath(stroke.points)}
-              fill="none"
-              stroke={stroke.color}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={stroke.width}
-            />
-          ))}
-        </Svg>
-        {hasText ? (
+        <View
+          onLayout={(event) => {
+            const { width, height } = event.nativeEvent.layout;
+            setFrameSize(getPostFrameSize(width, height));
+          }}
+          style={styles.frameSlot}
+        >
           <View
-            {...(tool === 'text' && !focused && !capturing ? textDragGesture.panHandlers : {})}
-            pointerEvents={tool === 'text' && !focused ? 'auto' : 'none'}
+            {...(tool === 'pen' ? penGesture.panHandlers : {})}
+            collapsable={false}
+            onLayout={onCanvasLayout}
+            ref={canvas}
             style={[
-              styles.textLayer,
-              { transform: [{ translateX: offset.x }, { translateY: offset.y }] },
+              styles.canvas,
+              frameSize.width > 0
+                ? { height: frameSize.height, width: frameSize.width }
+                : null,
             ]}
           >
-            {focused && !capturing ? (
-              <TextInput
-                autoCapitalize="sentences"
-                maxLength={120}
-                multiline
-                onBlur={() => setFocused(false)}
-                onChangeText={setOverlayText}
-                placeholder="Text"
-                placeholderTextColor={
-                  lightInk ? 'rgba(255,255,255,0.45)' : 'rgba(28,41,34,0.35)'
-                }
-                ref={inputRef}
-                selectionColor={colors.accent}
-                style={[styles.onImageInput, textStyle]}
-                value={overlayText}
+          <Image
+            resizeMode="cover"
+            source={{ uri: imageUri }}
+            style={StyleSheet.absoluteFill}
+          />
+          <Svg height="100%" pointerEvents="none" style={StyleSheet.absoluteFill} width="100%">
+            {allStrokes.map((stroke, index) => (
+              <Path
+                key={`stroke-${index}`}
+                d={pointsToPath(stroke.points)}
+                fill="none"
+                stroke={stroke.color}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={stroke.width}
               />
-            ) : (
-              <Text style={[styles.onImageInput, textStyle]}>
-                {overlayText.trim() || (capturing ? '' : 'Text')}
-              </Text>
-            )}
+            ))}
+          </Svg>
+          {hasText ? (
+            <View
+              {...(tool === 'text' && !capturing ? textDragGesture.panHandlers : {})}
+              pointerEvents={tool === 'text' ? 'auto' : 'none'}
+              style={[
+                styles.textLayer,
+                {
+                  transform: [
+                    { translateX: offset.x },
+                    { translateY: offset.y },
+                    { rotate: `${rotation}deg` },
+                  ],
+                },
+              ]}
+            >
+              {focused && !capturing ? (
+                <TextInput
+                  autoCapitalize="sentences"
+                  maxLength={120}
+                  multiline
+                  onBlur={() => setFocused(false)}
+                  onChangeText={setOverlayText}
+                  placeholder="Text"
+                  placeholderTextColor={
+                    lightInk ? 'rgba(255,255,255,0.45)' : 'rgba(28,41,34,0.35)'
+                  }
+                  ref={inputRef}
+                  selectionColor={colors.accent}
+                  style={[styles.onImageInput, textStyle]}
+                  value={overlayText}
+                />
+              ) : (
+                <Text style={[styles.onImageInput, textStyle]}>
+                  {overlayText.trim() || (capturing ? '' : 'Text')}
+                </Text>
+              )}
+            </View>
+          ) : null}
           </View>
-        ) : null}
+        </View>
       </View>
 
       {showDismissOverlay ? (
@@ -436,7 +558,7 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
         </Pressable>
       </View>
 
-      <View style={[styles.toolDock, { top: topPad + 62 }]}>
+      <View style={[styles.toolDock, { top: topPad + 62 + spacing.lg }]}>
         <Pressable
           accessibilityLabel="Text tool"
           accessibilityRole="button"
@@ -466,22 +588,6 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
             name={tool === 'pen' ? 'pencil' : 'pencil-outline'}
             size={18}
           />
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Smaller"
-          accessibilityRole="button"
-          onPress={() => bumpSize(tool === 'pen' ? -2 : -4)}
-          style={({ pressed }) => [styles.toolButton, pressed && styles.pressed]}
-        >
-          <Text style={[styles.toolGlyph, styles.toolGlyphSmall]}>A</Text>
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Larger"
-          accessibilityRole="button"
-          onPress={() => bumpSize(tool === 'pen' ? 2 : 4)}
-          style={({ pressed }) => [styles.toolButton, pressed && styles.pressed]}
-        >
-          <Text style={[styles.toolGlyph, styles.toolGlyphLarge]}>A</Text>
         </Pressable>
         <Pressable
           accessibilityLabel="Undo"
@@ -563,7 +669,19 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
 
 const styles = StyleSheet.create({
   root: { backgroundColor: '#000', flex: 1 },
-  canvas: { ...StyleSheet.absoluteFillObject },
+  canvasStage: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  frameSlot: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    width: '100%',
+  },
+  canvas: {
+    backgroundColor: '#111',
+    overflow: 'hidden',
+  },
   dismissOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 2,
@@ -599,7 +717,7 @@ const styles = StyleSheet.create({
   toolDock: {
     gap: spacing.sm,
     position: 'absolute',
-    right: spacing.md,
+    right: spacing.xl,
     zIndex: 3,
   },
   toolButton: {
@@ -632,9 +750,6 @@ const styles = StyleSheet.create({
   toolLabelActive: {
     color: colors.white,
   },
-  toolGlyph: { color: colors.white, fontWeight: '800' },
-  toolGlyphSmall: { fontSize: 13 },
-  toolGlyphLarge: { fontSize: 20 },
   textLayer: {
     alignSelf: 'center',
     left: spacing.md,

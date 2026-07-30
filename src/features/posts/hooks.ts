@@ -26,6 +26,7 @@ import {
   getReactions,
   getRideFeedPage,
   getSignedPostImage,
+  getSignedPostAudio,
   removeReaction,
   upsertReaction,
 } from './service';
@@ -122,6 +123,18 @@ export function useSignedPostImage(imagePath: string | null | undefined) {
     queryKey: ['post-image', imagePath ?? ''] as const,
     queryFn: () => getSignedPostImage(imagePath ?? ''),
     enabled: Boolean(imagePath && user?.id),
+    staleTime:
+      POST_IMAGE_URL_TTL_SECONDS * 1000 - POST_IMAGE_URL_EXPIRY_SAFETY_MS,
+    gcTime: POST_IMAGE_URL_TTL_SECONDS * 1000,
+  });
+}
+
+export function useSignedPostAudio(audioPath: string | null | undefined) {
+  const { user } = useCurrentUser();
+  return useQuery({
+    queryKey: ['post-audio', audioPath ?? ''] as const,
+    queryFn: () => getSignedPostAudio(audioPath ?? ''),
+    enabled: Boolean(audioPath && user?.id),
     staleTime:
       POST_IMAGE_URL_TTL_SECONDS * 1000 - POST_IMAGE_URL_EXPIRY_SAFETY_MS,
     gcTime: POST_IMAGE_URL_TTL_SECONDS * 1000,

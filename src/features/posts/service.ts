@@ -7,6 +7,7 @@ import {
   mapUploadError,
   PostDataError,
 } from './errors';
+import { preparePostAudio } from './audio';
 import { preparePostImage } from './image';
 import {
   commentSchema,
@@ -26,14 +27,16 @@ import {
   uuidSchema,
 } from './schemas';
 import {
+  buildPostAudioPath,
   buildPostImagePath,
   isValidReactionScore,
   POST_IMAGE_BUCKET,
   POST_IMAGE_URL_TTL_SECONDS,
+  POST_MEDIA_BUCKET,
 } from './utils';
 
 const POST_SELECT = `
-  id, ride_id, user_id, image_path, description, latitude, longitude,
+  id, ride_id, user_id, image_path, audio_path, description, latitude, longitude,
   location_name, scheduled_date, is_temporary, expires_at, created_at, updated_at,
   profile:profiles!posts_user_id_fkey(id, username, display_name, avatar_url),
   comments(count),
@@ -281,6 +284,36 @@ export async function getSignedPostImage(
   };
 }
 
+export async function getSignedPostAudio(
+  audioPath: string,
+  expiresInSeconds = POST_IMAGE_URL_TTL_SECONDS,
+): Promise<SignedPostImage> {
+  if (!audioPath || expiresInSeconds <= 0) {
+    throw new PostDataError('INVALID_INPUT', 'The voice note request is invalid.');
+  }
+
+  const requestedAt = Date.now();
+  const { data, error } = await supabase.storage
+    .from(POST_MEDIA_BUCKET)
+    .createSignedUrl(audioPath, expiresInSeconds);
+
+  if (error) {
+    if (String(error.message).toLowerCase().includes('network')) {
+      throw mapUploadError(error);
+    }
+    throw new PostDataError(
+      'STORAGE',
+      'The private voice note could not be opened.',
+      { cause: error },
+    );
+  }
+
+  return {
+    url: data.signedUrl,
+    expiresAt: requestedAt + expiresInSeconds * 1000,
+  };
+}
+
 export async function createPost(input: CreatePostInput): Promise<PostRecord[]> {
   const parsed = createPostInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -293,6 +326,9 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord[]> 
 
   const userId = await requireUserId();
   const imageBytes = await preparePostImage(parsed.data.imageUri);
+  const audioBytes = parsed.data.audioUri
+    ? await preparePostAudio(parsed.data.audioUri)
+    : null;
   const isTemporary = parsed.data.isTemporary;
   const prepared = parsed.data.rideIds.map((rideId) => {
     const postId = Crypto.randomUUID();
@@ -300,6 +336,7 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord[]> 
       rideId,
       postId,
       imagePath: buildPostImagePath(rideId, userId, postId),
+      audioPath: audioBytes ? buildPostAudioPath(rideId, userId, postId) : null,
     };
   });
 
@@ -316,6 +353,19 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord[]> 
         throw mapUploadError(uploadError);
       }
       uploadedPaths.push(entry.imagePath);
+
+      if (audioBytes && entry.audioPath) {
+        const { error: audioUploadError } = await supabase.storage
+          .from(POST_MEDIA_BUCKET)
+          .upload(entry.audioPath, audioBytes, {
+            contentType: 'audio/mp4',
+            upsert: false,
+          });
+        if (audioUploadError) {
+          throw mapUploadError(audioUploadError);
+        }
+        uploadedPaths.push(entry.audioPath);
+      }
     }
 
     // DB trigger overwrites expires_at for temps; required by check constraint.
@@ -331,6 +381,7 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord[]> 
           ride_id: entry.rideId,
           user_id: userId,
           image_path: entry.imagePath,
+          audio_path: entry.audioPath,
           description: parsed.data.description,
           latitude: parsed.data.latitude,
           longitude: parsed.data.longitude,
@@ -349,7 +400,7 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord[]> 
     return parseFeedPosts(inserted ?? []);
   } catch (error) {
     if (uploadedPaths.length) {
-      await supabase.storage.from(POST_IMAGE_BUCKET).remove(uploadedPaths);
+      await supabase.storage.from(POST_MEDIA_BUCKET).remove(uploadedPaths);
     }
     throw error;
   }
@@ -361,7 +412,7 @@ export async function deletePost(postId: string): Promise<void> {
 
   const { data, error: lookupError } = await supabase
     .from('posts')
-    .select('id, user_id, image_path')
+    .select('id, user_id, image_path, audio_path')
     .eq('id', validPostId)
     .eq('user_id', userId)
     .single();
@@ -370,27 +421,32 @@ export async function deletePost(postId: string): Promise<void> {
   }
 
   const imagePath = String(data.image_path);
+  const audioPath =
+    typeof data.audio_path === 'string' && data.audio_path.trim()
+      ? data.audio_path
+      : null;
+  const pathsToRemove = audioPath ? [imagePath, audioPath] : [imagePath];
 
-  // Remove the file first while the caller can still resolve it. storage.remove
+  // Remove files first while the caller can still resolve them. storage.remove
   // needs SELECT+DELETE; an empty result usually means RLS blocked the delete.
   const { data: removed, error: storageError } = await supabase.storage
-    .from(POST_IMAGE_BUCKET)
-    .remove([imagePath]);
+    .from(POST_MEDIA_BUCKET)
+    .remove(pathsToRemove);
   if (storageError) {
     throw new PostDataError(
       'STORAGE',
-      'The post image could not be removed, so the post was kept.',
+      'The post media could not be removed, so the post was kept.',
       { cause: storageError },
     );
   }
   if (!removed?.length) {
     const { error: stillExistsError } = await supabase.storage
-      .from(POST_IMAGE_BUCKET)
+      .from(POST_MEDIA_BUCKET)
       .createSignedUrl(imagePath, 60);
     if (!stillExistsError) {
       throw new PostDataError(
         'STORAGE',
-        'The post image could not be removed, so the post was kept.',
+        'The post media could not be removed, so the post was kept.',
       );
     }
   }
@@ -402,7 +458,7 @@ export async function deletePost(postId: string): Promise<void> {
     .eq('user_id', userId)
     .select('id');
   if (deleteError) {
-    throw mapDatabaseError(deleteError, 'The post image was removed, but its record remains.');
+    throw mapDatabaseError(deleteError, 'The post media was removed, but its record remains.');
   }
   if (!deleted?.length) {
     throw new PostDataError('NOT_FOUND', 'The post could not be deleted.');

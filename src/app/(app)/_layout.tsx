@@ -16,6 +16,7 @@ export default function AppLayout() {
       }}
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="publish" options={{ title: 'New photo' }} />
       <Stack.Screen name="your-rides" options={{ title: 'Your Rides' }} />
       <Stack.Screen name="create-ride" options={{ title: 'Create Ride' }} />
       <Stack.Screen name="join-ride" options={{ title: 'Join Ride' }} />

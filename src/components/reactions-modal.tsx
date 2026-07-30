@@ -1,10 +1,7 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import {
   ActivityIndicator,
   Modal,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,9 +9,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { formatProfileName, reactionScoreToSize, useReactions } from '@/features/posts';
+import {
+  formatProfileName,
+  reactionEmojiForScore,
+  reactionScoreToSize,
+  useReactions,
+} from '@/features/posts';
 import { colors, spacing } from '@/theme';
 
+import { SheetCloseButton } from './sheet-close-button';
 import { Avatar, Body } from './ui';
 
 function formatReactionTime(isoDate: string) {
@@ -39,6 +42,7 @@ export function ReactionsModal({
 
   return (
     <Modal
+      allowSwipeDismissal
       animationType="slide"
       onRequestClose={onClose}
       presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : undefined}
@@ -47,14 +51,7 @@ export function ReactionsModal({
       <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safeArea}>
         <View style={styles.header}>
           <Text style={styles.title}>Reactions</Text>
-          <Pressable
-            accessibilityLabel="Close reactions"
-            accessibilityRole="button"
-            hitSlop={10}
-            onPress={onClose}
-          >
-            <Ionicons color={colors.muted} name="close" size={24} />
-          </Pressable>
+          <SheetCloseButton accessibilityLabel="Close reactions" onPress={onClose} />
         </View>
 
         <ScrollView contentContainerStyle={styles.list} style={styles.flex}>
@@ -70,11 +67,14 @@ export function ReactionsModal({
                   <Text style={styles.author}>{formatProfileName(reaction.profile)}</Text>
                   <Text style={styles.time}>{formatReactionTime(reaction.created_at)}</Text>
                 </View>
-                <MaterialIcons
-                  color={colors.text}
-                  name={reaction.score > 0 ? 'thumb-up-off-alt' : 'thumb-down-off-alt'}
-                  size={reactionScoreToSize(reaction.score)}
-                />
+                <Text
+                  style={{
+                    fontSize: reactionScoreToSize(reaction.score),
+                    lineHeight: reactionScoreToSize(reaction.score) + 4,
+                  }}
+                >
+                  {reactionEmojiForScore(reaction.score)}
+                </Text>
               </View>
             ))
           ) : (
@@ -91,14 +91,19 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   header: {
     alignItems: 'center',
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  title: { color: colors.text, fontSize: 17, fontWeight: '800' },
+  title: {
+    color: colors.text,
+    flex: 1,
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    paddingRight: spacing.sm,
+  },
   list: { gap: spacing.md, padding: spacing.lg },
   spinner: { paddingTop: spacing.lg },
   row: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },

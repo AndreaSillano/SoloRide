@@ -1,12 +1,13 @@
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   PanResponder,
   StyleSheet,
+  Text,
   View,
   type View as ViewType,
 } from 'react-native';
 
+import { reactionEmojiForScore } from '@/features/posts';
 import { haptics } from '@/lib/haptics';
 import { colors, spacing } from '@/theme';
 
@@ -225,12 +226,9 @@ export function ScalePicker({
                     ]}
                   />
                 ) : (
-                  <MaterialIcons
-                    color={colors.white}
-                    name={score > 0 ? 'thumb-up-off-alt' : 'thumb-down-off-alt'}
-                    size={size}
-                    style={{ opacity }}
-                  />
+                  <Text style={[styles.emoji, { fontSize: size, lineHeight: size + 4, opacity }]}>
+                    {reactionEmojiForScore(score)}
+                  </Text>
                 )}
               </View>
             );
@@ -274,5 +272,8 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     height: 10,
     width: 10,
+  },
+  emoji: {
+    textAlign: 'center',
   },
 });

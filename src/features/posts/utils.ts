@@ -1,10 +1,70 @@
 import type { PostRecord } from './schemas';
 
 export const POST_IMAGE_BUCKET = 'ride-posts';
+/** Same private bucket as images; voice notes are stored as `.m4a`. */
+export const POST_MEDIA_BUCKET = POST_IMAGE_BUCKET;
 export const POST_IMAGE_MAX_LONG_EDGE = 1600;
 export const POST_IMAGE_JPEG_QUALITY = 0.9;
 export const POST_IMAGE_URL_TTL_SECONDS = 60 * 60;
 export const POST_IMAGE_URL_EXPIRY_SAFETY_MS = 60_000;
+/** Max voice-note length while recording on publish. */
+export const POST_AUDIO_MAX_DURATION_MS = 30_000;
+/** Post / camera frame aspect (width ÷ height). Portrait 3∶4. */
+export const POST_IMAGE_ASPECT_RATIO = 3 / 4;
+
+/**
+ * Fit the feed post frame into available space.
+ * Prefers full width (same as feed) when height allows; otherwise shrinks.
+ */
+export function getPostFrameSize(
+  availableWidth: number,
+  availableHeight: number,
+  aspectRatio = POST_IMAGE_ASPECT_RATIO,
+) {
+  if (availableWidth <= 0 || availableHeight <= 0 || aspectRatio <= 0) {
+    return { width: 0, height: 0 };
+  }
+
+  const heightFromWidth = availableWidth / aspectRatio;
+  if (heightFromWidth <= availableHeight) {
+    return { width: availableWidth, height: heightFromWidth };
+  }
+
+  return {
+    width: availableHeight * aspectRatio,
+    height: availableHeight,
+  };
+}
+
+/** Center crop rect that yields `aspectRatio` from an arbitrary image size. */
+export function getCenterCropRect(
+  width: number,
+  height: number,
+  aspectRatio = POST_IMAGE_ASPECT_RATIO,
+) {
+  if (width <= 0 || height <= 0 || aspectRatio <= 0) {
+    return { originX: 0, originY: 0, width: Math.max(0, width), height: Math.max(0, height) };
+  }
+
+  const imageAspect = width / height;
+  if (imageAspect > aspectRatio) {
+    const cropWidth = Math.round(height * aspectRatio);
+    return {
+      originX: Math.round((width - cropWidth) / 2),
+      originY: 0,
+      width: cropWidth,
+      height,
+    };
+  }
+
+  const cropHeight = Math.round(width / aspectRatio);
+  return {
+    originX: 0,
+    originY: Math.round((height - cropHeight) / 2),
+    width,
+    height: cropHeight,
+  };
+}
 
 /** Valid stored reaction scores: -3..-1 and +1..+3 (0 means cleared / no row). */
 export type ReactionScore = -3 | -2 | -1 | 1 | 2 | 3;
@@ -19,6 +79,24 @@ export function reactionScoreToSize(score: number) {
   if (magnitude >= 3) return 36;
   if (magnitude === 2) return 26;
   return 18;
+}
+
+/** Like / dislike emoji for a reaction score (0 has no emoji). */
+export function reactionEmojiForScore(score: number) {
+  if (score > 0) return '👍';
+  if (score < 0) return '👎';
+  return null;
+}
+
+/**
+ * Feed sticker font size from net reaction sum — three big tiers.
+ * Uses |sum| capped at 3 so a single strong vote and a pile of mild ones share bands.
+ */
+export function reactionSumToStickerSize(sum: number) {
+  const magnitude = Math.min(3, Math.max(1, Math.abs(sum)));
+  if (magnitude >= 3) return 124;
+  if (magnitude === 2) return 88;
+  return 56;
 }
 
 /** Last N reaction scores for the feed stack: newest first, capped; `hasMore` when truncated. */
@@ -68,6 +146,18 @@ export function getOwnReactionScore(
 
 export function buildPostImagePath(rideId: string, userId: string, postId: string) {
   return `${rideId}/${userId}/${postId}.jpg`;
+}
+
+export function buildPostAudioPath(rideId: string, userId: string, postId: string) {
+  return `${rideId}/${userId}/${postId}.m4a`;
+}
+
+/** Format seconds as m:ss for recorders and players. */
+export function formatAudioDuration(totalSeconds: number) {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const minutes = Math.floor(safe / 60);
+  const seconds = safe % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
 export function getCommentCount(post: Pick<PostRecord, 'comments'>) {

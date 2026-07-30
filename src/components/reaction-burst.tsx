@@ -1,8 +1,7 @@
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet } from 'react-native';
 
-import { colors } from '@/theme';
+import { reactionEmojiForScore } from '@/features/posts';
 
 function burstSizeForScore(score: number) {
   const magnitude = Math.abs(score);
@@ -11,7 +10,7 @@ function burstSizeForScore(score: number) {
   return 72;
 }
 
-/** Large centered thumb that pops in then dissolves — Instagram-style confirm. */
+/** Large centered emoji that pops in then dissolves — Instagram-style confirm. */
 export function ReactionBurst({
   score,
   onFinished,
@@ -23,6 +22,8 @@ export function ReactionBurst({
   const scale = useRef(new Animated.Value(0.35)).current;
   const onFinishedRef = useRef(onFinished);
   onFinishedRef.current = onFinished;
+  const emoji = reactionEmojiForScore(score);
+  const size = burstSizeForScore(score);
 
   useEffect(() => {
     opacity.setValue(0);
@@ -69,7 +70,7 @@ export function ReactionBurst({
     return () => animation.stop();
   }, [score, opacity, scale]);
 
-  if (score === 0) return null;
+  if (!emoji) return null;
 
   return (
     <Animated.View
@@ -82,12 +83,9 @@ export function ReactionBurst({
         },
       ]}
     >
-      <MaterialIcons
-        color={colors.white}
-        name={score > 0 ? 'thumb-up-off-alt' : 'thumb-down-off-alt'}
-        size={burstSizeForScore(score)}
-        style={styles.icon}
-      />
+      <Animated.Text style={[styles.emoji, { fontSize: size, lineHeight: size + 8 }]}>
+        {emoji}
+      </Animated.Text>
     </Animated.View>
   );
 }
@@ -99,7 +97,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 6,
   },
-  icon: {
+  emoji: {
+    textAlign: 'center',
     textShadowColor: 'rgba(0,0,0,0.35)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 8,

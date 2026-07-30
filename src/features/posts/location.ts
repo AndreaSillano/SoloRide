@@ -60,8 +60,13 @@ export async function searchLocations(query: string): Promise<LocationSuggestion
 
     const places = await Location.geocodeAsync(trimmed);
     const suggestions: LocationSuggestion[] = [];
+    const seen = new Set<string>();
 
     for (const place of places.slice(0, 5)) {
+      const key = `${place.latitude.toFixed(5)},${place.longitude.toFixed(5)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
       let locationName = trimmed;
       try {
         const [address] = await Location.reverseGeocodeAsync({
@@ -72,6 +77,7 @@ export async function searchLocations(query: string): Promise<LocationSuggestion
       } catch {
         // Fall back to the typed query when reverse geocoding fails.
       }
+
       suggestions.push({
         latitude: place.latitude,
         longitude: place.longitude,

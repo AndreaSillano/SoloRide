@@ -59,6 +59,7 @@ export type Post = {
   ride_id: string;
   user_id: string;
   image_path: string;
+  audio_path: string | null;
   description: string | null;
   latitude: number | null;
   longitude: number | null;

@@ -22,6 +22,7 @@
       "infoPlist": {
         "NSCameraUsageDescription": "SoloRide uses the camera to add photos to your rides.",
         "NSLocationWhenInUseUsageDescription": "SoloRide uses your location to optionally tag photos with where they were taken.",
+        "NSMicrophoneUsageDescription": "SoloRide uses the microphone to attach voice notes to your photos.",
         "NSPhotoLibraryUsageDescription": "SoloRide uses your photo library to add photos to your rides."
       },
       "bundleIdentifier": "com.anonymous.SoloRide"
@@ -79,7 +80,15 @@
         }
       ],
       "@react-native-community/datetimepicker",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "SoloRide uses the microphone to attach voice notes to your photos.",
+          "recordAudioAndroid": true
+        }
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true

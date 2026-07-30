@@ -1,9 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -13,6 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCurrentUser } from '@/auth/auth-context';
@@ -20,7 +20,11 @@ import { useComments, useCreateComment, useDeleteComment, formatProfileName } fr
 import { haptics } from '@/lib/haptics';
 import { colors, spacing } from '@/theme';
 
+import { SheetCloseButton } from './sheet-close-button';
 import { Avatar, Body } from './ui';
+
+/** Approx. single-line composer height so the list clears the sticky bar. */
+const COMPOSER_BAR_HEIGHT = spacing.sm + 40 + spacing.sm;
 
 function formatCommentTime(isoDate: string) {
   return new Date(isoDate).toLocaleString([], {
@@ -51,30 +55,7 @@ export function CommentsModal({
   const createComment = useCreateComment();
   const deleteComment = useDeleteComment();
   const [content, setContent] = useState('');
-  // KeyboardAvoidingView is unreliable inside iOS pageSheet modals, so pad the
-  // composer from the keyboard's reported height instead.
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-  useEffect(() => {
-    if (!visible) {
-      setKeyboardHeight(0);
-      return;
-    }
-
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSub = Keyboard.addListener(showEvent, (event) => {
-      setKeyboardHeight(event.endCoordinates.height);
-    });
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      setKeyboardHeight(0);
-    });
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, [visible]);
+  const footerPad = Math.max(insets.bottom, spacing.sm);
 
   const submit = async () => {
     const text = content.trim();
@@ -112,6 +93,7 @@ export function CommentsModal({
 
   return (
     <Modal
+      allowSwipeDismissal
       animationType="slide"
       onRequestClose={onClose}
       presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : undefined}
@@ -120,94 +102,85 @@ export function CommentsModal({
       <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
         <View style={styles.header}>
           <Text style={styles.title}>Comments</Text>
-          <Pressable
-            accessibilityLabel="Close comments"
-            accessibilityRole="button"
-            hitSlop={10}
-            onPress={onClose}
-          >
-            <Ionicons color={colors.muted} name="close" size={24} />
-          </Pressable>
+          <SheetCloseButton accessibilityLabel="Close comments" onPress={onClose} />
         </View>
 
-        <ScrollView
-          contentContainerStyle={styles.list}
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-          keyboardShouldPersistTaps="handled"
-          style={styles.flex}
-        >
-          {comments.isPending ? (
-            <ActivityIndicator color={colors.primary} style={styles.spinner} />
-          ) : comments.isError ? (
-            <Body muted>Comments could not load.</Body>
-          ) : comments.data?.length ? (
-            comments.data.map((comment) => (
-              <View key={comment.id} style={styles.comment}>
-                <Avatar profile={comment.profile} size={30} />
-                <View style={styles.commentText}>
-                  <View style={styles.commentHeader}>
-                    <Text style={styles.author}>{formatProfileName(comment.profile)}</Text>
-                    <Text style={styles.commentTime}>
-                      {formatCommentTime(comment.created_at)}
-                    </Text>
-                  </View>
-                  <Text style={styles.commentBody}>{comment.content}</Text>
-                </View>
-                {comment.user_id === user?.id ? (
-                  <Pressable
-                    accessibilityLabel="Delete comment"
-                    accessibilityRole="button"
-                    hitSlop={8}
-                    onPress={() => confirmDelete(comment.id)}
-                    style={styles.deleteButton}
-                  >
-                    <Ionicons color={colors.danger} name="trash-outline" size={18} />
-                  </Pressable>
-                ) : null}
-              </View>
-            ))
-          ) : (
-            <Body muted>No comments yet. Keep it kind and simple.</Body>
-          )}
-        </ScrollView>
-
-        <View
-          style={[
-            styles.inputRow,
-            {
-              paddingBottom:
-                keyboardHeight > 0 ? spacing.sm : Math.max(insets.bottom, spacing.sm),
-              marginBottom: keyboardHeight,
-            },
-          ]}
-        >
-          <TextInput
-            maxLength={2000}
-            multiline
-            onChangeText={setContent}
-            placeholder="Add a comment…"
-            placeholderTextColor={colors.muted}
-            style={styles.input}
-            value={content}
-          />
-          <Pressable
-            accessibilityLabel="Post comment"
-            accessibilityRole="button"
-            disabled={!content.trim() || createComment.isPending}
-            hitSlop={8}
-            onPress={() => void submit()}
-            style={styles.sendButton}
+        <View style={styles.flex}>
+          <ScrollView
+            contentContainerStyle={[
+              styles.list,
+              { paddingBottom: COMPOSER_BAR_HEIGHT + footerPad + spacing.md },
+            ]}
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            keyboardShouldPersistTaps="handled"
+            style={styles.flex}
           >
-            {createComment.isPending ? (
-              <ActivityIndicator color={colors.primary} size="small" />
+            {comments.isPending ? (
+              <ActivityIndicator color={colors.primary} style={styles.spinner} />
+            ) : comments.isError ? (
+              <Body muted>Comments could not load.</Body>
+            ) : comments.data?.length ? (
+              comments.data.map((comment) => (
+                <View key={comment.id} style={styles.comment}>
+                  <Avatar profile={comment.profile} size={30} />
+                  <View style={styles.commentText}>
+                    <View style={styles.commentHeader}>
+                      <Text style={styles.author}>{formatProfileName(comment.profile)}</Text>
+                      <Text style={styles.commentTime}>
+                        {formatCommentTime(comment.created_at)}
+                      </Text>
+                    </View>
+                    <Text style={styles.commentBody}>{comment.content}</Text>
+                  </View>
+                  {comment.user_id === user?.id ? (
+                    <Pressable
+                      accessibilityLabel="Delete comment"
+                      accessibilityRole="button"
+                      hitSlop={8}
+                      onPress={() => confirmDelete(comment.id)}
+                      style={styles.deleteButton}
+                    >
+                      <Ionicons color={colors.danger} name="trash-outline" size={18} />
+                    </Pressable>
+                  ) : null}
+                </View>
+              ))
             ) : (
-              <Ionicons
-                color={content.trim() ? colors.primary : colors.muted}
-                name="send"
-                size={20}
-              />
+              <Body muted>No comments yet. Keep it kind and simple.</Body>
             )}
-          </Pressable>
+          </ScrollView>
+
+          <KeyboardStickyView offset={{ closed: 0, opened: 0 }} style={styles.composerSticky}>
+            <View style={[styles.inputRow, { paddingBottom: footerPad }]}>
+              <TextInput
+                maxLength={2000}
+                multiline
+                onChangeText={setContent}
+                placeholder="Add a comment…"
+                placeholderTextColor={colors.muted}
+                style={styles.input}
+                value={content}
+              />
+              <Pressable
+                accessibilityLabel="Post comment"
+                accessibilityRole="button"
+                disabled={!content.trim() || createComment.isPending}
+                hitSlop={8}
+                onPress={() => void submit()}
+                style={styles.sendButton}
+              >
+                {createComment.isPending ? (
+                  <ActivityIndicator color={colors.primary} size="small" />
+                ) : (
+                  <Ionicons
+                    color={content.trim() ? colors.primary : colors.muted}
+                    name="send"
+                    size={20}
+                  />
+                )}
+              </Pressable>
+            </View>
+          </KeyboardStickyView>
         </View>
       </SafeAreaView>
     </Modal>
@@ -219,14 +192,19 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   header: {
     alignItems: 'center',
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  title: { color: colors.text, fontSize: 17, fontWeight: '800' },
+  title: {
+    color: colors.text,
+    flex: 1,
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    paddingRight: spacing.sm,
+  },
   list: { gap: spacing.md, padding: spacing.lg },
   spinner: { paddingTop: spacing.lg },
   comment: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm },
@@ -241,8 +219,15 @@ const styles = StyleSheet.create({
   commentTime: { color: colors.muted, fontSize: 12 },
   commentBody: { color: colors.textSoft, fontSize: 14, lineHeight: 20 },
   deleteButton: { marginTop: 2, padding: spacing.xxs },
+  composerSticky: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+  },
   inputRow: {
     alignItems: 'flex-end',
+    backgroundColor: colors.surface,
     borderTopColor: colors.border,
     borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',

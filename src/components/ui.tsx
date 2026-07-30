@@ -1,6 +1,5 @@
 import { useHeaderHeight } from '@react-navigation/elements';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import type { PropsWithChildren, ReactElement, ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -32,8 +31,9 @@ import {
   formatProfileName,
   getReactionCount,
   getReactionScoreSum,
-  // getReactionSummary,
-  // reactionScoreToSize,
+  reactionEmojiForScore,
+  reactionSumToStickerSize,
+  POST_IMAGE_ASPECT_RATIO,
   useSignedPostImage,
   type PostRecord,
 } from '@/features/posts';
@@ -41,6 +41,7 @@ import { haptics } from '@/lib/haptics';
 import { colors, radius, shadows, spacing } from '@/theme';
 
 import { ReactionBurst } from './reaction-burst';
+import { FeedAudioNote } from './feed-audio-note';
 import {
   clampReactionScore,
   reactionScoreFromSwipe,
@@ -498,7 +499,7 @@ export function Avatar({ profile, size = 34 }: { profile?: AvatarProfile; size?:
 
 export function PostImage({
   post,
-  aspectRatio = 1,
+  aspectRatio = POST_IMAGE_ASPECT_RATIO,
   style,
 }: {
   post: PostRecord;
@@ -526,7 +527,7 @@ export function PostImage({
   return (
     <Image
       accessibilityLabel={`Photo by ${author}`}
-      resizeMode="cover"
+      resizeMode="contain"
       source={{ uri: image.data.url }}
       style={[styles.photo, { aspectRatio }, style]}
     />
@@ -589,8 +590,6 @@ export function FeedPost({
   const commentCount = getCommentCount(post);
   const reactionCount = getReactionCount(post);
   const reactionSum = getReactionScoreSum(post);
-  // Reaction stack (temporarily hidden):
-  // const { scores: reactionSummary, hasMore: hasMoreReactions } = getReactionSummary(post);
   const remaining = formatRemainingTime(post.expires_at);
   const lastTapAt = useRef(0);
   const singleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -762,20 +761,51 @@ export function FeedPost({
     </>
   );
 
-  // Reaction stack (temporarily hidden):
-  // const summaryScores =
-  //   reactionSummary.length > 0
-  //     ? reactionSummary
-  //     : ownReactionScore != null
-  //       ? [ownReactionScore]
-  //       : [];
-
   const commentLabel =
     commentCount === 0
       ? 'Add a comment'
       : commentCount === 1
         ? 'View 1 comment'
         : `View all ${commentCount} comments`;
+
+  const reactionStickerEmoji =
+    reactionCount > 0 ? reactionEmojiForScore(reactionSum <= -1 ? -1 : 1) : null;
+  const reactionStickerSize = reactionSumToStickerSize(reactionSum === 0 ? 1 : reactionSum);
+
+  const reactionSticker =
+    reactionStickerEmoji && onPressReactions ? (
+      <Pressable
+        accessibilityLabel={
+          reactionCount === 1
+            ? 'View 1 reaction'
+            : `View all ${reactionCount} reactions`
+        }
+        accessibilityRole="button"
+        hitSlop={8}
+        onPress={onPressReactions}
+        style={({ pressed }) => [
+          styles.feedReactionSticker,
+          reactionSum <= -1
+            ? styles.feedReactionStickerDislike
+            : styles.feedReactionStickerLike,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Text
+          style={[
+            styles.feedReactionStickerEmoji,
+            {
+              fontSize: reactionStickerSize,
+              height: reactionStickerSize + 16,
+              lineHeight: reactionStickerSize + 16,
+              width: reactionStickerSize + 16,
+            },
+          ]}
+        >
+          {reactionStickerEmoji}
+        </Text>
+      </Pressable>
+    ) : null;
 
   const actionsRow = (
     <View style={styles.feedActions}>
@@ -801,130 +831,64 @@ export function FeedPost({
           {commentLabel}
         </Text>
       </Pressable>
-
-      <View style={styles.feedActionsSpacer} />
-
-      <Pressable
-        accessibilityLabel={
-          reactionCount === 0
-            ? 'No reactions yet'
-            : reactionCount === 1
-              ? 'View 1 reaction'
-              : `View all ${reactionCount} reactions`
-        }
-        accessibilityRole="button"
-        hitSlop={10}
-        onPress={onPressReactions}
-        style={({ pressed }) => pressed && styles.pressed}
-      >
-        <MaterialIcons
-          color={reactionCount > 0 ? colors.text : colors.muted}
-          name={reactionSum <= -1 ? 'thumb-down-off-alt' : 'thumb-up-off-alt'}
-          size={24}
-        />
-      </Pressable>
-
-      {/* Reaction stack — temporarily hidden; single thumb opens the reactions modal.
-      <Pressable
-        accessibilityLabel={
-          reactionCount === 0
-            ? 'No reactions yet'
-            : reactionCount === 1
-              ? 'View 1 reaction'
-              : `View all ${reactionCount} reactions`
-        }
-        accessibilityRole="button"
-        hitSlop={10}
-        onPress={onPressReactions}
-        style={({ pressed }) => [styles.feedReactions, pressed && styles.pressed]}
-      >
-        {summaryScores.length ? (
-          <View style={styles.feedReactionStack}>
-            {summaryScores.map((score, index) => {
-              const size = reactionScoreToSize(score);
-              const stackCount = summaryScores.length;
-              const opacity =
-                stackCount <= 1 ? 1 : 1 - (0.5 * index) / (stackCount - 1);
-              return (
-                <View
-                  key={`${score}-${index}`}
-                  style={[
-                    styles.feedReactionIconWrap,
-                    index > 0 ? styles.feedReactionOverlap : null,
-                    { opacity, zIndex: stackCount - index },
-                  ]}
-                >
-                  <MaterialIcons
-                    color={colors.text}
-                    name={score > 0 ? 'thumb-up-off-alt' : 'thumb-down-off-alt'}
-                    size={size}
-                  />
-                </View>
-              );
-            })}
-            {hasMoreReactions ? (
-              <Text
-                style={[
-                  styles.feedReactionMoreText,
-                  styles.feedReactionOverlap,
-                  { opacity: 0.4, zIndex: 0 },
-                ]}
-              >
-                +
-              </Text>
-            ) : null}
-          </View>
-        ) : (
-          <MaterialIcons color={colors.muted} name="thumb-up-off-alt" size={24} />
-        )}
-      </Pressable>
-      */}
     </View>
   );
 
   if (post.is_temporary) {
     return (
       <View style={styles.feedItemTemporary}>
-        <View style={styles.tempPhotoWrap} {...photoPanResponder.panHandlers}>
-          <View
-            accessibilityHint="Double-tap or long-press to react"
-            accessibilityRole="imagebutton"
-          >
-            <PostImage aspectRatio={3 / 4} post={post} style={styles.tempPhoto} />
-          </View>
-          <View style={styles.tempOverlay} pointerEvents="box-none">
-            <Avatar profile={post.profile} size={34} />
-            <View style={styles.feedHeaderText}>
-              <Text style={styles.tempAuthor}>{author}</Text>
-              {post.location_name ? (
-                <Text style={styles.tempMeta} numberOfLines={1}>
-                  ⌖ {post.location_name}
-                </Text>
+        <View
+          style={styles.feedPhotoBlock}
+        >
+          <View style={styles.tempPhotoWrap} {...photoPanResponder.panHandlers}>
+            <View
+              accessibilityHint="Double-tap or long-press to react"
+              accessibilityRole="imagebutton"
+            >
+              <PostImage aspectRatio={POST_IMAGE_ASPECT_RATIO} post={post} style={styles.tempPhoto} />
+            </View>
+            <View style={styles.tempOverlay} pointerEvents="box-none">
+              <Avatar profile={post.profile} size={34} />
+              <View style={styles.feedHeaderText}>
+                <Text style={styles.tempAuthor}>{author}</Text>
+                {post.location_name ? (
+                  <Text style={styles.tempMeta} numberOfLines={1}>
+                    ⌖ {post.location_name}
+                  </Text>
+                ) : null}
+              </View>
+              {isOwnPost && onDelete ? (
+                <Pressable
+                  accessibilityLabel="Delete photo"
+                  accessibilityRole="button"
+                  disabled={deleting}
+                  hitSlop={10}
+                  onPress={onDelete}
+                  style={({ pressed }) => [styles.feedDelete, pressed && styles.pressed]}
+                >
+                  {deleting ? (
+                    <ActivityIndicator color={colors.white} size="small" />
+                  ) : (
+                    <Ionicons color={colors.white} name="trash-outline" size={18} />
+                  )}
+                </Pressable>
               ) : null}
             </View>
-            {isOwnPost && onDelete ? (
-              <Pressable
-                accessibilityLabel="Delete photo"
-                accessibilityRole="button"
-                disabled={deleting}
-                hitSlop={10}
-                onPress={onDelete}
-                style={({ pressed }) => [styles.feedDelete, pressed && styles.pressed]}
+            {remaining ? (
+              <View
+                style={[
+                  styles.tempTimerBadge,
+                  post.audio_path ? styles.tempTimerBadgeAboveAudio : null,
+                ]}
+                pointerEvents="none"
               >
-                {deleting ? (
-                  <ActivityIndicator color={colors.white} size="small" />
-                ) : (
-                  <Ionicons color={colors.white} name="trash-outline" size={18} />
-                )}
-              </Pressable>
+                <Text style={styles.tempTimerText}>{remaining}</Text>
+              </View>
             ) : null}
+            {post.audio_path ? <FeedAudioNote audioPath={post.audio_path} /> : null}
+            {reactionOverlay}
           </View>
-          {remaining ? (
-            <View style={styles.tempTimerBadge} pointerEvents="none">
-              <Text style={styles.tempTimerText}>{remaining}</Text>
-            </View>
-          ) : null}
-          {reactionOverlay}
+          {reactionSticker}
         </View>
 
         {actionsRow}
@@ -970,14 +934,20 @@ export function FeedPost({
         ) : null}
       </View>
 
-      <View style={styles.feedImageWrap} {...photoPanResponder.panHandlers}>
-        <View
-          accessibilityHint="Double-tap or long-press to react"
-          accessibilityRole="imagebutton"
-        >
-          <PostImage aspectRatio={3 / 4} post={post} style={styles.feedImage} />
+      <View
+        style={styles.feedPhotoBlock}
+      >
+        <View style={styles.feedImageWrap} {...photoPanResponder.panHandlers}>
+          <View
+            accessibilityHint="Double-tap or long-press to react"
+            accessibilityRole="imagebutton"
+          >
+            <PostImage aspectRatio={POST_IMAGE_ASPECT_RATIO} post={post} style={styles.feedImage} />
+          </View>
+          {post.audio_path ? <FeedAudioNote audioPath={post.audio_path} /> : null}
+          {reactionOverlay}
         </View>
-        {reactionOverlay}
+        {reactionSticker}
       </View>
 
       {actionsRow}
@@ -1093,7 +1063,7 @@ const styles = StyleSheet.create({
   skeletonAuthor: { borderRadius: radius.pill, height: 12, width: 110 },
   skeletonMeta: { borderRadius: radius.pill, height: 10, marginTop: 4, width: 72 },
   skeletonTime: { borderRadius: radius.pill, height: 10, width: 28 },
-  skeletonImage: { aspectRatio: 3 / 4, borderRadius: 0, width: '100%' },
+  skeletonImage: { aspectRatio: POST_IMAGE_ASPECT_RATIO, borderRadius: 0, width: '100%' },
   skeletonAction: { borderRadius: radius.pill, height: 22, width: 22 },
   skeletonCaption: {
     borderRadius: radius.pill,
@@ -1150,7 +1120,13 @@ const styles = StyleSheet.create({
   feedLocation: { color: colors.muted, fontSize: 12 },
   feedTime: { color: colors.muted, fontSize: 12 },
   feedDelete: { paddingLeft: spacing.xs },
-  feedImage: { aspectRatio: 3 / 4 },
+  feedImage: { aspectRatio: POST_IMAGE_ASPECT_RATIO },
+  feedPhotoBlock: {
+    overflow: 'visible',
+    position: 'relative',
+    width: '100%',
+    zIndex: 2,
+  },
   feedImageWrap: {
     overflow: 'hidden',
     position: 'relative',
@@ -1162,7 +1138,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   tempPhoto: {
-    aspectRatio: 3 / 4,
+    aspectRatio: POST_IMAGE_ASPECT_RATIO,
     width: '100%',
   },
   tempOverlay: {
@@ -1183,10 +1159,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(12, 18, 15, 0.55)',
     borderRadius: radius.pill,
     bottom: spacing.sm,
+    left: spacing.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xxs,
     position: 'absolute',
-    right: spacing.sm,
+  },
+  tempTimerBadgeAboveAudio: {
+    bottom: spacing.sm + 52,
   },
   tempTimerText: {
     color: colors.white,
@@ -1201,38 +1180,36 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xs,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
+    zIndex: 1,
   },
-  feedActionsSpacer: { flex: 1 },
   feedCommentAction: {
     alignItems: 'center',
     flexDirection: 'row',
     flexShrink: 1,
     gap: spacing.xs,
-    maxWidth: '78%',
+    maxWidth: '90%',
   },
-  feedReactions: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.xs,
+  feedReactionSticker: {
+    bottom: -28,
+    overflow: 'visible',
+    position: 'absolute',
+    right: 0,
+    zIndex: 4,
   },
-  feedReactionStack: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
+  feedReactionStickerLike: {
+    bottom: -36,
+    transform: [{ rotate: '14deg' }],
   },
-  feedReactionOverlap: {
-    marginLeft: -0,
+  feedReactionStickerDislike: {
+    bottom: -60,
+    transform: [{ rotate: '-14deg' }],
   },
-  feedReactionIconWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 28,
-    minWidth: 18,
-  },
-  feedReactionMoreText: {
-    color: colors.muted,
-    fontSize: 20,
-    fontWeight: '800',
-    lineHeight: 26,
+  feedReactionStickerEmoji: {
+    overflow: 'visible',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.28)',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 6,
   },
   feedCaption: {
     color: colors.textSoft,

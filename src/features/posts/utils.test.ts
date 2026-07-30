@@ -6,14 +6,18 @@ import {
   upsertReactionInputSchema,
 } from './schemas';
 import {
+  buildPostAudioPath,
   buildPostImagePath,
   formatLocationLabel,
   getOwnReactionScore,
   getReactionCount,
   getReactionSummary,
   getResizeDimensions,
+  getCenterCropRect,
+  getPostFrameSize,
   isValidReactionScore,
   reactionScoreToSize,
+  reactionSumToStickerSize,
 } from './utils';
 
 const rideId = '11111111-1111-4111-8111-111111111111';
@@ -27,12 +31,45 @@ describe('post data utilities', () => {
     );
   });
 
+  it('builds the private audio path required by the backend', () => {
+    expect(buildPostAudioPath(rideId, userId, postId)).toBe(
+      `${rideId}/${userId}/${postId}.m4a`,
+    );
+  });
+
   it('only downsizes the long edge and preserves aspect ratio', () => {
     expect(getResizeDimensions(2400, 1200)).toEqual({
       width: 1600,
       height: null,
     });
     expect(getResizeDimensions(800, 1200)).toBeNull();
+  });
+
+  it('center-crops to the post 3:4 frame', () => {
+    expect(getCenterCropRect(1200, 1200)).toEqual({
+      originX: 150,
+      originY: 0,
+      width: 900,
+      height: 1200,
+    });
+    expect(getCenterCropRect(900, 1600)).toEqual({
+      originX: 0,
+      originY: 200,
+      width: 900,
+      height: 1200,
+    });
+    expect(getCenterCropRect(900, 1200)).toEqual({
+      originX: 0,
+      originY: 0,
+      width: 900,
+      height: 1200,
+    });
+  });
+
+  it('fits the post frame preferring full feed width', () => {
+    expect(getPostFrameSize(390, 600)).toEqual({ width: 390, height: 520 });
+    expect(getPostFrameSize(390, 400)).toEqual({ width: 300, height: 400 });
+    expect(getPostFrameSize(0, 400)).toEqual({ width: 0, height: 0 });
   });
 
   it('formats a useful reverse-geocoded label', () => {
@@ -233,6 +270,9 @@ describe('post data utilities', () => {
     expect(isValidReactionScore(4)).toBe(false);
     expect(reactionScoreToSize(1)).toBe(18);
     expect(reactionScoreToSize(-3)).toBe(36);
+    expect(reactionSumToStickerSize(1)).toBe(56);
+    expect(reactionSumToStickerSize(-2)).toBe(88);
+    expect(reactionSumToStickerSize(5)).toBe(112);
   });
 
   it('validates reaction upsert input', () => {
