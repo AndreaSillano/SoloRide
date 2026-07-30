@@ -59,11 +59,21 @@ export function PublishAudioFooter({
   const willCancelRef = useRef(false);
   const pendingReplaceRef = useRef(false);
   const finishingRef = useRef(false);
+  const startingRef = useRef(false);
+  /** Finger still down — start is async, so pressOut can race prepare/record. */
+  const holdingRef = useRef(false);
+  /** Mirrors isRecording synchronously for press handlers. */
+  const isRecordingRef = useRef(false);
   const autoStoppedRef = useRef(false);
 
   const resetCancel = () => {
     willCancelRef.current = false;
     setWillCancel(false);
+  };
+
+  const setRecordingActive = (active: boolean) => {
+    isRecordingRef.current = active;
+    setIsRecording(active);
   };
 
   const finishRecording = useCallback(
@@ -80,7 +90,7 @@ export function PublishAudioFooter({
         if (recorder.isRecording) {
           await recorder.stop();
         }
-        setIsRecording(false);
+        setRecordingActive(false);
         resetCancel();
 
         if (cancelled || durationMs < MIN_SAVE_MS) {
@@ -96,7 +106,7 @@ export function PublishAudioFooter({
         onAudioChange(uri, durationMs);
         haptics.success();
       } catch {
-        setIsRecording(false);
+        setRecordingActive(false);
         resetCancel();
         haptics.error();
       } finally {
@@ -107,6 +117,14 @@ export function PublishAudioFooter({
   );
 
   const beginRecording = useCallback(async () => {
+    if (
+      startingRef.current ||
+      finishingRef.current ||
+      isRecordingRef.current
+    ) {
+      return;
+    }
+    startingRef.current = true;
     try {
       const permission = await AudioModule.requestRecordingPermissionsAsync();
       if (!permission.granted) {
@@ -116,21 +134,35 @@ export function PublishAudioFooter({
         );
         return;
       }
+      // Quick tap: finger already up before native session is ready.
+      if (!holdingRef.current) return;
+
       await setAudioModeAsync({
         playsInSilentMode: true,
         allowsRecording: true,
       });
+      if (!holdingRef.current) return;
+
       await recorder.prepareToRecordAsync();
+      if (!holdingRef.current) return;
+
       recorder.record();
       autoStoppedRef.current = false;
-      setIsRecording(true);
+      setRecordingActive(true);
       resetCancel();
+
+      // PressOut raced past prepare — discard so the bar doesn't stick open.
+      if (!holdingRef.current) {
+        await finishRecording(true);
+      }
     } catch {
-      setIsRecording(false);
+      setRecordingActive(false);
       haptics.error();
       Alert.alert('Recording failed', 'Could not start the voice note. Try again.');
+    } finally {
+      startingRef.current = false;
     }
-  }, [recorder]);
+  }, [finishRecording, recorder]);
 
   useEffect(() => {
     if (
@@ -168,14 +200,17 @@ export function PublishAudioFooter({
       pendingReplaceRef.current = true;
       return;
     }
+    // Already armed or recording — wait for pressOut to stop.
+    if (isRecordingRef.current || startingRef.current) return;
     pendingReplaceRef.current = false;
+    holdingRef.current = true;
     startPageX.current = event.nativeEvent.pageX;
     haptics.medium();
     void beginRecording();
   };
 
   const onMicTouchMove = (event: GestureResponderEvent) => {
-    if (!isRecording) return;
+    if (!isRecordingRef.current) return;
     const dx = event.nativeEvent.pageX - startPageX.current;
     const cancel = dx < -CANCEL_SLIDE_PX;
     if (cancel !== willCancelRef.current) {
@@ -187,12 +222,14 @@ export function PublishAudioFooter({
   };
 
   const onMicPressOut = () => {
+    holdingRef.current = false;
     if (pendingReplaceRef.current) {
       pendingReplaceRef.current = false;
       confirmReplaceThenRecord();
       return;
     }
-    if (!isRecording) return;
+    // Start still in flight — beginRecording will abort when it sees !holding.
+    if (!isRecordingRef.current) return;
     void finishRecording(willCancelRef.current);
   };
 
