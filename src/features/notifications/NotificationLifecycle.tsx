@@ -68,13 +68,13 @@ function invalidateQueriesForNotification(queryClient: QueryClient, data: unknow
 
   if (isSocialNotificationData(data)) {
     void queryClient.invalidateQueries({ queryKey: queryKeys.post(data.postId) });
-    if (data.kind === 'social_comment') {
+    if (data.kind === 'social_comment' || data.kind === 'social_mention') {
       void queryClient.invalidateQueries({ queryKey: queryKeys.comments(data.postId) });
     }
   }
 }
 
-function openHome(rideId?: string) {
+function openHome(rideId?: string, openCommentsPostId?: string) {
   try {
     if (rideId) {
       // notificationOpenId forces Home to re-apply selectRide even when the
@@ -84,6 +84,7 @@ function openHome(rideId?: string) {
         params: {
           selectRideId: rideId,
           notificationOpenId: String(Date.now()),
+          ...(openCommentsPostId ? { openCommentsPostId } : {}),
         },
       });
       return;
@@ -102,7 +103,13 @@ function openHome(rideId?: string) {
 /** Open the matching Ride when possible; otherwise land on home. */
 function openFromNotificationData(queryClient: QueryClient, data: unknown) {
   invalidateQueriesForNotification(queryClient, data);
-  openHome(rideIdFromNotificationData(data));
+  const rideId = rideIdFromNotificationData(data);
+  const openCommentsPostId =
+    isSocialNotificationData(data) &&
+    (data.kind === 'social_comment' || data.kind === 'social_mention')
+      ? data.postId
+      : undefined;
+  openHome(rideId, openCommentsPostId);
 }
 
 async function loadNotificationPlan(userId: string) {

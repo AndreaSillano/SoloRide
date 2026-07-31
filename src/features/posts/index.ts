@@ -5,6 +5,7 @@ export * from './hooks';
 export { cropImageToPostAspect } from './image';
 export { deleteLocalMediaFile, deleteLocalMediaFiles } from './local-media';
 export * from './location';
+export * from './mentions';
 export * from './schemas';
 export * from './service';
 export { generatePostVideoThumbnail } from './video';

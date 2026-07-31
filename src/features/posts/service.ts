@@ -636,15 +636,25 @@ export async function createComment(
     );
   }
 
-  const userId = await requireUserId();
+  await requireUserId();
+  const mentionedUserIds = [...new Set(parsed.data.mentionedUserIds ?? [])];
+  const { data: commentId, error: createError } = await supabase.rpc(
+    'create_comment_with_mentions',
+    {
+      p_post_id: parsed.data.postId,
+      p_content: parsed.data.content,
+      p_mentioned_user_ids: mentionedUserIds,
+    },
+  );
+
+  if (createError) {
+    throw mapDatabaseError(createError, 'The comment could not be posted.');
+  }
+
   const { data, error } = await supabase
     .from('comments')
-    .insert({
-      post_id: parsed.data.postId,
-      user_id: userId,
-      content: parsed.data.content,
-    })
     .select(COMMENT_SELECT)
+    .eq('id', String(commentId))
     .single();
 
   if (error) throw mapDatabaseError(error, 'The comment could not be posted.');

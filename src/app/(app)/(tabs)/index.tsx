@@ -32,10 +32,12 @@ type MenuState = 'switcher' | 'create' | null;
 
 export default function HomeScreen() {
   const { user } = useCurrentUser();
-  const { selectRideId: pendingSelectRideId, notificationOpenId } = useLocalSearchParams<{
-    selectRideId?: string;
-    notificationOpenId?: string;
-  }>();
+  const { selectRideId: pendingSelectRideId, notificationOpenId, openCommentsPostId } =
+    useLocalSearchParams<{
+      selectRideId?: string;
+      notificationOpenId?: string;
+      openCommentsPostId?: string;
+    }>();
   const queryClient = useQueryClient();
   const rides = useUserRides(user?.id);
   const { selectedRideId, selectRide, isReady } = useSelectedRide(rides.data, user?.id);
@@ -290,7 +292,20 @@ export default function HomeScreen() {
         refreshing ? (
           <RideFeedSkeleton />
         ) : (
-          <RideOverview compact rideId={selectedRideId} showHeading={false} />
+          <RideOverview
+            commentsOpenKey={
+              typeof notificationOpenId === 'string' ? notificationOpenId : null
+            }
+            compact
+            onCommentsOpened={() => {
+              router.setParams({ openCommentsPostId: undefined });
+            }}
+            openCommentsPostId={
+              typeof openCommentsPostId === 'string' ? openCommentsPostId : null
+            }
+            rideId={selectedRideId}
+            showHeading={false}
+          />
         )
       ) : (
         <RideFeedSkeleton count={1} />

@@ -10,7 +10,7 @@ import {
 } from './service';
 
 export type SocialNotificationData = {
-  kind: 'social_post' | 'social_comment';
+  kind: 'social_post' | 'social_comment' | 'social_mention';
   rideId: string;
   postId: string;
   commentId?: string;
@@ -37,7 +37,9 @@ export function isSocialNotificationData(value: unknown): value is SocialNotific
   if (!value || typeof value !== 'object') return false;
   const data = value as Record<string, unknown>;
   return (
-    (data.kind === 'social_post' || data.kind === 'social_comment') &&
+    (data.kind === 'social_post' ||
+      data.kind === 'social_comment' ||
+      data.kind === 'social_mention') &&
     typeof data.rideId === 'string' &&
     typeof data.postId === 'string'
   );

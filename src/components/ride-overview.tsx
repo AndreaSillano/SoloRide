@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Share, StyleSheet, Text, View } from 'react-native';
 
 import { useCurrentUser } from '@/auth/auth-context';
@@ -33,12 +33,20 @@ export function RideOverview({
   rideId,
   showHeading = true,
   compact = false,
+  openCommentsPostId,
+  commentsOpenKey,
+  onCommentsOpened,
 }: {
   rideId: string;
   showHeading?: boolean;
   /** Hides the posted-today status line, Members section, and Photos label,
    * since that detail already lives on the Ride settings screen. */
   compact?: boolean;
+  /** Opens the comments sheet for this post (e.g. from a mention/comment push). */
+  openCommentsPostId?: string | null;
+  /** Changes when a push asks to open comments again for the same post. */
+  commentsOpenKey?: string | null;
+  onCommentsOpened?: () => void;
 }) {
   const { user } = useCurrentUser();
   const ride = useRide(rideId);
@@ -52,6 +60,12 @@ export function RideOverview({
   const [reactionsPostId, setReactionsPostId] = useState<string | null>(null);
   const [pickerPostId, setPickerPostId] = useState<string | null>(null);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!openCommentsPostId) return;
+    setActivePostId(openCommentsPostId);
+    onCommentsOpened?.();
+  }, [openCommentsPostId, commentsOpenKey, onCommentsOpened]);
 
   const confirmDeletePost = (postId: string) => {
     Alert.alert('Delete photo?', 'This permanently removes the photo and its comments.', [

@@ -178,6 +178,8 @@ export const createCommentInputSchema = z.object({
   postId: uuidSchema,
   rideId: uuidSchema,
   content: z.string().trim().min(1, 'Write a comment first.').max(2000),
+  /** Ride-member user IDs picked from @autocomplete (server also parses @tokens). */
+  mentionedUserIds: z.array(uuidSchema).max(10).optional().default([]),
 });
 
 export const upsertReactionInputSchema = z.object({
