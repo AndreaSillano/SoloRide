@@ -3,7 +3,13 @@ export const queryKeys = {
   rides: (userId: string) => ['rides', userId] as const,
   ride: (rideId: string) => ['ride', rideId] as const,
   rideMembers: (rideId: string) => ['ride-members', rideId] as const,
+  rideJoinRequests: (rideId: string) => ['ride-join-requests', rideId] as const,
+  myPendingJoinRequests: (userId: string) => ['my-pending-join-requests', userId] as const,
   ridePosts: (rideId: string) => ['ride-posts', rideId] as const,
+  ridePostDates: (rideId: string, monthKey: string) =>
+    ['ride-post-dates', rideId, monthKey] as const,
+  ridePostsForDate: (rideId: string, scheduledDate: string) =>
+    ['ride-posts-for-date', rideId, scheduledDate] as const,
   post: (postId: string) => ['post', postId] as const,
   comments: (postId: string) => ['comments', postId] as const,
   reactions: (postId: string) => ['reactions', postId] as const,

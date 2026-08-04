@@ -16,11 +16,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCurrentUser } from '@/auth/auth-context';
 import { RideCard } from '@/components/ride-card';
 import { RideOverview } from '@/components/ride-overview';
-import { FixedHeaderScreen, RideFeedSkeleton, StatePanel } from '@/components/ui';
+import { FixedHeaderScreen, Body, Button, Heading, RideFeedSkeleton, StatePanel } from '@/components/ui';
 import { requestNotificationRefresh } from '@/features/notifications';
-import { useRideFeed } from '@/features/posts';
+import { POST_CAPTURE_TAB_BAR_CLEARANCE, useRideFeed } from '@/features/posts';
 import {
   groupUserRides,
+  useRideJoinRequests,
   useRidesDueToday,
   useSelectedRide,
   useUserRides,
@@ -63,6 +64,13 @@ export default function HomeScreen() {
   const groups = groupUserRides(rides.data ?? []);
   const selectedRide = rides.data?.find((ride) => ride.id === selectedRideId) ?? null;
   const hasRides = Boolean(rides.data?.length);
+  const hasPosts = Boolean(selectedRideId && feed.data.length > 0);
+  // Keep scroll + RefreshControl mounted while refreshing — toggling them off
+  // mid-pull unmounts the spinner and jumps the feed layout.
+  const scrollEnabled = hasRides && (hasPosts || refreshing);
+  const isOwnerOfSelected = selectedRide?.current_user_role === 'creator';
+  const pendingJoins = useRideJoinRequests(selectedRideId, Boolean(isOwnerOfSelected));
+  const hasPendingJoinRequests = Boolean(pendingJoins.data && pendingJoins.data.length > 0);
 
   const closeMenu = () => setMenu(null);
   const toggleMenu = (next: Exclude<MenuState, null>) =>
@@ -98,6 +106,7 @@ export default function HomeScreen() {
         tasks.push(
           feed.refetch(),
           queryClient.invalidateQueries({ queryKey: queryKeys.ride(selectedRideId) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.rideJoinRequests(selectedRideId) }),
           queryClient.invalidateQueries({ queryKey: ['ride-schedule', selectedRideId] }),
           queryClient.invalidateQueries({ queryKey: ['posted-status', selectedRideId] }),
           queryClient.invalidateQueries({ queryKey: ['week-posted-status', selectedRideId] }),
@@ -112,14 +121,6 @@ export default function HomeScreen() {
 
   const header = (
     <>
-      {menu ? (
-        <Pressable
-          accessibilityLabel="Close menu"
-          accessibilityRole="button"
-          onPress={closeMenu}
-          style={[styles.overlay, { height: windowHeight }]}
-        />
-      ) : null}
       <View
         style={[
           styles.headerRow,
@@ -174,6 +175,7 @@ export default function HomeScreen() {
                         key={ride.id}
                         onPress={() => handleSelectRide(ride.id)}
                         ride={ride}
+                        selected={ride.id === selectedRideId}
                         userId={user?.id}
                       />
                     ))}
@@ -187,6 +189,7 @@ export default function HomeScreen() {
                         key={ride.id}
                         onPress={() => handleSelectRide(ride.id)}
                         ride={ride}
+                        selected={ride.id === selectedRideId}
                         userId={user?.id}
                       />
                     ))}
@@ -199,18 +202,29 @@ export default function HomeScreen() {
 
         <View style={styles.headerActions}>
           <Pressable
-            accessibilityLabel="Ride settings"
+            accessibilityLabel={
+              hasPendingJoinRequests
+                ? 'Ride settings, pending join requests'
+                : 'Ride settings'
+            }
             accessibilityRole="button"
             disabled={!selectedRideId}
             hitSlop={8}
             onPress={openSettings}
-            style={({ pressed }) => pressed && styles.pressed}
+            style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
           >
             <Ionicons
               color={selectedRideId ? colors.text : colors.muted}
               name="settings-outline"
               size={22}
             />
+            {hasPendingJoinRequests ? (
+              <View
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+                style={styles.settingsBadge}
+              />
+            ) : null}
           </Pressable>
 
           <View style={styles.plusWrap}>
@@ -257,11 +271,26 @@ export default function HomeScreen() {
 
   return (
     <FixedHeaderScreen
-      contentStyle={{ paddingBottom: insets.bottom + spacing.sm }}
+      contentStyle={{
+        paddingBottom: insets.bottom + spacing.sm + POST_CAPTURE_TAB_BAR_CLEARANCE,
+      }}
       header={header}
-      onScroll={selectedRideId ? feed.loadMoreIfNearEnd : undefined}
+      onScroll={(event) => {
+        if (menu) closeMenu();
+        if (selectedRideId) feed.loadMoreIfNearEnd(event);
+      }}
+      overlay={
+        menu ? (
+          <Pressable
+            accessibilityLabel="Close menu"
+            accessibilityRole="button"
+            onPress={closeMenu}
+            style={[styles.menuDismiss, { height: windowHeight }]}
+          />
+        ) : null
+      }
       refreshControl={
-        hasRides ? (
+        hasRides && (hasPosts || refreshing) ? (
           <RefreshControl
             onRefresh={() => void onRefresh()}
             refreshing={refreshing}
@@ -269,6 +298,7 @@ export default function HomeScreen() {
           />
         ) : undefined
       }
+      scrollEnabled={scrollEnabled}
     >
       {rides.isPending || !isReady ? (
         <RideFeedSkeleton />
@@ -280,14 +310,18 @@ export default function HomeScreen() {
           title="Couldn’t load Rides"
         />
       ) : !hasRides ? (
-        <StatePanel
-          actionLabel="Create a Ride"
-          message="Start a private photo rhythm, or join with a friend’s code."
-          onAction={openCreateRide}
-          onSecondaryAction={openJoinRide}
-          secondaryActionLabel="Join with code"
-          title="Your first Ride starts here"
-        />
+        <View style={styles.emptyState}>
+          <Heading>Your first Ride starts here</Heading>
+          <Body muted>
+            Start a private photo rhythm, or join with a friend’s code.
+          </Body>
+          <View style={styles.emptyActions}>
+            <Button onPress={openCreateRide}>Create a Ride</Button>
+            <Button variant="secondary" onPress={openJoinRide}>
+              Join with code
+            </Button>
+          </View>
+        </View>
       ) : selectedRideId ? (
         refreshing ? (
           <RideFeedSkeleton />
@@ -304,7 +338,6 @@ export default function HomeScreen() {
               typeof openCommentsPostId === 'string' ? openCommentsPostId : null
             }
             rideId={selectedRideId}
-            showHeading={false}
           />
         )
       ) : (
@@ -315,18 +348,25 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  overlay: { left: -1000, position: 'absolute', right: -1000, top: 0 },
+  menuDismiss: { left: -1000, position: 'absolute', right: -1000, top: 0, zIndex: 0 },
+  emptyState: {
+    gap: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  emptyActions: {
+    gap: spacing.sm,
+    paddingTop: spacing.xs,
+  },
   headerRow: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: spacing.sm,
-    paddingBottom: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xs,
     zIndex: 2,
   },
   headerRowWithDescription: {
-    paddingBottom: spacing.xxs,
+    paddingBottom: 0,
   },
   rideDescription: {
     color: colors.muted,
@@ -335,6 +375,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     paddingBottom: spacing.sm,
     paddingHorizontal: spacing.lg,
+    paddingTop: 0,
     zIndex: 0,
   },
   switcherWrap: { flex: 1, position: 'relative', zIndex: 2 },
@@ -397,6 +438,23 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   headerActions: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
+  settingsButton: {
+    position: 'relative',
+  },
+  settingsBadge: {
+    backgroundColor: colors.accent,
+    borderRadius: radius.pill,
+    elevation: 4,
+    height: 8,
+    position: 'absolute',
+    right: -3,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 5,
+    top: -2,
+    width: 8,
+  },
   plusWrap: { position: 'relative' },
   plusButton: {
     alignItems: 'center',

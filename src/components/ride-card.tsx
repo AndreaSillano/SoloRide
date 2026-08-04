@@ -33,10 +33,12 @@ function statusForRide(
 export function RideCard({
   ride,
   userId,
+  selected = false,
   onPress,
 }: {
   ride: UserRide;
   userId: string | null | undefined;
+  selected?: boolean;
   onPress: () => void;
 }) {
   const posting = usePostingStatus(ride.id, userId);
@@ -44,10 +46,15 @@ export function RideCard({
 
   return (
     <Pressable
-      accessibilityLabel={`${ride.name}, ${status.label}`}
+      accessibilityLabel={`${ride.name}, ${status.label}${selected ? ', selected' : ''}`}
       accessibilityRole="button"
+      accessibilityState={{ selected }}
       onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.card,
+        selected && styles.cardSelected,
+        pressed && styles.pressed,
+      ]}
     >
       <Text ellipsizeMode="tail" numberOfLines={1} style={styles.title}>
         {ride.name}
@@ -79,6 +86,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+  },
+  cardSelected: {
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.borderStrong,
   },
   title: { color: colors.text, flex: 1, fontSize: 16, fontWeight: '700' },
   statusChip: {

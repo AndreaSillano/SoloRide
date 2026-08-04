@@ -8,8 +8,10 @@ import { mapRideError, RideProductError } from './errors';
 import { rideCodeSchema, rideFormSchema } from './schema';
 import type {
   CreateRideInput,
+  MyPendingJoinRequest,
   PostedTodayStatus,
   Ride,
+  RideJoinRequest,
   RideMember,
   RidePreview,
   RidePreviewDetails,
@@ -30,6 +32,10 @@ type UserRideRecord = {
 
 type RideMemberRecord = Omit<RideMember, 'profile'> & {
   profile: RideMember['profile'] | RideMember['profile'][] | null;
+};
+
+type RideJoinRequestRecord = Omit<RideJoinRequest, 'profile'> & {
+  profile: RideJoinRequest['profile'] | RideJoinRequest['profile'][] | null;
 };
 
 type PreviewRecord = Partial<RidePreviewDetails> & {
@@ -116,6 +122,9 @@ function normalizePreviewStatus(status: unknown): RidePreviewStatus {
     case 'duplicate':
     case 'already_member':
       return 'duplicate';
+    case 'pending':
+    case 'already_requested':
+      return 'pending';
     default:
       return 'invalid';
   }
@@ -198,6 +207,56 @@ export async function fetchRideMembers(rideId: string): Promise<RideMember[]> {
   }));
 }
 
+export async function fetchRideJoinRequests(rideId: string): Promise<RideJoinRequest[]> {
+  const { data, error } = await supabase
+    .from('ride_join_requests')
+    .select(
+      'id,ride_id,user_id,status,created_at,resolved_at,resolved_by,profile:profiles!ride_join_requests_user_id_fkey(id,username,display_name,avatar_url)',
+    )
+    .eq('ride_id', rideId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true });
+
+  if (error) throw mapRideError(error);
+
+  return ((data ?? []) as unknown as RideJoinRequestRecord[]).map((request) => ({
+    ...request,
+    profile: request.profile ? firstOrSelf(request.profile) : null,
+  }));
+}
+
+type MyPendingJoinRequestRecord = Omit<MyPendingJoinRequest, 'ride'> & {
+  ride:
+    | Pick<Ride, 'id' | 'name' | 'description' | 'is_archived'>
+    | Pick<Ride, 'id' | 'name' | 'description' | 'is_archived'>[]
+    | null;
+};
+
+/** Pending join requests submitted by the current user (not yet accepted). */
+export async function fetchMyPendingJoinRequests(
+  userId: string,
+): Promise<MyPendingJoinRequest[]> {
+  if (!userId) return [];
+
+  const { data, error } = await supabase
+    .from('ride_join_requests')
+    .select(
+      'id,ride_id,created_at,ride:rides!ride_join_requests_ride_id_fkey(id,name,description,is_archived)',
+    )
+    .eq('user_id', userId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+
+  if (error) throw mapRideError(error);
+
+  return ((data ?? []) as unknown as MyPendingJoinRequestRecord[]).map((request) => ({
+    id: request.id,
+    ride_id: request.ride_id,
+    created_at: request.created_at,
+    ride: request.ride ? firstOrSelf(request.ride) : null,
+  }));
+}
+
 export async function fetchRideSchedule(rideId: string): Promise<RideScheduleDay[]> {
   const { data, error } = await supabase
     .from('ride_schedule_days')
@@ -227,6 +286,40 @@ export async function joinRideByCode(code: string): Promise<Ride> {
 
   if (error) throw mapRideError(error);
   return unwrapRide(data);
+}
+
+/** Creates a pending join request; membership starts only after the owner accepts. */
+export async function requestJoinRideByCode(code: string): Promise<Ride> {
+  return joinRideByCode(code);
+}
+
+export async function acceptRideJoinRequest(requestId: string): Promise<RideJoinRequest> {
+  const { data, error } = await supabase.rpc('accept_ride_join_request', {
+    p_request_id: requestId,
+    p_local_date: localDateParam(),
+  });
+  if (error) throw mapRideError(error);
+  const request = firstOrSelf(data as Omit<RideJoinRequest, 'profile'> | null);
+  if (!request) throw new RideProductError('not_found');
+  return { ...request, profile: null };
+}
+
+export async function rejectRideJoinRequest(requestId: string): Promise<RideJoinRequest> {
+  const { data, error } = await supabase.rpc('reject_ride_join_request', {
+    p_request_id: requestId,
+  });
+  if (error) throw mapRideError(error);
+  const request = firstOrSelf(data as Omit<RideJoinRequest, 'profile'> | null);
+  if (!request) throw new RideProductError('not_found');
+  return { ...request, profile: null };
+}
+
+export async function removeRideMember(rideId: string, userId: string): Promise<void> {
+  const { error } = await supabase.rpc('remove_ride_member', {
+    p_ride_id: rideId,
+    p_user_id: userId,
+  });
+  if (error) throw mapRideError(error);
 }
 
 export async function leaveRide(rideId: string): Promise<void> {

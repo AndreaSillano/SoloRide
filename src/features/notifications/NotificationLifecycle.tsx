@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
@@ -15,6 +16,8 @@ import { format } from 'date-fns';
 import { isSoloRideNotificationData, type NotificationRide, type PostedRideDate } from './planner';
 import { getNotificationsEnabled } from './preferences';
 import {
+  isJoinRequestDecisionNotificationData,
+  isJoinRequestNotificationData,
   isSocialNotificationData,
   registerExpoPushToken,
   unregisterExpoPushToken,
@@ -26,6 +29,7 @@ import {
 } from './service';
 
 const refreshListeners = new Set<() => void>();
+const SELECTED_RIDE_STORAGE_PREFIX = 'soloride:last-ride-id:';
 
 export function requestNotificationRefresh() {
   refreshListeners.forEach((listener) => listener());
@@ -41,7 +45,12 @@ Notifications.setNotificationHandler({
 });
 
 function rideIdFromNotificationData(data: unknown): string | undefined {
-  if (isSocialNotificationData(data) || isSoloRideNotificationData(data)) {
+  if (
+    isSocialNotificationData(data) ||
+    isSoloRideNotificationData(data) ||
+    isJoinRequestNotificationData(data) ||
+    isJoinRequestDecisionNotificationData(data)
+  ) {
     return data.rideId;
   }
   if (data && typeof data === 'object') {
@@ -51,16 +60,24 @@ function rideIdFromNotificationData(data: unknown): string | undefined {
   return undefined;
 }
 
+function persistSelectedRide(userId: string | undefined, rideId: string) {
+  if (!userId) return;
+  void AsyncStorage.setItem(SELECTED_RIDE_STORAGE_PREFIX + userId, rideId);
+}
+
 /** Drop stale home/feed caches so the ride opened from a tap shows fresh data. */
 function invalidateQueriesForNotification(queryClient: QueryClient, data: unknown) {
   void queryClient.invalidateQueries({ queryKey: ['rides'] });
   void queryClient.invalidateQueries({ queryKey: ['rides-due-today'] });
   void queryClient.invalidateQueries({ queryKey: ['camera-rides'] });
+  void queryClient.invalidateQueries({ queryKey: ['my-pending-join-requests'] });
 
   const rideId = rideIdFromNotificationData(data);
   if (rideId) {
     void queryClient.invalidateQueries({ queryKey: queryKeys.ridePosts(rideId) });
     void queryClient.invalidateQueries({ queryKey: queryKeys.ride(rideId) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.rideMembers(rideId) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.rideJoinRequests(rideId) });
     void queryClient.invalidateQueries({ queryKey: ['ride-schedule', rideId] });
     void queryClient.invalidateQueries({ queryKey: ['posted-status', rideId] });
     void queryClient.invalidateQueries({ queryKey: ['week-posted-status', rideId] });
@@ -100,10 +117,52 @@ function openHome(rideId?: string, openCommentsPostId?: string) {
   }
 }
 
+function openRideSettingsPeople(rideId: string) {
+  try {
+    // Land on Home first so the settings back button has a screen to return to
+    // (cold-start / push-only stacks otherwise leave nowhere to go).
+    router.replace({
+      pathname: '/',
+      params: {
+        selectRideId: rideId,
+        notificationOpenId: String(Date.now()),
+      },
+    });
+    router.push({
+      pathname: '/ride/[rideId]/settings',
+      params: { rideId, tab: 'people' },
+    });
+  } catch {
+    openHome(rideId);
+  }
+}
+
 /** Open the matching Ride when possible; otherwise land on home. */
-function openFromNotificationData(queryClient: QueryClient, data: unknown) {
+function openFromNotificationData(
+  queryClient: QueryClient,
+  data: unknown,
+  userId?: string,
+) {
   invalidateQueriesForNotification(queryClient, data);
+
+  if (isJoinRequestNotificationData(data)) {
+    persistSelectedRide(userId, data.rideId);
+    openRideSettingsPeople(data.rideId);
+    return;
+  }
+
+  if (isJoinRequestDecisionNotificationData(data)) {
+    if (data.status === 'accepted') {
+      persistSelectedRide(userId, data.rideId);
+      openHome(data.rideId);
+    } else {
+      openHome();
+    }
+    return;
+  }
+
   const rideId = rideIdFromNotificationData(data);
+  if (rideId) persistSelectedRide(userId, rideId);
   const openCommentsPostId =
     isSocialNotificationData(data) &&
     (data.kind === 'social_comment' || data.kind === 'social_mention')
@@ -248,7 +307,11 @@ export function NotificationLifecycle() {
       if (lastHandledResponseId.current === responseId) return;
       lastHandledResponseId.current = responseId;
       try {
-        openFromNotificationData(queryClient, response.notification.request.content.data);
+        openFromNotificationData(
+          queryClient,
+          response.notification.request.content.data,
+          user?.id,
+        );
       } catch {
         openHome();
       }
@@ -260,7 +323,7 @@ export function NotificationLifecycle() {
     void Notifications.getLastNotificationResponseAsync().then(handleResponse);
 
     return () => responseSub.remove();
-  }, [queryClient]);
+  }, [queryClient, user?.id]);
 
   return null;
 }

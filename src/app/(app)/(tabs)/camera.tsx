@@ -18,8 +18,11 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useCurrentUser } from '@/auth/auth-context';
 import { PhotoTextEditor } from '@/components/photo-text-editor';
 import {
+  Body,
+  Button,
+  CenteredBusy,
   ErrorBanner,
-  StatePanel,
+  Heading,
 } from '@/components/ui';
 import {
   cropImageToPostAspect,
@@ -376,19 +379,25 @@ export default function CameraScreen() {
   if (cameraRides.isPending) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <StatePanel loading message="Checking your Rides…" />
+        <CenteredBusy message="Checking your Rides…" />
       </SafeAreaView>
     );
   }
 
   if (!activeRides.length) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.emptyWrap}>
-          <StatePanel
-            message="Join or create an active Ride to share photos anytime."
-            title="No active Rides"
-          />
+      <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
+        <View style={styles.emptyState}>
+          <Heading>No active Rides</Heading>
+          <Body muted>
+            Join or create an active Ride to share photos anytime.
+          </Body>
+          <View style={styles.emptyActions}>
+            <Button onPress={() => router.push('/create-ride')}>Create a Ride</Button>
+            <Button variant="secondary" onPress={() => router.push('/join-ride')}>
+              Join with code
+            </Button>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -465,20 +474,21 @@ export default function CameraScreen() {
               </>
             ) : (
               <View style={styles.cameraFallback}>
-                <StatePanel
-                  actionLabel={
-                    permission?.canAskAgain === false ? 'Open Settings' : 'Allow camera'
-                  }
-                  message={
-                    permission === null
-                      ? 'Checking camera permission…'
-                      : permission?.canAskAgain === false
-                        ? 'Camera access is blocked for SoloRide. Enable it in system Settings.'
-                        : 'Camera access is off. Allow it, or choose a photo from your library.'
-                  }
-                  onAction={permission === null ? undefined : () => void askForCamera()}
-                  title="Camera access"
-                />
+                <Heading>Camera access</Heading>
+                <Body muted>
+                  {permission === null
+                    ? 'Checking camera permission…'
+                    : permission?.canAskAgain === false
+                      ? 'Camera access is blocked for SoloRide. Enable it in system Settings.'
+                      : 'Camera access is off. Allow it, or choose a photo from your library.'}
+                </Body>
+                {permission != null ? (
+                  <View style={styles.emptyActions}>
+                    <Button onPress={() => void askForCamera()}>
+                      {permission.canAskAgain === false ? 'Open Settings' : 'Allow camera'}
+                    </Button>
+                  </View>
+                ) : null}
               </View>
             )}
           </View>
@@ -650,7 +660,15 @@ export default function CameraScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: colors.background, flex: 1 },
-  emptyWrap: { flex: 1, justifyContent: 'center', padding: spacing.lg },
+  emptyState: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+  },
+  emptyActions: {
+    gap: spacing.sm,
+    paddingTop: spacing.xs,
+  },
   cameraRoot: { backgroundColor: '#000', flex: 1 },
   frameStage: {
     ...StyleSheet.absoluteFillObject,
@@ -676,10 +694,11 @@ const styles = StyleSheet.create({
   },
   cameraFallback: {
     ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
     backgroundColor: colors.background,
-    justifyContent: 'center',
-    padding: spacing.lg,
+    gap: spacing.md,
+    justifyContent: 'flex-start',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
   },
   cameraChrome: {
     ...StyleSheet.absoluteFillObject,

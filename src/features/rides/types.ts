@@ -41,6 +41,26 @@ export type RideMember = {
   profile: RideMemberProfile | null;
 };
 
+export type RideJoinRequestStatus = 'pending' | 'accepted' | 'rejected';
+
+export type RideJoinRequest = {
+  id: string;
+  ride_id: string;
+  user_id: string;
+  status: RideJoinRequestStatus;
+  created_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  profile: RideMemberProfile | null;
+};
+
+export type MyPendingJoinRequest = {
+  id: string;
+  ride_id: string;
+  created_at: string;
+  ride: Pick<Ride, 'id' | 'name' | 'description' | 'is_archived'> | null;
+};
+
 export type RideFormValues = {
   name: string;
   description: string;
@@ -65,7 +85,8 @@ export type RidePreviewStatus =
   | 'expired'
   | 'archived'
   | 'duplicate'
-  | 'full';
+  | 'full'
+  | 'pending';
 
 export type RidePreviewDetails = Pick<
   Ride,

@@ -17,6 +17,23 @@ export type SocialNotificationData = {
   isTemporary?: boolean;
 };
 
+export type JoinRequestNotificationData = {
+  kind: 'join_request';
+  rideId: string;
+  requestId: string;
+};
+
+export type JoinRequestDecisionNotificationData = {
+  kind: 'join_request_decision';
+  rideId: string;
+  requestId: string;
+  status: 'accepted' | 'rejected';
+};
+
+export type JoinNotificationData =
+  | JoinRequestNotificationData
+  | JoinRequestDecisionNotificationData;
+
 function pushProjectId(): string | null {
   return (
     process.env.EXPO_PUBLIC_EAS_PROJECT_ID ||
@@ -43,6 +60,35 @@ export function isSocialNotificationData(value: unknown): value is SocialNotific
     typeof data.rideId === 'string' &&
     typeof data.postId === 'string'
   );
+}
+
+export function isJoinRequestNotificationData(
+  value: unknown,
+): value is JoinRequestNotificationData {
+  if (!value || typeof value !== 'object') return false;
+  const data = value as Record<string, unknown>;
+  return (
+    data.kind === 'join_request' &&
+    typeof data.rideId === 'string' &&
+    typeof data.requestId === 'string'
+  );
+}
+
+export function isJoinRequestDecisionNotificationData(
+  value: unknown,
+): value is JoinRequestDecisionNotificationData {
+  if (!value || typeof value !== 'object') return false;
+  const data = value as Record<string, unknown>;
+  return (
+    data.kind === 'join_request_decision' &&
+    typeof data.rideId === 'string' &&
+    typeof data.requestId === 'string' &&
+    (data.status === 'accepted' || data.status === 'rejected')
+  );
+}
+
+export function isJoinNotificationData(value: unknown): value is JoinNotificationData {
+  return isJoinRequestNotificationData(value) || isJoinRequestDecisionNotificationData(value);
 }
 
 export async function registerExpoPushToken(userId: string): Promise<string | null> {

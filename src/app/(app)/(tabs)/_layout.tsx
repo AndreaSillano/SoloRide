@@ -25,7 +25,12 @@ export default function TabLayout() {
       }}
       tintColor={colors.primary}
     >
-      <NativeTabs.Trigger name="index">
+      <NativeTabs.Trigger
+        name="index"
+        // Keep our ScrollView's contentInsetAdjustmentBehavior="never" so the
+        // collapsing header paddingTop isn't doubled by UIKit's automatic inset.
+        options={{ overrideScrollViewContentInsetAdjustmentBehavior: false }}
+      >
         <Label>Rides</Label>
         <Icon
           androidSrc={{

@@ -25,6 +25,8 @@ import {
   getPost,
   getReactions,
   getRideFeedPage,
+  getRidePostDates,
+  getRidePostsForDate,
   getSignedPostImage,
   getSignedPostAudio,
   getSignedPostVideo,
@@ -91,6 +93,48 @@ export function useRideFeed(rideId: string | null | undefined) {
     data: posts,
     loadMoreIfNearEnd,
   };
+}
+
+function monthBounds(monthKey: string) {
+  const [yearText, monthText] = monthKey.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+  if (!year || !month) return null;
+  const lastDay = new Date(year, month, 0).getDate();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return {
+    fromDate: `${year}-${pad(month)}-01`,
+    toDate: `${year}-${pad(month)}-${pad(lastDay)}`,
+  };
+}
+
+export function useRidePostDates(
+  rideId: string | null | undefined,
+  monthKey: string | null | undefined,
+) {
+  const { user } = useCurrentUser();
+  const bounds = monthKey ? monthBounds(monthKey) : null;
+  return useQuery({
+    queryKey: queryKeys.ridePostDates(rideId ?? 'missing', monthKey ?? 'missing'),
+    queryFn: () =>
+      getRidePostDates(rideId ?? '', bounds!.fromDate, bounds!.toDate),
+    enabled: Boolean(rideId && user?.id && bounds),
+  });
+}
+
+export function useRidePostsForDate(
+  rideId: string | null | undefined,
+  scheduledDate: string | null | undefined,
+) {
+  const { user } = useCurrentUser();
+  return useQuery({
+    queryKey: queryKeys.ridePostsForDate(
+      rideId ?? 'missing',
+      scheduledDate ?? 'missing',
+    ),
+    queryFn: () => getRidePostsForDate(rideId ?? '', scheduledDate ?? ''),
+    enabled: Boolean(rideId && user?.id && scheduledDate),
+  });
 }
 
 export function usePost(postId: string | null | undefined) {
@@ -188,6 +232,12 @@ export function useCreatePost() {
           queryKey: queryKeys.ridePosts(post.ride_id),
         });
         void queryClient.invalidateQueries({
+          queryKey: ['ride-post-dates', post.ride_id],
+        });
+        void queryClient.invalidateQueries({
+          queryKey: ['ride-posts-for-date', post.ride_id],
+        });
+        void queryClient.invalidateQueries({
           queryKey: queryKeys.postedStatus(
             post.ride_id,
             post.user_id,
@@ -226,6 +276,12 @@ export function useDeletePost() {
         queryKey: queryKeys.ridePosts(variables.rideId),
       });
       void queryClient.invalidateQueries({
+        queryKey: ['ride-post-dates', variables.rideId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ['ride-posts-for-date', variables.rideId],
+      });
+      void queryClient.invalidateQueries({
         queryKey: ['posted-status', variables.rideId],
       });
       void queryClient.invalidateQueries({
@@ -251,6 +307,9 @@ export function useCreateComment() {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.ridePosts(variables.rideId),
       });
+      void queryClient.invalidateQueries({
+        queryKey: ['ride-posts-for-date', variables.rideId],
+      });
     },
   });
 }
@@ -273,6 +332,9 @@ export function useDeleteComment() {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.ridePosts(variables.rideId),
       });
+      void queryClient.invalidateQueries({
+        queryKey: ['ride-posts-for-date', variables.rideId],
+      });
     },
   });
 }
@@ -287,6 +349,9 @@ export function useUpsertReaction() {
       });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.ridePosts(variables.rideId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ['ride-posts-for-date', variables.rideId],
       });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.post(reaction.post_id),
@@ -305,6 +370,9 @@ export function useRemoveReaction() {
       });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.ridePosts(variables.rideId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ['ride-posts-for-date', variables.rideId],
       });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.post(variables.postId),

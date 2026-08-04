@@ -84,9 +84,15 @@ export default function CreateRideScreen() {
         </Card>
         <Button
           variant="secondary"
-          onPress={() =>
-            router.replace({ pathname: '/', params: { selectRideId: created.id } })
-          }
+          onPress={() => {
+            router.dismissTo({
+              pathname: '/',
+              params: {
+                selectRideId: created.id,
+                notificationOpenId: String(Date.now()),
+              },
+            });
+          }}
         >
           Open Ride
         </Button>

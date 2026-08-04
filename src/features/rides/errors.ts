@@ -8,6 +8,7 @@ export type RideErrorCode =
   | 'duplicate'
   | 'full'
   | 'live_limit'
+  | 'pending'
   | 'not_found'
   | 'forbidden'
   | 'validation'
@@ -21,6 +22,7 @@ const ERROR_MESSAGES: Record<RideErrorCode, string> = {
   duplicate: 'You are already a member of this Ride.',
   full: 'This Ride is full (16 riders max).',
   live_limit: 'You can only be in 4 active Rides at a time.',
+  pending: 'Your request to join is waiting for the owner.',
   not_found: 'We could not find that Ride.',
   forbidden: 'You do not have permission to do that.',
   validation: 'The Ride details are not valid.',
@@ -67,6 +69,9 @@ export function mapRideError(error: unknown): RideProductError {
   const text = errorText(error);
   const databaseCode = databaseErrorCode(error);
 
+  if (text.includes('join request already pending') || text.includes('already pending')) {
+    return new RideProductError('pending', undefined, { cause: error });
+  }
   if (text.includes('already') || text.includes('member') || databaseCode === '23505') {
     return new RideProductError('duplicate', undefined, { cause: error });
   }
@@ -82,8 +87,14 @@ export function mapRideError(error: unknown): RideProductError {
   if (text.includes('full') || text.includes('16')) {
     return new RideProductError('full', undefined, { cause: error });
   }
-  if (text.includes('4 active') || text.includes('4 live')) {
-    return new RideProductError('live_limit', undefined, { cause: error });
+  if (text.includes('4 active') || text.includes('4 live') || text.includes('already in 4')) {
+    return new RideProductError(
+      'live_limit',
+      text.includes('that rider')
+        ? 'That rider is already in 4 active Rides.'
+        : undefined,
+      { cause: error },
+    );
   }
   if (text.includes('code') && (text.includes('invalid') || text.includes('not found'))) {
     return new RideProductError('invalid_code', undefined, { cause: error });

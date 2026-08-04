@@ -248,6 +248,55 @@ export async function getRideFeedPage(
   return { posts, nextCursor };
 }
 
+/** Distinct scheduled dates (YYYY-MM-DD) that still have posts in a range. */
+export async function getRidePostDates(
+  rideId: string,
+  fromDate: string,
+  toDate: string,
+): Promise<string[]> {
+  const validRideId = parseUuid(rideId, 'Ride');
+  const { data, error } = await supabase
+    .from('posts')
+    .select('scheduled_date')
+    .eq('ride_id', validRideId)
+    .not('scheduled_date', 'is', null)
+    .gte('scheduled_date', fromDate)
+    .lte('scheduled_date', toDate);
+
+  if (error) throw mapDatabaseError(error, 'Post days could not be loaded.');
+
+  const dates = new Set<string>();
+  for (const row of data ?? []) {
+    const value = (row as { scheduled_date?: string | null }).scheduled_date;
+    if (typeof value === 'string' && value.length >= 10) {
+      dates.add(value.slice(0, 10));
+    }
+  }
+  return [...dates].sort();
+}
+
+/** All posts for one scheduled calendar day in a Ride (history, including expired). */
+export async function getRidePostsForDate(
+  rideId: string,
+  scheduledDate: string,
+): Promise<PostRecord[]> {
+  const validRideId = parseUuid(rideId, 'Ride');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduledDate)) {
+    throw new PostDataError('INVALID_INPUT', 'That date is invalid.');
+  }
+
+  const { data, error } = await supabase
+    .from('posts')
+    .select(POST_SELECT)
+    .eq('ride_id', validRideId)
+    .eq('scheduled_date', scheduledDate)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false });
+
+  if (error) throw mapDatabaseError(error, 'The day feed could not be loaded.');
+  return parseFeedPosts(data ?? []);
+}
+
 export async function getPost(postId: string): Promise<PostRecord> {
   const validPostId = parseUuid(postId, 'Post');
   const { data, error } = await supabase

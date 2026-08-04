@@ -23,7 +23,6 @@ import {
   Button,
   Card,
   FeedPost,
-  Heading,
   RideFeedSkeleton,
   SectionTitle,
   StatePanel,
@@ -31,14 +30,12 @@ import {
 
 export function RideOverview({
   rideId,
-  showHeading = true,
   compact = false,
   openCommentsPostId,
   commentsOpenKey,
   onCommentsOpened,
 }: {
   rideId: string;
-  showHeading?: boolean;
   /** Hides the posted-today status line, Members section, and Photos label,
    * since that detail already lives on the Ride settings screen. */
   compact?: boolean;
@@ -158,27 +155,6 @@ export function RideOverview({
         <View style={styles.archivedBanner}>
           <Ionicons color={colors.muted} name="archive-outline" size={16} />
           <Text style={styles.archivedBannerText}>This Ride is archived</Text>
-        </View>
-      ) : null}
-      {showHeading ? (
-        <View style={styles.headerRow}>
-          <View style={styles.headerText}>
-            <Heading numberOfLines={1}>{data.name}</Heading>
-            <Body muted>
-              {new Date(`${data.start_date}T12:00:00`).toLocaleDateString()}
-              {data.end_date
-                ? ` – ${new Date(`${data.end_date}T12:00:00`).toLocaleDateString()}`
-                : ' · Never ends'}
-            </Body>
-          </View>
-          <Button
-            variant="secondary"
-            onPress={() =>
-              router.push({ pathname: '/ride/[rideId]/settings', params: { rideId } })
-            }
-          >
-            Settings
-          </Button>
         </View>
       ) : null}
       {/* Home (compact) pins the description under the fixed ride header instead. */}
@@ -344,8 +320,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
-  headerRow: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm },
-  headerText: { flex: 1, gap: spacing.xs },
   nextLabel: { color: colors.primary, fontSize: 18, fontWeight: '700' },
   actions: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
   code: { fontWeight: '800', letterSpacing: 1 },
@@ -359,7 +333,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xxl,
+    paddingTop: spacing.xl,
   },
   emptyIconWrap: {
     alignItems: 'center',

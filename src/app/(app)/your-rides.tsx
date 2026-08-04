@@ -1,22 +1,31 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useCurrentUser } from '@/auth/auth-context';
 import { RideCard } from '@/components/ride-card';
 import { Body, CenteredBusy, ScrollScreen, StatePanel } from '@/components/ui';
-import { groupUserRides, useUserRides, type UserRide } from '@/features/rides';
-import { colors, spacing } from '@/theme';
+import {
+  groupUserRides,
+  useMyPendingJoinRequests,
+  useUserRides,
+  type MyPendingJoinRequest,
+  type UserRide,
+} from '@/features/rides';
+import { colors, radius, spacing } from '@/theme';
 
 export default function YourRidesScreen() {
   const { user } = useCurrentUser();
   const rides = useUserRides(user?.id);
+  const pending = useMyPendingJoinRequests(user?.id);
   const groups = groupUserRides(rides.data ?? []);
+  const pendingRequests = pending.data ?? [];
 
   const openRide = (rideId: string) => {
     router.replace({ pathname: '/', params: { selectRideId: rideId } });
   };
 
-  if (rides.isPending) {
+  if (rides.isPending || pending.isPending) {
     return (
       <ScrollScreen>
         <CenteredBusy message="Loading your Rides…" />
@@ -39,7 +48,10 @@ export default function YourRidesScreen() {
     );
   }
 
-  if (!rides.data?.length) {
+  const hasRides = Boolean(rides.data?.length);
+  const hasPending = pendingRequests.length > 0;
+
+  if (!hasRides && !hasPending) {
     return (
       <ScrollScreen>
         <StatePanel
@@ -57,6 +69,20 @@ export default function YourRidesScreen() {
   return (
     <ScrollScreen>
       <Body muted>Tap a Ride to open it in the Rides tab.</Body>
+      {hasPending ? (
+        <View style={styles.group}>
+          <Text style={styles.groupLabel}>
+            Waiting for approval · {pendingRequests.length}
+          </Text>
+          {pending.isError ? (
+            <Body muted>Pending requests could not load.</Body>
+          ) : (
+            pendingRequests.map((request) => (
+              <PendingJoinCard key={request.id} request={request} />
+            ))
+          )}
+        </View>
+      ) : null}
       {groups.active.length ? (
         <RideGroup label="Active" onSelect={openRide} rides={groups.active} userId={user?.id} />
       ) : null}
@@ -77,6 +103,26 @@ export default function YourRidesScreen() {
         />
       ) : null}
     </ScrollScreen>
+  );
+}
+
+function PendingJoinCard({ request }: { request: MyPendingJoinRequest }) {
+  const name = request.ride?.name ?? 'Ride';
+  return (
+    <View
+      accessibilityLabel={`${name}, waiting for owner approval`}
+      style={styles.pendingCard}
+    >
+      <View style={styles.pendingBody}>
+        <Text ellipsizeMode="tail" numberOfLines={1} style={styles.pendingTitle}>
+          {name}
+        </Text>
+        <Text style={styles.pendingSubtitle}>Waiting for the owner to accept</Text>
+      </View>
+      <View style={styles.pendingChip}>
+        <Ionicons color={colors.accent} name="time-outline" size={18} />
+      </View>
+    </View>
   );
 }
 
@@ -116,5 +162,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxs,
     paddingTop: spacing.xs,
     textTransform: 'uppercase',
+  },
+  pendingCard: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  pendingBody: { flex: 1, gap: 2, minWidth: 0 },
+  pendingTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  pendingSubtitle: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  pendingChip: {
+    alignItems: 'center',
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius.pill,
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
   },
 });

@@ -10,7 +10,7 @@ export default function RideScreen() {
 
   return (
     <ScrollScreen onScroll={rideId ? feed.loadMoreIfNearEnd : undefined}>
-      <RideOverview rideId={rideId} showHeading />
+      <RideOverview rideId={rideId} />
     </ScrollScreen>
   );
 }

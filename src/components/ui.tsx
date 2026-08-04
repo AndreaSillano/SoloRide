@@ -2,7 +2,7 @@ import { useHeaderHeight } from '@react-navigation/elements';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image as ExpoImage } from 'expo-image';
 import type { PropsWithChildren, ReactElement, ReactNode } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { cloneElement, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -162,6 +162,7 @@ export function FixedHeaderScreen({
   overlay,
   refreshControl,
   onScroll,
+  scrollEnabled = true,
 }: PropsWithChildren<{
   header: ReactNode;
   contentStyle?: StyleProp<import('react-native').ViewStyle>;
@@ -170,36 +171,96 @@ export function FixedHeaderScreen({
   overlay?: ReactNode;
   refreshControl?: ReactElement<RefreshControlProps>;
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  /** When false, locks the posts layer (empty states). */
+  scrollEnabled?: boolean;
 }>) {
   const insets = useSafeAreaInsets();
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const onScrollRef = useRef(onScroll);
+  onScrollRef.current = onScroll;
+
+  const headerTranslateY = scrollY.interpolate({
+    inputRange: [0, Math.max(headerHeight, 1)],
+    outputRange: [0, -Math.max(headerHeight, 1)],
+    extrapolate: 'clamp',
+  });
+
+  const handleScroll = useMemo(
+    () =>
+      Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+        useNativeDriver: true,
+        listener: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+          onScrollRef.current?.(event);
+        },
+      }),
+    [scrollY],
+  );
+
+  const refresh =
+    scrollEnabled && refreshControl && headerHeight > 0
+      ? cloneElement(refreshControl, { progressViewOffset: headerHeight })
+      : scrollEnabled
+        ? refreshControl
+        : undefined;
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.flex}
     >
-      <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
-        {/* Elevated above the ScrollView so absolutely-positioned dropdowns
-            rendered inside `header` can overlay the scrolling content below. */}
-        <View style={styles.fixedHeader}>{header}</View>
-        <ScrollView
+      <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
+        {/* Posts-only scroll: pull-to-refresh moves this layer; header stays put. */}
+        <Animated.ScrollView
+          automaticallyAdjustContentInsets={false}
+          bounces={scrollEnabled}
           contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: spacing.lg + insets.bottom },
+            styles.feedScrollContent,
+            {
+              paddingBottom: spacing.lg + insets.bottom,
+              paddingTop: headerHeight,
+            },
+            !scrollEnabled && styles.feedScrollContentLocked,
             contentStyle,
           ]}
           contentInset={{ bottom: KEYBOARD_CLEARANCE }}
+          // Prevent iOS from adding a second top inset on top of paddingTop.
+          contentInsetAdjustmentBehavior="never"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
-          onScroll={onScroll}
-          refreshControl={refreshControl}
-          scrollEventThrottle={onScroll ? 16 : undefined}
-          scrollIndicatorInsets={{ bottom: KEYBOARD_CLEARANCE }}
+          onScroll={handleScroll}
+          overScrollMode={scrollEnabled ? 'auto' : 'never'}
+          refreshControl={refresh}
+          removeClippedSubviews={false}
+          scrollEnabled={scrollEnabled}
+          scrollEventThrottle={16}
+          scrollIndicatorInsets={{ bottom: KEYBOARD_CLEARANCE, top: headerHeight }}
+          showsVerticalScrollIndicator={false}
           style={styles.flex}
         >
           {children}
-        </ScrollView>
-        {overlay}
+        </Animated.ScrollView>
+
+        {/* Collapses on scroll-down; clamped so overscroll/pull-to-refresh leaves it sticky. */}
+        <Animated.View
+          pointerEvents="box-none"
+          style={[
+            styles.collapsingHeader,
+            { transform: [{ translateY: headerTranslateY }] },
+          ]}
+        >
+          {/* Behind header chrome so ride/create menus stay tappable. */}
+          {overlay}
+          <View
+            onLayout={(event) => {
+              const next = Math.ceil(event.nativeEvent.layout.height);
+              setHeaderHeight((current) => (current === next ? current : next));
+            }}
+            style={[styles.collapsingHeaderInner, { paddingTop: insets.top }]}
+          >
+            {header}
+          </View>
+        </Animated.View>
       </SafeAreaView>
     </KeyboardAvoidingView>
   );
@@ -291,12 +352,14 @@ export function Button({
   children,
   loading = false,
   variant = 'primary',
+  compact = false,
   disabled,
   ...pressableProps
 }: PressableProps & {
   children: ReactNode;
   loading?: boolean;
   variant?: 'primary' | 'secondary' | 'accent' | 'danger';
+  compact?: boolean;
 }) {
   const isDisabled = disabled || loading;
 
@@ -306,6 +369,7 @@ export function Button({
       disabled={isDisabled}
       style={({ pressed }) => [
         styles.button,
+        compact && styles.buttonCompact,
         variant === 'secondary' && styles.buttonSecondary,
         variant === 'accent' && styles.buttonAccent,
         variant === 'danger' && styles.buttonDanger,
@@ -320,6 +384,7 @@ export function Button({
         <Text
           style={[
             styles.buttonText,
+            compact && styles.buttonTextCompact,
             variant === 'secondary' && styles.buttonTextSecondary,
           ]}
         >
@@ -999,7 +1064,28 @@ export function FeedPost({
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1},
-  fixedHeader: { position: 'relative', zIndex: 20 },
+  collapsingHeader: {
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 20,
+  },
+  collapsingHeaderInner: {
+    backgroundColor: colors.background,
+    position: 'relative',
+    zIndex: 2,
+  },
+  /** Home feed: posts sit flush under the collapsing ride header. */
+  feedScrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+    paddingTop: 0,
+  },
+  feedScrollContentLocked: {
+    flexGrow: 1,
+  },
   screen: {
     flexGrow: 1,
     gap: spacing.md,
@@ -1266,6 +1352,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     ...shadows.card,
   },
+  buttonCompact: {
+    minHeight: 36,
+    paddingHorizontal: spacing.sm,
+  },
   buttonSecondary: {
     backgroundColor: colors.primarySoft,
     borderColor: 'transparent',
@@ -1274,6 +1364,7 @@ const styles = StyleSheet.create({
   buttonAccent: { backgroundColor: colors.accent },
   buttonDanger: { backgroundColor: colors.danger },
   buttonText: { color: colors.white, fontSize: 16, fontWeight: '800', letterSpacing: 0.1 },
+  buttonTextCompact: { fontSize: 13, fontWeight: '700' },
   buttonTextSecondary: { color: colors.primary },
   pressed: { opacity: 0.82 },
   disabled: { opacity: 0.55 },

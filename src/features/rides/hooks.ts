@@ -9,11 +9,14 @@ import {
 } from '@/utils/schedule';
 
 import {
+  acceptRideJoinRequest,
   archiveRide,
   createRide,
   deleteRide,
+  fetchMyPendingJoinRequests,
   fetchPostedTodayStatus,
   fetchRide,
+  fetchRideJoinRequests,
   fetchRideMembers,
   fetchRideSchedule,
   fetchWeekPostStatus,
@@ -21,6 +24,9 @@ import {
   joinRideByCode,
   leaveRide,
   previewRideByCode,
+  rejectRideJoinRequest,
+  removeRideMember,
+  requestJoinRideByCode,
   unarchiveRide,
   updateRide,
 } from './api';
@@ -45,6 +51,7 @@ function useInvalidateRideQueries(userId?: string | null) {
       invalidations.push(
         queryClient.invalidateQueries({ queryKey: queryKeys.ride(rideId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.rideMembers(rideId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.rideJoinRequests(rideId) }),
         queryClient.invalidateQueries({ queryKey: rideQueryKeys.schedule(rideId) }),
         queryClient.invalidateQueries({ queryKey: ['posted-status', rideId] }),
       );
@@ -77,6 +84,23 @@ export function useRideMembers(rideId?: string | null) {
     queryKey: queryKeys.rideMembers(rideId ?? 'missing'),
     queryFn: () => fetchRideMembers(rideId ?? ''),
     enabled: Boolean(rideId && user?.id),
+  });
+}
+
+export function useRideJoinRequests(rideId?: string | null, enabled = true) {
+  const { user } = useCurrentUser();
+  return useQuery({
+    queryKey: queryKeys.rideJoinRequests(rideId ?? 'missing'),
+    queryFn: () => fetchRideJoinRequests(rideId ?? ''),
+    enabled: Boolean(enabled && rideId && user?.id),
+  });
+}
+
+export function useMyPendingJoinRequests(userId?: string | null) {
+  return useQuery({
+    queryKey: queryKeys.myPendingJoinRequests(userId ?? 'signed-out'),
+    queryFn: () => fetchMyPendingJoinRequests(userId ?? ''),
+    enabled: Boolean(userId),
   });
 }
 
@@ -193,6 +217,47 @@ export function useJoinRideByCode(userId?: string | null) {
   });
 }
 
+export function useRequestJoinRideByCode(userId?: string | null) {
+  const queryClient = useQueryClient();
+  const invalidate = useInvalidateRideQueries(userId);
+  return useMutation({
+    mutationFn: requestJoinRideByCode,
+    onSuccess: async (ride) => {
+      await invalidate(ride.id);
+      if (userId) {
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.myPendingJoinRequests(userId),
+        });
+      }
+    },
+  });
+}
+
+export function useAcceptRideJoinRequest(userId?: string | null) {
+  const invalidate = useInvalidateRideQueries(userId);
+  return useMutation({
+    mutationFn: acceptRideJoinRequest,
+    onSuccess: (request) => invalidate(request.ride_id),
+  });
+}
+
+export function useRejectRideJoinRequest(userId?: string | null) {
+  const invalidate = useInvalidateRideQueries(userId);
+  return useMutation({
+    mutationFn: rejectRideJoinRequest,
+    onSuccess: (request) => invalidate(request.ride_id),
+  });
+}
+
+export function useRemoveRideMember(userId?: string | null) {
+  const invalidate = useInvalidateRideQueries(userId);
+  return useMutation({
+    mutationFn: ({ rideId, userId: memberId }: { rideId: string; userId: string }) =>
+      removeRideMember(rideId, memberId),
+    onSuccess: (_result, { rideId }) => invalidate(rideId),
+  });
+}
+
 export function useLeaveRide(userId?: string | null) {
   const queryClient = useQueryClient();
   const invalidate = useInvalidateRideQueries(userId);
@@ -203,6 +268,7 @@ export function useLeaveRide(userId?: string | null) {
       await invalidate(rideId);
       queryClient.removeQueries({ queryKey: queryKeys.ride(rideId) });
       queryClient.removeQueries({ queryKey: queryKeys.rideMembers(rideId) });
+      queryClient.removeQueries({ queryKey: queryKeys.rideJoinRequests(rideId) });
       queryClient.removeQueries({ queryKey: rideQueryKeys.schedule(rideId) });
     },
   });
@@ -218,6 +284,7 @@ export function useDeleteRide(userId?: string | null) {
       await invalidate(rideId);
       queryClient.removeQueries({ queryKey: queryKeys.ride(rideId) });
       queryClient.removeQueries({ queryKey: queryKeys.rideMembers(rideId) });
+      queryClient.removeQueries({ queryKey: queryKeys.rideJoinRequests(rideId) });
       queryClient.removeQueries({ queryKey: rideQueryKeys.schedule(rideId) });
     },
   });

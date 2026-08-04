@@ -36,7 +36,7 @@ import {
   type AppPermissionStatus,
 } from '@/features/permissions';
 import { ProfileDataError, useRemoveAvatar, useUpdateAvatar } from '@/features/profile';
-import { groupUserRides, useUserRides } from '@/features/rides';
+import { groupUserRides, useMyPendingJoinRequests, useUserRides } from '@/features/rides';
 import { haptics } from '@/lib/haptics';
 import { colors, radius, spacing } from '@/theme';
 
@@ -63,6 +63,7 @@ export default function ProfileScreen() {
   const { logout } = useAuth();
   const { user, profile, profileError, refreshProfile } = useCurrentUser();
   const rides = useUserRides(user?.id);
+  const pendingJoins = useMyPendingJoinRequests(user?.id);
   const notifications = useSoloRideNotifications(user?.id ?? null);
   const updateAvatar = useUpdateAvatar();
   const removeAvatar = useRemoveAvatar();
@@ -81,6 +82,7 @@ export default function ProfileScreen() {
   const previousPermission = useRef<SoloRidePermissionStatus | null>(null);
 
   const groups = useMemo(() => groupUserRides(rides.data ?? []), [rides.data]);
+  const pendingJoinCount = pendingJoins.data?.length ?? 0;
   const username = profile?.username ?? null;
   const avatarBusy = busy === 'avatar' || updateAvatar.isPending || removeAvatar.isPending;
   const cameraGranted = Boolean(cameraPermission?.granted);
@@ -413,9 +415,10 @@ export default function ProfileScreen() {
       groups.active.length ? `${groups.active.length} active` : null,
       groups.upcoming.length ? `${groups.upcoming.length} upcoming` : null,
       groups.archived.length ? `${groups.archived.length} archived` : null,
+      pendingJoinCount ? `${pendingJoinCount} pending` : null,
     ].filter(Boolean);
     return parts.length ? parts.join(' · ') : 'No Rides yet';
-  }, [groups]);
+  }, [groups, pendingJoinCount]);
 
   return (
     <ScrollScreen>
@@ -454,12 +457,26 @@ export default function ProfileScreen() {
         <Text style={styles.sectionLabel}>Your Rides</Text>
         <Pressable
           accessibilityHint="Opens a list of all your Rides"
+          accessibilityLabel={
+            pendingJoinCount > 0
+              ? `Your Rides, ${pendingJoinCount} pending join request${
+                  pendingJoinCount === 1 ? '' : 's'
+                }`
+              : 'Your Rides'
+          }
           accessibilityRole="button"
           onPress={openRidesList}
           style={({ pressed }) => [styles.row, pressed && styles.pressed]}
         >
           <View style={styles.rowIcon}>
             <Ionicons color={colors.primary} name="images-outline" size={20} />
+            {pendingJoinCount > 0 ? (
+              <View
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+                style={styles.rowDot}
+              />
+            ) : null}
           </View>
           <View style={styles.rowBody}>
             <Text style={styles.rowTitle}>
@@ -633,7 +650,22 @@ const styles = StyleSheet.create({
     borderRadius: radius.xs,
     height: 36,
     justifyContent: 'center',
+    position: 'relative',
     width: 36,
+  },
+  rowDot: {
+    backgroundColor: colors.accent,
+    borderRadius: radius.pill,
+    elevation: 4,
+    height: 8,
+    position: 'absolute',
+    right: -2,
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 5,
+    top: -2,
+    width: 8,
   },
   rowBody: { flex: 1, gap: 4 },
   rowTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },

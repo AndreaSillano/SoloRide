@@ -18,8 +18,14 @@ export default function AppLayout() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="publish" options={{ title: 'New photo' }} />
       <Stack.Screen name="your-rides" options={{ title: 'Your Rides' }} />
-      <Stack.Screen name="create-ride" options={{ title: 'Create Ride' }} />
-      <Stack.Screen name="join-ride" options={{ title: 'Join Ride' }} />
+      <Stack.Screen
+        name="create-ride"
+        options={{ animationTypeForReplace: 'pop', title: 'Create Ride' }}
+      />
+      <Stack.Screen
+        name="join-ride"
+        options={{ animationTypeForReplace: 'pop', title: 'Join Ride' }}
+      />
       <Stack.Screen name="ride/[rideId]/index" options={{ title: 'Ride' }} />
       <Stack.Screen name="ride/[rideId]/create-post" options={{ title: 'Add photo' }} />
       <Stack.Screen name="ride/[rideId]/settings" options={{ title: 'Ride settings' }} />
