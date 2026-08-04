@@ -13,6 +13,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
+
     "ios": {
       "icon": "./assets/SoloRideIcon.icon",
       "supportsTablet": true,
@@ -33,7 +34,7 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "versionCode": 5,
+      "versionCode": 6,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.ACCESS_COARSE_LOCATION",
@@ -49,6 +50,15 @@
     },
     "plugins": [
       "./plugins/withAndroidReleaseSigning",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 100,
+          "resizeMode": "contain",
+          "backgroundColor": "#000000"
+        }
+      ],
       "expo-router",
       [
         "expo-camera",

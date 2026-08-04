@@ -7,7 +7,14 @@
       "layers" : [
         {
           "image-name" : "Logonew-2.png",
-          "name" : "Logonew-2"
+          "name" : "Logonew-2",
+          "position" : {
+            "scale" : 0.9,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
         }
       ],
       "lighting" : "individual",
