@@ -102,7 +102,11 @@ export function mapRideError(error: unknown): RideProductError {
   if (text.includes('not found') || databaseCode === 'P0002') {
     return new RideProductError('not_found', undefined, { cause: error });
   }
-  if (text.includes('exclude existing posts') || text.includes('new weekdays')) {
+  if (
+    text.includes('exclude existing posts') ||
+    text.includes('new weekdays') ||
+    text.includes('new schedule would exclude')
+  ) {
     return new RideProductError(
       'validation',
       'Those posting days would leave out an existing permanent photo. Keep those days, or delete that photo first.',

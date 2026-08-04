@@ -269,6 +269,9 @@ async function loadNotificationPlan(userId: string) {
     endDate: ride.end_date,
     notificationTime: ride.notification_time,
     weekdays,
+    scheduleKind: ride.schedule_kind,
+    monthDay: ride.month_day,
+    weekdayOrdinal: ride.weekday_ordinal,
     strictSchedule: ride.strict_schedule,
     archived: ride.is_archived,
   }));

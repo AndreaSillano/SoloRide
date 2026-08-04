@@ -1,5 +1,11 @@
 export type RideRole = 'creator' | 'member';
 
+export type ScheduleKind =
+  | 'weekly'
+  | 'biweekly'
+  | 'monthly_date'
+  | 'monthly_weekday';
+
 export type Ride = {
   id: string;
   name: string;
@@ -10,6 +16,9 @@ export type Ride = {
   end_date: string | null;
   notification_time: string;
   strict_schedule: boolean;
+  schedule_kind: ScheduleKind;
+  month_day: number | null;
+  weekday_ordinal: number | null;
   is_archived: boolean;
   archived_at: string | null;
   created_at: string;
@@ -68,7 +77,10 @@ export type RideFormValues = {
   endDate: string;
   neverEnds: boolean;
   notificationTime: string;
+  scheduleKind: ScheduleKind;
   weekdays: number[];
+  monthDay: number;
+  weekdayOrdinal: number;
   strictSchedule: boolean;
 };
 

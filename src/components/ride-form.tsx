@@ -2,9 +2,14 @@ import DateTimePicker, {
   type DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Platform, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
-import type { RideFormValues } from '@/features/rides';
+import {
+  SCHEDULE_KIND_OPTIONS,
+  WEEKDAY_ORDINAL_OPTIONS,
+  type RideFormValues,
+  type ScheduleKind,
+} from '@/features/rides';
 import { haptics } from '@/lib/haptics';
 import { colors, radius, spacing } from '@/theme';
 
@@ -46,6 +51,12 @@ function formatDateLabel(value: string) {
   });
 }
 
+function topLevelKind(kind: ScheduleKind): 'weekly' | 'biweekly' | 'monthly' {
+  if (kind === 'biweekly') return 'biweekly';
+  if (kind === 'monthly_date' || kind === 'monthly_weekday') return 'monthly';
+  return 'weekly';
+}
+
 export function RideForm({
   value,
   onChange,
@@ -62,10 +73,35 @@ export function RideForm({
     nextValue: RideFormValues[Key],
   ) => onChange({ ...value, [key]: nextValue });
 
+  const setKind = (scheduleKind: ScheduleKind) => {
+    haptics.selection();
+    const todayWeekday = new Date().getDay();
+    const next: RideFormValues = {
+      ...value,
+      scheduleKind,
+      strictSchedule: scheduleKind === 'weekly' ? value.strictSchedule : true,
+    };
+    if (scheduleKind === 'monthly_date') {
+      next.weekdays = [];
+      if (!next.monthDay) next.monthDay = new Date().getDate();
+    } else if (scheduleKind === 'monthly_weekday') {
+      next.weekdays = value.weekdays.length === 1 ? value.weekdays : [todayWeekday];
+      if (![1, 2, 3, 4, -1].includes(next.weekdayOrdinal)) next.weekdayOrdinal = 1;
+    } else if (value.weekdays.length === 0) {
+      next.weekdays = [todayWeekday];
+    }
+    onChange(next);
+  };
+
   const pickerMode = picker === 'notificationTime' ? 'time' : 'date';
   const pickerValue = picker ? dateFromValue(value[picker], pickerMode) : new Date();
   const datePickerOpen = picker === 'startDate' || picker === 'endDate';
   const timePickerOpen = picker === 'notificationTime';
+  const rhythm = topLevelKind(value.scheduleKind);
+  const showWeekdays =
+    value.scheduleKind === 'weekly' ||
+    value.scheduleKind === 'biweekly' ||
+    value.scheduleKind === 'monthly_weekday';
 
   const togglePicker = (field: PickerField) =>
     setPicker((current) => (current === field ? null : field));
@@ -154,33 +190,207 @@ export function RideForm({
           value={value.neverEnds}
         />
       </View>
+
       <View style={styles.group}>
-        <Text style={styles.label}>Posting days</Text>
-        <WeekdaySelector
-          disabled={disabled}
-          onChange={(weekdays) => set('weekdays', weekdays)}
-          value={value.weekdays}
-        />
-        <View style={styles.scheduleMode}>
-          <View style={styles.scheduleModeText}>
-            <Text style={styles.label}>Strict schedule</Text>
-            <Body muted>
-              {value.strictSchedule
-                ? 'Members must post on every selected day.'
-                : 'Members can post on any one selected day each week.'}
-            </Body>
-          </View>
-          <Switch
-            disabled={disabled}
-            onValueChange={(strictSchedule) => {
-              haptics.selection();
-              set('strictSchedule', strictSchedule);
-            }}
-            trackColor={{ true: colors.primary }}
-            value={value.strictSchedule}
-          />
+        <Text style={styles.label}>Posting rhythm</Text>
+        <View style={styles.rhythmRow}>
+          {SCHEDULE_KIND_OPTIONS.map((option) => {
+            const selected =
+              option.value === 'monthly_date'
+                ? rhythm === 'monthly'
+                : value.scheduleKind === option.value;
+            return (
+              <Pressable
+                key={option.value}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: selected, disabled }}
+                disabled={disabled}
+                onPress={() => {
+                  if (option.value === 'monthly_date') {
+                    setKind(
+                      value.scheduleKind === 'monthly_weekday'
+                        ? 'monthly_weekday'
+                        : 'monthly_date',
+                    );
+                    return;
+                  }
+                  setKind(option.value);
+                }}
+                style={({ pressed }) => [
+                  styles.rhythmPill,
+                  selected && styles.rhythmPillSelected,
+                  pressed && styles.pressed,
+                  disabled && styles.disabled,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.rhythmPillText,
+                    selected && styles.rhythmPillTextSelected,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
+
+        {rhythm === 'monthly' ? (
+          <View style={styles.rhythmRow}>
+            <Pressable
+              accessibilityRole="radio"
+              accessibilityState={{
+                checked: value.scheduleKind === 'monthly_date',
+                disabled,
+              }}
+              disabled={disabled}
+              onPress={() => setKind('monthly_date')}
+              style={({ pressed }) => [
+                styles.rhythmPill,
+                value.scheduleKind === 'monthly_date' && styles.rhythmPillSelected,
+                pressed && styles.pressed,
+                disabled && styles.disabled,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.rhythmPillText,
+                  value.scheduleKind === 'monthly_date' && styles.rhythmPillTextSelected,
+                ]}
+              >
+                Day of month
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="radio"
+              accessibilityState={{
+                checked: value.scheduleKind === 'monthly_weekday',
+                disabled,
+              }}
+              disabled={disabled}
+              onPress={() => setKind('monthly_weekday')}
+              style={({ pressed }) => [
+                styles.rhythmPill,
+                value.scheduleKind === 'monthly_weekday' && styles.rhythmPillSelected,
+                pressed && styles.pressed,
+                disabled && styles.disabled,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.rhythmPillText,
+                  value.scheduleKind === 'monthly_weekday' &&
+                    styles.rhythmPillTextSelected,
+                ]}
+              >
+                Weekday of month
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {value.scheduleKind === 'monthly_date' ? (
+          <View style={styles.monthDayRow}>
+            <Text style={styles.monthDayLabel}>On day</Text>
+            <TextInput
+              editable={!disabled}
+              keyboardType="number-pad"
+              maxLength={2}
+              onChangeText={(text) => {
+                const digits = text.replace(/\D/g, '');
+                if (!digits) {
+                  set('monthDay', 1);
+                  return;
+                }
+                const next = Math.min(31, Math.max(1, Number(digits)));
+                set('monthDay', next);
+              }}
+              style={styles.monthDayInput}
+              value={String(value.monthDay || 1)}
+            />
+            <Body muted>Short months use the last day.</Body>
+          </View>
+        ) : null}
+
+        {value.scheduleKind === 'monthly_weekday' ? (
+          <View style={styles.ordinalRow}>
+            {WEEKDAY_ORDINAL_OPTIONS.map((option) => {
+              const selected = value.weekdayOrdinal === option.value;
+              return (
+                <Pressable
+                  key={option.value}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selected, disabled }}
+                  disabled={disabled}
+                  onPress={() => {
+                    haptics.selection();
+                    set('weekdayOrdinal', option.value);
+                  }}
+                  style={({ pressed }) => [
+                    styles.ordinalPill,
+                    selected && styles.rhythmPillSelected,
+                    pressed && styles.pressed,
+                    disabled && styles.disabled,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.rhythmPillText,
+                      selected && styles.rhythmPillTextSelected,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+
+        {showWeekdays ? (
+          <>
+            <Text style={styles.subLabel}>
+              {value.scheduleKind === 'monthly_weekday'
+                ? 'Weekday'
+                : value.scheduleKind === 'biweekly'
+                  ? 'Weekdays (every other week)'
+                  : 'Weekdays'}
+            </Text>
+            <WeekdaySelector
+              disabled={disabled}
+              onChange={(weekdays) => set('weekdays', weekdays)}
+              single={value.scheduleKind === 'monthly_weekday'}
+              value={value.weekdays}
+            />
+          </>
+        ) : null}
+
+        {value.scheduleKind === 'weekly' ? (
+          <View style={styles.scheduleMode}>
+            <View style={styles.scheduleModeText}>
+              <Text style={styles.label}>Strict schedule</Text>
+              <Body muted>
+                {value.strictSchedule
+                  ? 'Members must post on every selected day.'
+                  : 'Members can post on any one selected day each week.'}
+              </Body>
+            </View>
+            <Switch
+              disabled={disabled}
+              onValueChange={(strictSchedule) => {
+                haptics.selection();
+                set('strictSchedule', strictSchedule);
+              }}
+              trackColor={{ true: colors.primary }}
+              value={value.strictSchedule}
+            />
+          </View>
+        ) : value.scheduleKind === 'biweekly' ? (
+          <Body muted>Posts are due on the selected days every other week, from the start week.</Body>
+        ) : null}
       </View>
+
       <PickerButton
         active={timePickerOpen}
         disabled={disabled}
@@ -232,6 +442,7 @@ const styles = StyleSheet.create({
   scheduleMode: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
   scheduleModeText: { flex: 1, gap: spacing.xxs },
   label: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  subLabel: { color: colors.muted, fontSize: 13, fontWeight: '600' },
   description: { minHeight: 92, paddingTop: spacing.md, textAlignVertical: 'top' },
   countedField: { gap: spacing.xs },
   charCount: {
@@ -241,6 +452,51 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   dateRow: { flexDirection: 'row', gap: spacing.sm },
+  rhythmRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  rhythmPill: {
+    backgroundColor: colors.backgroundRaised,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+  },
+  rhythmPillSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  rhythmPillText: { color: colors.text, fontSize: 12, fontWeight: '600' },
+  rhythmPillTextSelected: { color: colors.surface },
+  ordinalRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  ordinalPill: {
+    backgroundColor: colors.backgroundRaised,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    minWidth: 44,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+  },
+  monthDayRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  monthDayLabel: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  monthDayInput: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+    minWidth: 52,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    textAlign: 'center',
+  },
   pickerButtonWrap: { flex: 1, gap: spacing.xs },
   pickerButton: {
     backgroundColor: colors.surface,

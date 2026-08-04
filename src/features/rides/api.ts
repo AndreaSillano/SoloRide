@@ -18,12 +18,14 @@ import type {
   RidePreviewStatus,
   RideRole,
   RideScheduleDay,
+  ScheduleKind,
   UpdateRideInput,
   UserRide,
 } from './types';
+import { isScheduleKind } from '../../utils/schedule';
 
 const RIDE_COLUMNS =
-  'id,name,description,code,creator_id,start_date,end_date,notification_time,strict_schedule,is_archived,archived_at,created_at,updated_at';
+  'id,name,description,code,creator_id,start_date,end_date,notification_time,strict_schedule,schedule_kind,month_day,weekday_ordinal,is_archived,archived_at,created_at,updated_at';
 
 type UserRideRecord = {
   role: RideRole;
@@ -44,6 +46,19 @@ type PreviewRecord = Partial<RidePreviewDetails> & {
 
 function firstOrSelf<T>(value: T | T[]) {
   return Array.isArray(value) ? value[0] ?? null : value;
+}
+
+function normalizeRide(ride: Ride): Ride {
+  const scheduleKind: ScheduleKind = isScheduleKind(ride.schedule_kind)
+    ? ride.schedule_kind
+    : 'weekly';
+  return {
+    ...ride,
+    schedule_kind: scheduleKind,
+    month_day: ride.month_day ?? null,
+    weekday_ordinal: ride.weekday_ordinal ?? null,
+    strict_schedule: ride.strict_schedule ?? true,
+  };
 }
 
 function parseForm(input: CreateRideInput) {
@@ -69,14 +84,23 @@ function localDateParam() {
 
 function mutationParams(input: CreateRideInput) {
   const values = parseForm(input);
+  const weekdays =
+    values.scheduleKind === 'monthly_date'
+      ? []
+      : [...values.weekdays].sort((a, b) => a - b);
   return {
     p_name: values.name,
     p_description: values.description || null,
     p_start_date: values.startDate,
     p_end_date: values.neverEnds ? null : values.endDate,
     p_notification_time: values.notificationTime,
-    p_weekdays: [...values.weekdays].sort((a, b) => a - b),
-    p_strict_schedule: values.strictSchedule,
+    p_weekdays: weekdays,
+    p_strict_schedule:
+      values.scheduleKind === 'weekly' ? values.strictSchedule : true,
+    p_schedule_kind: values.scheduleKind,
+    p_month_day: values.scheduleKind === 'monthly_date' ? values.monthDay : null,
+    p_weekday_ordinal:
+      values.scheduleKind === 'monthly_weekday' ? values.weekdayOrdinal : null,
   };
 }
 
@@ -159,7 +183,7 @@ function toPreview(data: unknown): RidePreview {
 function unwrapRide(data: unknown): Ride {
   const ride = firstOrSelf(data as Ride | Ride[] | null);
   if (!ride) throw new RideProductError('not_found');
-  return ride;
+  return normalizeRide(ride);
 }
 
 export async function fetchUserRides(userId: string): Promise<UserRide[]> {
@@ -175,7 +199,9 @@ export async function fetchUserRides(userId: string): Promise<UserRide[]> {
   const records = (data ?? []) as unknown as UserRideRecord[];
   return records.flatMap((record) => {
     const ride = record.ride ? firstOrSelf(record.ride) : null;
-    return ride ? [{ ...ride, current_user_role: record.role }] : [];
+    return ride
+      ? [{ ...normalizeRide(ride), current_user_role: record.role }]
+      : [];
   });
 }
 

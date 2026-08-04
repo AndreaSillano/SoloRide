@@ -37,7 +37,10 @@ const INITIAL_VALUES: RideFormValues = {
   endDate: format(addDays(today, 30), 'yyyy-MM-dd'),
   neverEnds: false,
   notificationTime: '09:00',
+  scheduleKind: 'weekly',
   weekdays: [today.getDay()],
+  monthDay: today.getDate(),
+  weekdayOrdinal: 1,
   strictSchedule: true,
 };
 

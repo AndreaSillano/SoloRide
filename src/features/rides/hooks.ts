@@ -6,7 +6,10 @@ import {
   getNextScheduledDate,
   getScheduledDateForPost,
   getWeekRange,
+  usesFlexibleWeek,
 } from '@/utils/schedule';
+
+import { rideToWindow } from './schedule-window';
 
 import {
   acceptRideJoinRequest,
@@ -158,33 +161,31 @@ export function usePostingStatus(rideId?: string | null, userId?: string | null)
   const ride = useRide(rideId);
   const schedule = useRideSchedule(rideId);
   const weekdays = schedule.data?.map((day) => day.weekday) ?? [];
-  const rideWindow = ride.data
-    ? { startDate: ride.data.start_date, endDate: ride.data.end_date, weekdays }
-    : null;
+  const rideWindow = ride.data ? rideToWindow(ride.data, weekdays) : null;
   const scheduledToday = rideWindow ? getScheduledDateForPost(rideWindow) : null;
   const posted = usePostedTodayStatus(rideId, userId, scheduledToday);
   const nextDate = rideWindow && schedule.data ? getNextScheduledDate(rideWindow) : null;
   const isArchived = Boolean(ride.data?.is_archived);
-  const strictSchedule = ride.data?.strict_schedule ?? true;
+  const flexibleWeek = Boolean(rideWindow && usesFlexibleWeek(rideWindow));
   const week = getWeekRange();
   const weeklyPosted = useWeekPostStatus(
     rideId,
     userId,
     week.start,
     week.end,
-    Boolean(ride.data && !strictSchedule),
+    Boolean(ride.data && flexibleWeek),
   );
-  const weekSatisfied = !strictSchedule && Boolean(weeklyPosted.data?.hasPosted);
+  const weekSatisfied = flexibleWeek && Boolean(weeklyPosted.data?.hasPosted);
 
   return {
-    isPending: ride.isPending || schedule.isPending || (!strictSchedule && weeklyPosted.isPending),
+    isPending: ride.isPending || schedule.isPending || (flexibleWeek && weeklyPosted.isPending),
     isArchived,
     scheduledToday,
     nextDate,
     canPost: Boolean(scheduledToday && !isArchived && !posted.data?.hasPosted),
     hasPosted: Boolean(posted.data?.hasPosted),
     postId: posted.data?.postId ?? null,
-    isRequiredToday: Boolean(scheduledToday && (strictSchedule || !weekSatisfied)),
+    isRequiredToday: Boolean(scheduledToday && (!flexibleWeek || !weekSatisfied)),
     weekSatisfied,
   };
 }

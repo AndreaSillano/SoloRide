@@ -2,9 +2,16 @@ import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 
 import { supabase } from '@/lib/supabase';
-import { DATE_FORMAT, getScheduledDateForPost, getWeekRange, isRideActive } from '@/utils/schedule';
+import {
+  DATE_FORMAT,
+  getScheduledDateForPost,
+  getWeekRange,
+  isRideActive,
+  usesFlexibleWeek,
+} from '@/utils/schedule';
 
 import { fetchRideSchedule, fetchUserRides } from './api';
+import { rideToWindow } from './schedule-window';
 import type { UserRide } from './types';
 
 export const MAX_ACTIVE_TEMPORARY_POSTS = 3;
@@ -70,17 +77,16 @@ async function loadRidesDueToday(userId: string): Promise<{
 
   for (const ride of rides) {
     const weekdays = weekdaysByRide.get(ride.id) ?? [];
-    const scheduledToday = getScheduledDateForPost({
-      startDate: ride.start_date,
-      endDate: ride.end_date,
-      weekdays,
-    });
+    const scheduledToday = getScheduledDateForPost(rideToWindow(ride, weekdays));
     if (!scheduledToday) continue;
     if (postedToday.has(ride.id)) continue;
 
-    const strictSchedule = ride.strict_schedule ?? true;
-    const weekSatisfied = !strictSchedule && weekSatisfiedRides.has(ride.id);
-    const isRequiredToday = strictSchedule || !weekSatisfied;
+    const flexibleWeek = usesFlexibleWeek({
+      scheduleKind: ride.schedule_kind,
+      strictSchedule: ride.strict_schedule,
+    });
+    const weekSatisfied = flexibleWeek && weekSatisfiedRides.has(ride.id);
+    const isRequiredToday = !flexibleWeek || !weekSatisfied;
     if (isRequiredToday) needsRequiredPhoto = true;
 
     postableRides.push({
@@ -160,17 +166,14 @@ async function loadCameraRides(userId: string): Promise<CameraRide[]> {
 
   return rides.map((ride) => {
     const weekdays = weekdaysByRide.get(ride.id) ?? [];
-    const scheduledToday = getScheduledDateForPost({
-      startDate: ride.start_date,
-      endDate: ride.end_date,
-      weekdays,
-    });
+    const rideWindow = rideToWindow(ride, weekdays);
+    const scheduledToday = getScheduledDateForPost(rideWindow);
     const canPublishPermanent = Boolean(
       scheduledToday && !postedPermanentToday.has(ride.id),
     );
-    const strictSchedule = ride.strict_schedule ?? true;
-    const weekSatisfied = !strictSchedule && weekSatisfiedRides.has(ride.id);
-    const isRequiredToday = Boolean(scheduledToday && (strictSchedule || !weekSatisfied));
+    const flexibleWeek = usesFlexibleWeek(rideWindow);
+    const weekSatisfied = flexibleWeek && weekSatisfiedRides.has(ride.id);
+    const isRequiredToday = Boolean(scheduledToday && (!flexibleWeek || !weekSatisfied));
     const activeTemporaryCount = activeTempCounts.get(ride.id) ?? 0;
 
     return {

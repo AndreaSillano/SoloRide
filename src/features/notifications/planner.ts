@@ -1,3 +1,6 @@
+import type { ScheduleKind } from '../../utils/schedule';
+import { matchesSchedule, usesFlexibleWeek } from '../../utils/schedule';
+
 export const DEFAULT_HORIZON_WEEKS = 8;
 export const MAX_SOLO_RIDE_NOTIFICATIONS = 56;
 export const DEFAULT_REMINDER_DELAY_MINUTES = 4 * 60;
@@ -18,6 +21,10 @@ export type NotificationRide = {
   endDate: string | null;
   weekdays: readonly number[];
   notificationTime: string;
+  /** Defaults to weekly for Rides created before schedule kinds existed. */
+  scheduleKind?: ScheduleKind;
+  monthDay?: number | null;
+  weekdayOrdinal?: number | null;
   /** Defaults to strict for Rides created before schedule modes existed. */
   strictSchedule?: boolean;
   archived?: boolean;
@@ -173,7 +180,15 @@ export function isSoloRideNotificationData(
 }
 
 export function getRideDatesInRange(
-  ride: Pick<NotificationRide, 'startDate' | 'endDate' | 'weekdays'>,
+  ride: Pick<
+    NotificationRide,
+    | 'startDate'
+    | 'endDate'
+    | 'weekdays'
+    | 'scheduleKind'
+    | 'monthDay'
+    | 'weekdayOrdinal'
+  >,
   from: Date,
   through: Date,
 ): string[] {
@@ -182,16 +197,24 @@ export function getRideDatesInRange(
   const rideEnd = ride.endDate ? parseLocalDate(ride.endDate) : null;
   if (rideEnd && rideStart.getTime() > rideEnd.getTime()) return [];
 
-  const weekdays = new Set(ride.weekdays.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6));
   let cursor = startOfLocalDay(from);
   const throughDay = startOfLocalDay(through);
   const last =
     rideEnd && rideEnd.getTime() < throughDay.getTime() ? rideEnd : throughDay;
   if (cursor.getTime() < rideStart.getTime()) cursor = rideStart;
 
+  const window = {
+    startDate: ride.startDate,
+    endDate: ride.endDate,
+    weekdays: [...ride.weekdays],
+    scheduleKind: ride.scheduleKind,
+    monthDay: ride.monthDay,
+    weekdayOrdinal: ride.weekdayOrdinal,
+  };
+
   const dates: string[] = [];
   while (cursor.getTime() <= last.getTime()) {
-    if (weekdays.has(cursor.getDay())) dates.push(formatLocalDate(cursor));
+    if (matchesSchedule(window, cursor)) dates.push(formatLocalDate(cursor));
     cursor = addLocalDays(cursor, 1);
   }
   return dates;
@@ -237,8 +260,10 @@ export function planSoloRideNotifications({
       const localDate = parseLocalDate(scheduledDate);
       if (!localDate) continue;
       const flexibleWeekSatisfied =
-        ride.strictSchedule === false &&
-        satisfiedFlexibleWeeks.has(`${ride.id}:${weekStartForDate(localDate)}`);
+        usesFlexibleWeek({
+          scheduleKind: ride.scheduleKind,
+          strictSchedule: ride.strictSchedule,
+        }) && satisfiedFlexibleWeeks.has(`${ride.id}:${weekStartForDate(localDate)}`);
       if (flexibleWeekSatisfied) continue;
 
       const triggerAt = atLocalTime(localDate, time.hour, time.minute);

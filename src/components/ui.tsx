@@ -426,22 +426,29 @@ export function StatePanel({
   secondaryActionLabel?: string;
   onSecondaryAction?: () => void;
 }) {
+  const hasPrimary = Boolean(actionLabel && onAction);
+  const hasSecondary = Boolean(secondaryActionLabel && onSecondaryAction);
+
   return (
-    <Card>
+    <View style={styles.statePanel}>
       {loading ? <ActivityIndicator color={colors.primary} size="large" /> : null}
       {title ? <Text style={styles.stateTitle}>{title}</Text> : null}
-      <Body muted>{message}</Body>
-      {actionLabel && onAction ? (
-        <Button variant="secondary" onPress={onAction}>
-          {actionLabel}
-        </Button>
+      <Text style={[styles.body, styles.muted, styles.stateMessage]}>{message}</Text>
+      {hasPrimary || hasSecondary ? (
+        <View style={styles.stateActions}>
+          {hasPrimary ? (
+            <Button variant="secondary" onPress={onAction}>
+              {actionLabel}
+            </Button>
+          ) : null}
+          {hasSecondary ? (
+            <Button variant="secondary" onPress={onSecondaryAction}>
+              {secondaryActionLabel}
+            </Button>
+          ) : null}
+        </View>
       ) : null}
-      {secondaryActionLabel && onSecondaryAction ? (
-        <Button variant="secondary" onPress={onSecondaryAction}>
-          {secondaryActionLabel}
-        </Button>
-      ) : null}
-    </Card>
+    </View>
   );
 }
 
@@ -509,10 +516,13 @@ export function WeekdaySelector({
   value,
   onChange,
   disabled = false,
+  single = false,
 }: {
   value: readonly number[];
   onChange: (days: number[]) => void;
   disabled?: boolean;
+  /** When true, tapping a day replaces the selection (monthly weekday). */
+  single?: boolean;
 }) {
   return (
     <View style={styles.weekdays}>
@@ -521,16 +531,20 @@ export function WeekdaySelector({
         return (
           <Pressable
             key={day}
-            accessibilityRole="checkbox"
+            accessibilityRole={single ? 'radio' : 'checkbox'}
             accessibilityState={{ checked: selected, disabled }}
             disabled={disabled}
-            onPress={() =>
+            onPress={() => {
+              if (single) {
+                onChange([day]);
+                return;
+              }
               onChange(
                 selected
                   ? value.filter((candidate) => candidate !== day)
                   : [...value, day].sort((a, b) => a - b),
-              )
-            }
+              );
+            }}
             style={({ pressed }) => [
               styles.weekday,
               selected && styles.weekdaySelected,
@@ -1158,7 +1172,7 @@ const styles = StyleSheet.create({
   centered: { justifyContent: 'center' },
   card: {
     backgroundColor: colors.surface,
-    borderColor: 'rgba(222, 217, 205, 0.75)',
+    borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     gap: spacing.md,
@@ -1213,7 +1227,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: spacing.md,
   },
+  statePanel: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
   stateTitle: { color: colors.text, fontSize: 19, fontWeight: '800', textAlign: 'center' },
+  stateMessage: { textAlign: 'center' },
+  stateActions: {
+    alignSelf: 'stretch',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
   skeleton: {
     backgroundColor: colors.surfaceMuted,
     borderRadius: radius.xs,
@@ -1247,19 +1272,26 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     width: '55%',
   },
-  weekdays: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  weekdays: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    justifyContent: 'space-between',
+  },
   weekday: {
     alignItems: 'center',
     backgroundColor: colors.backgroundRaised,
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
-    minWidth: 43,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 11,
+    flexGrow: 1,
+    flexBasis: '12%',
+    minWidth: 36,
+    paddingHorizontal: 4,
+    paddingVertical: 8,
   },
   weekdaySelected: { backgroundColor: colors.primary, borderColor: colors.primary },
-  weekdayText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  weekdayText: { color: colors.text, fontSize: 11, fontWeight: '600' },
   weekdayTextSelected: { color: colors.surface },
   photo: { backgroundColor: colors.surfaceMuted, width: '100%' },
   photoLoading: { alignItems: 'center', justifyContent: 'center' },

@@ -1,6 +1,8 @@
 import {
   addDays,
+  differenceInCalendarDays,
   format,
+  getDaysInMonth,
   isAfter,
   isBefore,
   isSameDay,
@@ -12,11 +14,34 @@ import {
 
 export const DATE_FORMAT = 'yyyy-MM-dd';
 
+export const SCHEDULE_KINDS = [
+  'weekly',
+  'biweekly',
+  'monthly_date',
+  'monthly_weekday',
+] as const;
+
+export type ScheduleKind = (typeof SCHEDULE_KINDS)[number];
+
+/** 1–4 = nth weekday of the month; -1 = last. */
+export type WeekdayOrdinal = 1 | 2 | 3 | 4 | -1;
+
 export type RideWindow = {
   startDate: string;
   endDate: string | null;
   weekdays: number[];
+  /** Defaults to weekly for Rides created before schedule kinds existed. */
+  scheduleKind?: ScheduleKind;
+  monthDay?: number | null;
+  weekdayOrdinal?: number | null;
 };
+
+export function isScheduleKind(value: unknown): value is ScheduleKind {
+  return (
+    typeof value === 'string' &&
+    (SCHEDULE_KINDS as readonly string[]).includes(value)
+  );
+}
 
 /** Returns the Sunday-Saturday window containing `date`, formatted for queries. */
 export function getWeekRange(date = new Date()) {
@@ -44,6 +69,57 @@ export function isRideUpcoming(startDate: string, archived: boolean, now = new D
   return !archived && isBefore(startOfDay(now), parseISO(startDate));
 }
 
+function sundayOfWeek(date: Date) {
+  return startOfWeek(startOfDay(date), { weekStartsOn: 0 });
+}
+
+/** Biweekly phase is anchored to the Sunday week that contains `startDate`. */
+function isBiweeklyOn(startDate: string, date: Date) {
+  const anchorSunday = sundayOfWeek(parseISO(startDate));
+  const dateSunday = sundayOfWeek(date);
+  const weeks = Math.floor(differenceInCalendarDays(dateSunday, anchorSunday) / 7);
+  return weeks >= 0 && weeks % 2 === 0;
+}
+
+function matchesMonthDay(date: Date, monthDay: number) {
+  const day = Math.min(Math.max(Math.floor(monthDay), 1), 31);
+  const daysInMonth = getDaysInMonth(date);
+  const target = Math.min(day, daysInMonth);
+  return date.getDate() === target;
+}
+
+function matchesMonthWeekday(date: Date, weekday: number, ordinal: number) {
+  if (date.getDay() !== weekday) return false;
+  const occurrence = Math.floor((date.getDate() - 1) / 7) + 1;
+  if (ordinal === -1) {
+    const nextWeek = addDays(date, 7);
+    return nextWeek.getMonth() !== date.getMonth();
+  }
+  return occurrence === ordinal;
+}
+
+/** Kind-specific match only (caller owns ride window bounds). */
+export function matchesSchedule(ride: RideWindow, date: Date) {
+  const day = startOfDay(date);
+  const kind = ride.scheduleKind ?? 'weekly';
+
+  switch (kind) {
+    case 'weekly':
+      return ride.weekdays.includes(day.getDay());
+    case 'biweekly':
+      return ride.weekdays.includes(day.getDay()) && isBiweeklyOn(ride.startDate, day);
+    case 'monthly_date':
+      return matchesMonthDay(day, ride.monthDay ?? 1);
+    case 'monthly_weekday': {
+      const weekday = ride.weekdays[0];
+      if (weekday == null) return false;
+      return matchesMonthWeekday(day, weekday, ride.weekdayOrdinal ?? 1);
+    }
+    default:
+      return false;
+  }
+}
+
 export function getScheduledDates(
   ride: RideWindow,
   from: Date,
@@ -60,7 +136,7 @@ export function getScheduledDates(
   if (isBefore(cursor, rideStart)) cursor = rideStart;
 
   while (!isAfter(cursor, finalDate) && result.length < limit) {
-    if (ride.weekdays.includes(cursor.getDay())) {
+    if (matchesSchedule(ride, cursor)) {
       result.push(format(cursor, DATE_FORMAT));
     }
     cursor = addDays(cursor, 1);
@@ -79,10 +155,15 @@ export function getScheduledDateForPost(ride: RideWindow, now = new Date()) {
   const started = !isBefore(today, parseISO(ride.startDate));
   const notEnded = !ride.endDate || !isAfter(today, parseISO(ride.endDate));
 
-  if (!started || !notEnded || !ride.weekdays.includes(today.getDay())) return null;
+  if (!started || !notEnded || !matchesSchedule(ride, today)) return null;
   return format(today, DATE_FORMAT);
 }
 
 export function isToday(date: string, now = new Date()) {
   return isSameDay(parseISO(date), now);
+}
+
+/** Flexible “one post per week” only applies to weekly rhythms. */
+export function usesFlexibleWeek(ride: Pick<RideWindow, 'scheduleKind'> & { strictSchedule?: boolean }) {
+  return (ride.scheduleKind ?? 'weekly') === 'weekly' && ride.strictSchedule === false;
 }

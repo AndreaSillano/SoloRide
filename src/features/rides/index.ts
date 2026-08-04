@@ -5,5 +5,6 @@ export * from './errors';
 export * from './grouping';
 export * from './hooks';
 export * from './schema';
+export * from './schedule-window';
 export * from './selection';
 export * from './types';

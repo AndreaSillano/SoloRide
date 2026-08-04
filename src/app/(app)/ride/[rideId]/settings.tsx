@@ -28,7 +28,6 @@ import {
   CenteredBusy,
   ErrorBanner,
   StatePanel,
-  WeekdaySelector,
 } from '@/components/ui';
 import {
   requestNotificationRefresh,
@@ -36,6 +35,9 @@ import {
 } from '@/features/notifications';
 import {
   MAX_RIDE_MEMBERS,
+  formatScheduleDays,
+  formatScheduleMode,
+  formatScheduleRhythm,
   rideFormSchema,
   useAcceptRideJoinRequest,
   useArchiveRide,
@@ -67,7 +69,10 @@ const EMPTY_FORM: RideFormValues = {
   endDate: '',
   neverEnds: false,
   notificationTime: '09:00',
+  scheduleKind: 'weekly',
   weekdays: [],
+  monthDay: 1,
+  weekdayOrdinal: 1,
   strictSchedule: true,
 };
 
@@ -93,7 +98,10 @@ function formFromRide(ride: Ride, schedule: RideScheduleDay[]): RideFormValues {
     endDate: ride.end_date ?? '',
     neverEnds: ride.end_date === null,
     notificationTime: ride.notification_time.slice(0, 5),
+    scheduleKind: ride.schedule_kind ?? 'weekly',
     weekdays: schedule.map((day) => day.weekday),
+    monthDay: ride.month_day ?? 1,
+    weekdayOrdinal: ride.weekday_ordinal ?? 1,
     strictSchedule: ride.strict_schedule,
   };
 }
@@ -166,6 +174,7 @@ function SettingsShell({
           contentContainerStyle={[
             styles.scrollContent,
             { paddingBottom: spacing.xl + insets.bottom },
+            header == null && styles.scrollContentCentered,
           ]}
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
@@ -519,11 +528,7 @@ export default function RideSettingsScreen() {
     return (
       <SettingsShell header={null} refreshControl={refreshControl}>
         <StatePanel
-          actionLabel="Try again"
           message="Ride settings could not load."
-          onAction={() => {
-            void onRefresh();
-          }}
           title="Settings unavailable"
         />
       </SettingsShell>
@@ -680,14 +685,27 @@ export default function RideSettingsScreen() {
                   value={formatNotificationTime(ride.data.notification_time)}
                 />
                 <MetaRow
-                  label="Mode"
-                  value={ride.data.strict_schedule ? 'Strict' : 'Flexible'}
-                  last
+                  label="Rhythm"
+                  value={formatScheduleRhythm({
+                    scheduleKind: ride.data.schedule_kind ?? 'weekly',
+                  })}
                 />
-              </View>
-              <View style={styles.daysBlock}>
-                <Text style={styles.metaLabel}>Posting days</Text>
-                <WeekdaySelector disabled onChange={() => undefined} value={scheduledWeekdays} />
+                {(ride.data.schedule_kind ?? 'weekly') === 'weekly' ? (
+                  <MetaRow
+                    label="Mode"
+                    value={formatScheduleMode(ride.data.strict_schedule)}
+                  />
+                ) : null}
+                <MetaRow
+                  label="Days"
+                  last
+                  value={formatScheduleDays({
+                    scheduleKind: ride.data.schedule_kind ?? 'weekly',
+                    weekdays: scheduledWeekdays,
+                    monthDay: ride.data.month_day,
+                    weekdayOrdinal: ride.data.weekday_ordinal,
+                  })}
+                />
               </View>
               {!owner ? (
                 <Body muted>Only the owner can edit schedule and details.</Body>
@@ -890,6 +908,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
   },
+  scrollContentCentered: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
   tabBar: {
     borderBottomColor: colors.border,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -1018,9 +1040,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 21,
     textAlign: 'right',
-  },
-  daysBlock: {
-    gap: spacing.xs,
   },
   personRow: {
     alignItems: 'center',
