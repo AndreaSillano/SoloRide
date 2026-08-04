@@ -2,20 +2,23 @@
   "fill" : "automatic",
   "groups" : [
     {
-      "blur-material" : null,
-      "hidden" : false,
       "layers" : [
         {
-          "image-name" : "Logonew-2.png",
-          "name" : "Logonew-2"
+          "image-name" : "icon 5.png",
+          "name" : "icon 5",
+          "position" : {
+            "scale" : 1.3,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
         }
       ],
-      "lighting" : "individual",
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.5
       },
-      "specular" : true,
       "translucency" : {
         "enabled" : true,
         "value" : 0.5
