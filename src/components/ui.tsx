@@ -4,7 +4,9 @@ import { Image as ExpoImage } from 'expo-image';
 import type { PropsWithChildren, ReactElement, ReactNode, RefObject } from 'react';
 import { cloneElement, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActionSheetIOS,
   ActivityIndicator,
+  Alert,
   Animated,
   Image,
   KeyboardAvoidingView,
@@ -631,6 +633,28 @@ function formatRemainingTime(expiresAt: string | null | undefined) {
   return `${remainingHours}h left`;
 }
 
+/** Native overflow menu for a post (Report stub — wire later). */
+function openPostOverflowMenu() {
+  if (Platform.OS === 'ios') {
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        options: ['Cancel', 'Report'],
+        cancelButtonIndex: 0,
+        destructiveButtonIndex: 1,
+      },
+      () => {
+        // Report action intentionally not implemented yet.
+      },
+    );
+    return;
+  }
+
+  Alert.alert('', '', [
+    { text: 'Report', style: 'destructive', onPress: () => {} },
+    { text: 'Cancel', style: 'cancel' },
+  ]);
+}
+
 export function FeedPost({
   post,
   onPress,
@@ -921,6 +945,30 @@ export function FeedPost({
     </View>
   );
 
+  const overflowButton = (
+    <Pressable
+      accessibilityLabel="Post options"
+      accessibilityRole="button"
+      hitSlop={10}
+      onPress={openPostOverflowMenu}
+      style={({ pressed }) => [styles.feedOverflow, pressed && styles.pressed]}
+    >
+      <Ionicons color={colors.muted} name="ellipsis-horizontal" size={18} />
+    </Pressable>
+  );
+
+  const overflowButtonOnDark = (
+    <Pressable
+      accessibilityLabel="Post options"
+      accessibilityRole="button"
+      hitSlop={10}
+      onPress={openPostOverflowMenu}
+      style={({ pressed }) => [styles.feedOverflow, pressed && styles.pressed]}
+    >
+      <Ionicons color={colors.white} name="ellipsis-horizontal" size={18} />
+    </Pressable>
+  );
+
   if (post.is_temporary) {
     return (
       <View style={styles.feedItemTemporary}>
@@ -950,6 +998,7 @@ export function FeedPost({
                   </Text>
                 ) : null}
               </View>
+              {overflowButtonOnDark}
               {isOwnPost && onDelete ? (
                 <Pressable
                   accessibilityLabel="Delete photo"
@@ -1013,7 +1062,10 @@ export function FeedPost({
             </Text>
           ) : null}
         </View>
-        <Text style={styles.feedTime}>{formatFeedTimestamp(post.created_at)}</Text>
+        <View style={styles.feedTimeRow}>
+          <Text style={styles.feedTime}>{formatFeedTimestamp(post.created_at)}</Text>
+          {overflowButton}
+        </View>
         {isOwnPost && onDelete ? (
           <Pressable
             accessibilityLabel="Delete photo"
@@ -1243,7 +1295,13 @@ const styles = StyleSheet.create({
   feedHeaderText: { flex: 1, gap: 1 },
   feedAuthor: { color: colors.text, fontSize: 14, fontWeight: '700' },
   feedLocation: { color: colors.muted, fontSize: 12 },
+  feedTimeRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xxs,
+  },
   feedTime: { color: colors.muted, fontSize: 12 },
+  feedOverflow: { paddingHorizontal: 2, paddingVertical: 2 },
   feedDelete: { paddingLeft: spacing.xs },
   feedImage: { aspectRatio: POST_IMAGE_ASPECT_RATIO },
   feedPhotoBlock: {
