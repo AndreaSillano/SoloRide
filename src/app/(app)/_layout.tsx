@@ -28,7 +28,10 @@ export default function AppLayout() {
       />
       <Stack.Screen name="ride/[rideId]/index" options={{ title: 'Ride' }} />
       <Stack.Screen name="ride/[rideId]/create-post" options={{ title: 'Add photo' }} />
-      <Stack.Screen name="ride/[rideId]/settings" options={{ title: 'Ride settings' }} />
+      <Stack.Screen
+        name="ride/[rideId]/settings"
+        options={{ animationTypeForReplace: 'pop', title: 'Ride settings' }}
+      />
     </Stack>
   );
 }

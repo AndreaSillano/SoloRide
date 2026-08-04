@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -16,7 +16,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCurrentUser } from '@/auth/auth-context';
 import { RideCard } from '@/components/ride-card';
 import { RideOverview } from '@/components/ride-overview';
-import { FixedHeaderScreen, Body, Button, Heading, RideFeedSkeleton, StatePanel } from '@/components/ui';
+import { FixedHeaderScreen, Body, Button, Heading, RideFeedSkeleton } from '@/components/ui';
+import { useCommentDeepLink, clearCommentDeepLink } from '@/features/notifications/deep-link';
 import { requestNotificationRefresh } from '@/features/notifications';
 import { POST_CAPTURE_TAB_BAR_CLEARANCE, useRideFeed } from '@/features/posts';
 import {
@@ -33,21 +34,22 @@ type MenuState = 'switcher' | 'create' | null;
 
 export default function HomeScreen() {
   const { user } = useCurrentUser();
-  const { selectRideId: pendingSelectRideId, notificationOpenId, openCommentsPostId } =
-    useLocalSearchParams<{
-      selectRideId?: string;
-      notificationOpenId?: string;
-      openCommentsPostId?: string;
-    }>();
+  const { selectRideId: pendingSelectRideId, notificationOpenId } = useLocalSearchParams<{
+    selectRideId?: string;
+    notificationOpenId?: string;
+  }>();
   const queryClient = useQueryClient();
   const rides = useUserRides(user?.id);
   const { selectedRideId, selectRide, isReady } = useSelectedRide(rides.data, user?.id);
   const feed = useRideFeed(selectedRideId);
   const due = useRidesDueToday(user?.id);
+  const commentDeepLink = useCommentDeepLink();
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [menu, setMenu] = useState<MenuState>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const feedScrollRef = useRef<ScrollView>(null);
+  const feedScrollOffsetRef = useRef(0);
   const selectedNeedsPublication = Boolean(
     due.data?.postableRides.some(
       (ride) => ride.id === selectedRideId && ride.isRequiredToday,
@@ -61,6 +63,16 @@ export default function HomeScreen() {
     if (pendingSelectRideId) selectRide(pendingSelectRideId);
   }, [pendingSelectRideId, notificationOpenId, selectRide]);
 
+  // Comment/mention pushes queue an in-memory deep link (URL params are flaky
+  // under Native Tabs). Select that Ride, then open comments once it matches.
+  useEffect(() => {
+    if (commentDeepLink) selectRide(commentDeepLink.rideId);
+  }, [commentDeepLink, selectRide]);
+
+  const openCommentsForSelectedRide =
+    commentDeepLink && selectedRideId === commentDeepLink.rideId
+      ? commentDeepLink.postId
+      : null;
   const groups = groupUserRides(rides.data ?? []);
   const selectedRide = rides.data?.find((ride) => ride.id === selectedRideId) ?? null;
   const hasRides = Boolean(rides.data?.length);
@@ -93,6 +105,20 @@ export default function HomeScreen() {
     closeMenu();
     router.push('/join-ride');
   };
+
+  const scrollPostIntoView = useCallback((postView: View) => {
+    const scroll = feedScrollRef.current;
+    if (!scroll) return;
+    // ScrollView host views expose measureInWindow at runtime; typings omit it.
+    const scrollView = scroll as unknown as View;
+    postView.measureInWindow((_x, postY) => {
+      scrollView.measureInWindow((_sx, scrollY) => {
+        const nextY = Math.max(0, feedScrollOffsetRef.current + (postY - scrollY));
+        scroll.scrollTo({ y: nextY, animated: true });
+        feedScrollOffsetRef.current = nextY;
+      });
+    });
+  }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -276,6 +302,7 @@ export default function HomeScreen() {
       }}
       header={header}
       onScroll={(event) => {
+        feedScrollOffsetRef.current = event.nativeEvent.contentOffset.y;
         if (menu) closeMenu();
         if (selectedRideId) feed.loadMoreIfNearEnd(event);
       }}
@@ -299,16 +326,22 @@ export default function HomeScreen() {
         ) : undefined
       }
       scrollEnabled={scrollEnabled}
+      scrollRef={feedScrollRef}
     >
       {rides.isPending || !isReady ? (
         <RideFeedSkeleton />
       ) : rides.isError ? (
-        <StatePanel
-          actionLabel="Try again"
-          message={rides.error instanceof Error ? rides.error.message : 'Your Rides could not load.'}
-          onAction={() => void rides.refetch()}
-          title="Couldn’t load Rides"
-        />
+        <View style={styles.emptyState}>
+          <Heading>Couldn’t load Rides</Heading>
+          <Body muted>
+            {rides.error instanceof Error
+              ? rides.error.message
+              : 'Your Rides could not load.'}
+          </Body>
+          <View style={styles.emptyActions}>
+            <Button onPress={() => void rides.refetch()}>Try again</Button>
+          </View>
+        </View>
       ) : !hasRides ? (
         <View style={styles.emptyState}>
           <Heading>Your first Ride starts here</Heading>
@@ -323,20 +356,17 @@ export default function HomeScreen() {
           </View>
         </View>
       ) : selectedRideId ? (
-        refreshing ? (
+        refreshing && !commentDeepLink ? (
           <RideFeedSkeleton />
         ) : (
           <RideOverview
-            commentsOpenKey={
-              typeof notificationOpenId === 'string' ? notificationOpenId : null
-            }
+            commentsOpenKey={commentDeepLink?.key ?? null}
             compact
             onCommentsOpened={() => {
-              router.setParams({ openCommentsPostId: undefined });
+              clearCommentDeepLink();
             }}
-            openCommentsPostId={
-              typeof openCommentsPostId === 'string' ? openCommentsPostId : null
-            }
+            onScrollPostIntoView={scrollPostIntoView}
+            openCommentsPostId={openCommentsForSelectedRide}
             rideId={selectedRideId}
           />
         )

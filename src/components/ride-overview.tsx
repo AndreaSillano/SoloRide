@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Share, StyleSheet, Text, View } from 'react-native';
 
 import { useCurrentUser } from '@/auth/auth-context';
@@ -28,12 +28,16 @@ import {
   StatePanel,
 } from './ui';
 
+/** Keep re-aligning while images finish laying out after a deep link. */
+const SCROLL_TARGET_MS = 1400;
+
 export function RideOverview({
   rideId,
   compact = false,
   openCommentsPostId,
   commentsOpenKey,
   onCommentsOpened,
+  onScrollPostIntoView,
 }: {
   rideId: string;
   /** Hides the posted-today status line, Members section, and Photos label,
@@ -44,6 +48,8 @@ export function RideOverview({
   /** Changes when a push asks to open comments again for the same post. */
   commentsOpenKey?: string | null;
   onCommentsOpened?: () => void;
+  /** Scrolls the home feed so this post’s view sits at the top of the viewport. */
+  onScrollPostIntoView?: (postView: View) => void;
 }) {
   const { user } = useCurrentUser();
   const ride = useRide(rideId);
@@ -57,12 +63,62 @@ export function RideOverview({
   const [reactionsPostId, setReactionsPostId] = useState<string | null>(null);
   const [pickerPostId, setPickerPostId] = useState<string | null>(null);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+  const [scrollTargetPostId, setScrollTargetPostId] = useState<string | null>(null);
+  const scrollUntilRef = useRef(0);
+  const postViewRefs = useRef(new Map<string, View | null>());
 
   useEffect(() => {
     if (!openCommentsPostId) return;
     setActivePostId(openCommentsPostId);
-    onCommentsOpened?.();
+    setScrollTargetPostId(openCommentsPostId);
+    scrollUntilRef.current = Date.now() + SCROLL_TARGET_MS;
+    // Clear after paint so the modal is committed before the deep link is dropped.
+    const timer = setTimeout(() => onCommentsOpened?.(), 0);
+    const clearScroll = setTimeout(() => setScrollTargetPostId(null), SCROLL_TARGET_MS);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(clearScroll);
+    };
   }, [openCommentsPostId, commentsOpenKey, onCommentsOpened]);
+
+  // Older posts may sit past the first page — keep loading until we find it.
+  useEffect(() => {
+    if (!scrollTargetPostId || feed.isPending || feed.isFetchingNextPage) return;
+    if (feed.data.some((post) => post.id === scrollTargetPostId)) return;
+    if (feed.hasNextPage) {
+      void feed.fetchNextPage();
+      return;
+    }
+    setScrollTargetPostId(null);
+  }, [
+    scrollTargetPostId,
+    feed.data,
+    feed.hasNextPage,
+    feed.isFetchingNextPage,
+    feed.isPending,
+    feed.fetchNextPage,
+  ]);
+
+  const tryScrollToPost = (postId: string) => {
+    if (!onScrollPostIntoView) return;
+    if (scrollTargetPostId !== postId) return;
+    if (Date.now() > scrollUntilRef.current) return;
+    const node = postViewRefs.current.get(postId);
+    if (!node) return;
+    onScrollPostIntoView(node);
+  };
+
+  // onLayout may not re-fire for an already-mounted post — retry while targeting.
+  useEffect(() => {
+    if (!scrollTargetPostId) return;
+    tryScrollToPost(scrollTargetPostId);
+    const timers = [50, 300, 700].map((ms) =>
+      setTimeout(() => tryScrollToPost(scrollTargetPostId), ms),
+    );
+    return () => timers.forEach(clearTimeout);
+    // Intentionally omit tryScrollToPost — it closes over the latest target/refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollTargetPostId, feed.data, onScrollPostIntoView]);
 
   const confirmDeletePost = (postId: string) => {
     Alert.alert('Delete photo?', 'This permanently removes the photo and its comments.', [
@@ -254,20 +310,28 @@ export function RideOverview({
       ) : feed.data.length ? (
         <View style={styles.feed}>
           {feed.data.map((post) => (
-            <FeedPost
+            <View
               key={post.id}
-              deleting={deletingPostId === post.id}
-              isOwnPost={post.user_id === user?.id}
-              onCloseReactionPicker={() => setPickerPostId(null)}
-              onDelete={() => confirmDeletePost(post.id)}
-              onDoubleTapImage={() => handleDoubleTapImage(post.id)}
-              onPress={() => setActivePostId(post.id)}
-              onPressReactions={() => setReactionsPostId(post.id)}
-              onSelectReaction={(score) => handleSelectReaction(post.id, score)}
-              ownReactionScore={getOwnReactionScore(post, user?.id)}
-              post={post}
-              reactionPickerVisible={pickerPostId === post.id}
-            />
+              onLayout={() => tryScrollToPost(post.id)}
+              ref={(node) => {
+                if (node) postViewRefs.current.set(post.id, node);
+                else postViewRefs.current.delete(post.id);
+              }}
+            >
+              <FeedPost
+                deleting={deletingPostId === post.id}
+                isOwnPost={post.user_id === user?.id}
+                onCloseReactionPicker={() => setPickerPostId(null)}
+                onDelete={() => confirmDeletePost(post.id)}
+                onDoubleTapImage={() => handleDoubleTapImage(post.id)}
+                onPress={() => setActivePostId(post.id)}
+                onPressReactions={() => setReactionsPostId(post.id)}
+                onSelectReaction={(score) => handleSelectReaction(post.id, score)}
+                ownReactionScore={getOwnReactionScore(post, user?.id)}
+                post={post}
+                reactionPickerVisible={pickerPostId === post.id}
+              />
+            </View>
           ))}
           {feed.isFetchingNextPage ? (
             <View style={styles.loadMore}>

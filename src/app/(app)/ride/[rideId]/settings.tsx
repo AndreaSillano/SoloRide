@@ -365,7 +365,8 @@ export default function RideSettingsScreen() {
 
   const exitRide = async () => {
     await notifications.onRideLeftOrArchived(rideId).catch(() => []);
-    router.replace('/');
+    // Pop back to Home (right → left), same as leaving create/join.
+    router.dismissTo('/');
   };
 
   const confirmLeave = () => {
@@ -610,6 +611,8 @@ export default function RideSettingsScreen() {
             </Pressable>
           </View>
 
+          <View style={styles.dottedDivider} />
+
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionLabel}>
               {editing
@@ -691,6 +694,8 @@ export default function RideSettingsScreen() {
               ) : null}
             </>
           )}
+
+          <View style={styles.dottedDivider} />
 
           <View style={styles.dangerZone}>
             <Text style={styles.dangerZoneTitle}>Danger zone</Text>
@@ -1041,20 +1046,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   dangerZone: {
-    backgroundColor: colors.dangerSurface,
-    borderColor: colors.danger,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
     gap: spacing.sm,
-    marginTop: spacing.md,
-    padding: spacing.md,
   },
   dangerZoneTitle: {
     color: colors.danger,
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '700',
     letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
   dangerActions: { gap: spacing.sm },
+  dottedDivider: {
+    borderColor: colors.border,
+    borderStyle: 'dotted',
+    borderTopWidth: 1,
+    marginVertical: spacing.xs,
+  },
 });

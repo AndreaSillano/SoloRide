@@ -1,14 +1,15 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useNavigation } from '@react-navigation/native';
 import { addDays, format } from 'date-fns';
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { Share } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Share, StyleSheet, Text, View } from 'react-native';
 
 import { useCurrentUser } from '@/auth/auth-context';
 import { RideForm } from '@/components/ride-form';
 import {
   Body,
   Button,
-  Card,
   ErrorBanner,
   Heading,
   ScrollScreen,
@@ -26,6 +27,7 @@ import {
   type RideFormValues,
 } from '@/features/rides';
 import { haptics } from '@/lib/haptics';
+import { colors, radius, spacing } from '@/theme';
 
 const today = new Date();
 const INITIAL_VALUES: RideFormValues = {
@@ -39,12 +41,40 @@ const INITIAL_VALUES: RideFormValues = {
   strictSchedule: true,
 };
 
+function goHomeWithRide(rideId: string) {
+  router.dismissTo({
+    pathname: '/',
+    params: {
+      selectRideId: rideId,
+      notificationOpenId: String(Date.now()),
+    },
+  });
+}
+
 export default function CreateRideScreen() {
+  const navigation = useNavigation();
   const { user } = useCurrentUser();
   const createRide = useCreateRide(user?.id);
   const [values, setValues] = useState<RideFormValues>(INITIAL_VALUES);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<Ride | null>(null);
+  const allowLeaveRef = useRef(false);
+
+  const openCreatedRide = (rideId: string) => {
+    allowLeaveRef.current = true;
+    goHomeWithRide(rideId);
+  };
+
+  // After create, back / swipe-dismiss should land on Home with the new Ride selected.
+  useEffect(() => {
+    if (!created) return;
+    const sub = navigation.addListener('beforeRemove', (event) => {
+      if (allowLeaveRef.current) return;
+      event.preventDefault();
+      openCreatedRide(created.id);
+    });
+    return sub;
+  }, [created, navigation]);
 
   const submit = async () => {
     const parsed = rideFormSchema.safeParse(values);
@@ -67,11 +97,21 @@ export default function CreateRideScreen() {
   if (created) {
     return (
       <ScrollScreen>
-        <Heading>Your Ride is ready</Heading>
-        <Body muted>Share this private code only with people you want in the Ride.</Body>
-        <Card>
-          <Body>{created.name}</Body>
-          <Heading>{created.code}</Heading>
+        <View style={styles.successBlock}>
+          <View style={styles.successIcon}>
+            <Ionicons color={colors.accent} name="checkmark-circle" size={56} />
+          </View>
+          <Text style={styles.successTitle}>Your Ride is ready</Text>
+          <Text style={styles.rideName} numberOfLines={2}>
+            {created.name}
+          </Text>
+          <Text style={styles.codeLabel}>Invite code</Text>
+          <Text style={styles.code}>{created.code}</Text>
+          <Text style={styles.successCopy}>
+            Share this private code only with people you want in the Ride.
+          </Text>
+        </View>
+        <View style={styles.actions}>
           <Button
             onPress={() =>
               void Share.share({
@@ -81,21 +121,10 @@ export default function CreateRideScreen() {
           >
             Share code
           </Button>
-        </Card>
-        <Button
-          variant="secondary"
-          onPress={() => {
-            router.dismissTo({
-              pathname: '/',
-              params: {
-                selectRideId: created.id,
-                notificationOpenId: String(Date.now()),
-              },
-            });
-          }}
-        >
-          Open Ride
-        </Button>
+          <Button variant="secondary" onPress={() => openCreatedRide(created.id)}>
+            Open Ride
+          </Button>
+        </View>
       </ScrollScreen>
     );
   }
@@ -115,3 +144,58 @@ export default function CreateRideScreen() {
     </ScrollScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  successBlock: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingBottom: spacing.md,
+    paddingTop: spacing.xl,
+  },
+  successIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius.pill,
+    height: 88,
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+    width: 88,
+  },
+  successTitle: {
+    color: colors.text,
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+    textAlign: 'center',
+  },
+  rideName: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    textAlign: 'center',
+  },
+  codeLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    marginTop: spacing.xs,
+    textTransform: 'uppercase',
+  },
+  code: {
+    color: colors.accent,
+    fontSize: 34,
+    fontWeight: '800',
+    letterSpacing: 2,
+    textAlign: 'center',
+  },
+  successCopy: {
+    color: colors.muted,
+    fontSize: 15,
+    fontWeight: '500',
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  actions: { gap: spacing.sm },
+});

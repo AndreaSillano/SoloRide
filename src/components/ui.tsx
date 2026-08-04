@@ -1,7 +1,7 @@
 import { useHeaderHeight } from '@react-navigation/elements';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image as ExpoImage } from 'expo-image';
-import type { PropsWithChildren, ReactElement, ReactNode } from 'react';
+import type { PropsWithChildren, ReactElement, ReactNode, RefObject } from 'react';
 import { cloneElement, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -163,6 +163,7 @@ export function FixedHeaderScreen({
   refreshControl,
   onScroll,
   scrollEnabled = true,
+  scrollRef,
 }: PropsWithChildren<{
   header: ReactNode;
   contentStyle?: StyleProp<import('react-native').ViewStyle>;
@@ -173,6 +174,8 @@ export function FixedHeaderScreen({
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   /** When false, locks the posts layer (empty states). */
   scrollEnabled?: boolean;
+  /** Lets parents scroll to a feed post (e.g. comment push deep link). */
+  scrollRef?: RefObject<ScrollView | null>;
 }>) {
   const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -212,6 +215,7 @@ export function FixedHeaderScreen({
       <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
         {/* Posts-only scroll: pull-to-refresh moves this layer; header stays put. */}
         <Animated.ScrollView
+          ref={scrollRef}
           automaticallyAdjustContentInsets={false}
           bounces={scrollEnabled}
           contentContainerStyle={[
@@ -1072,7 +1076,6 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
   collapsingHeaderInner: {
-    backgroundColor: colors.background,
     position: 'relative',
     zIndex: 2,
   },

@@ -1,7 +1,7 @@
 export const colors = {
   // Chalk studio — clean photo-app light
-  background: '#F3F5F8',
-  backgroundRaised: '#FAFBFC',
+  background: '#FFFFFF',
+  backgroundRaised: '#FFFFFF',
   surface: '#FFFFFF',
   surfaceMuted: '#E4E9F0',
   text: '#12151A',

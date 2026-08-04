@@ -15,12 +15,14 @@ import { format } from 'date-fns';
 
 import { isSoloRideNotificationData, type NotificationRide, type PostedRideDate } from './planner';
 import { getNotificationsEnabled } from './preferences';
+import { queueCommentDeepLink } from './deep-link';
 import {
   isJoinRequestDecisionNotificationData,
   isJoinRequestNotificationData,
   isSocialNotificationData,
   registerExpoPushToken,
   unregisterExpoPushToken,
+  type SocialNotificationData,
 } from './push';
 import {
   cancelSoloRideNotifications,
@@ -88,10 +90,18 @@ function invalidateQueriesForNotification(queryClient: QueryClient, data: unknow
     if (data.kind === 'social_comment' || data.kind === 'social_mention') {
       void queryClient.invalidateQueries({ queryKey: queryKeys.comments(data.postId) });
     }
+  } else {
+    const social = parseSocialNotificationData(data);
+    if (social) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.post(social.postId) });
+      if (social.kind === 'social_comment' || social.kind === 'social_mention') {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.comments(social.postId) });
+      }
+    }
   }
 }
 
-function openHome(rideId?: string, openCommentsPostId?: string) {
+function openHome(rideId?: string) {
   try {
     if (rideId) {
       // notificationOpenId forces Home to re-apply selectRide even when the
@@ -101,7 +111,6 @@ function openHome(rideId?: string, openCommentsPostId?: string) {
         params: {
           selectRideId: rideId,
           notificationOpenId: String(Date.now()),
-          ...(openCommentsPostId ? { openCommentsPostId } : {}),
         },
       });
       return;
@@ -137,38 +146,100 @@ function openRideSettingsPeople(rideId: string) {
   }
 }
 
+/** Flatten Expo / OS notification payloads into the custom `data` object. */
+function notificationData(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw;
+  const record = raw as Record<string, unknown>;
+  if (record.kind != null || record.rideId != null || record.postId != null) {
+    return raw;
+  }
+  if (record.data && typeof record.data === 'object') return record.data;
+  if (typeof record.body === 'string') {
+    try {
+      const parsed = JSON.parse(record.body) as unknown;
+      if (parsed && typeof parsed === 'object') return parsed;
+    } catch {
+      // ignore
+    }
+  }
+  return raw;
+}
+
+/** Coerce Expo push `data` fields (sometimes non-strings) into SocialNotificationData. */
+function parseSocialNotificationData(value: unknown): SocialNotificationData | null {
+  const payload = notificationData(value);
+  if (!payload || typeof payload !== 'object') return null;
+  const data = payload as Record<string, unknown>;
+  const kind = String(data.kind ?? '');
+  const rideId = String(data.rideId ?? '');
+  const postId = String(data.postId ?? '');
+  if (
+    kind !== 'social_post' &&
+    kind !== 'social_comment' &&
+    kind !== 'social_mention'
+  ) {
+    return null;
+  }
+  if (!rideId || !postId) return null;
+  const commentId =
+    data.commentId == null || data.commentId === ''
+      ? undefined
+      : String(data.commentId);
+  const isTemporary =
+    typeof data.isTemporary === 'boolean'
+      ? data.isTemporary
+      : data.isTemporary === 'true'
+        ? true
+        : data.isTemporary === 'false'
+          ? false
+          : undefined;
+  return { kind, rideId, postId, commentId, isTemporary };
+}
+
 /** Open the matching Ride when possible; otherwise land on home. */
 function openFromNotificationData(
   queryClient: QueryClient,
   data: unknown,
   userId?: string,
 ) {
-  invalidateQueriesForNotification(queryClient, data);
+  const payload = notificationData(data);
+  invalidateQueriesForNotification(queryClient, payload);
 
-  if (isJoinRequestNotificationData(data)) {
-    persistSelectedRide(userId, data.rideId);
-    openRideSettingsPeople(data.rideId);
+  if (isJoinRequestNotificationData(payload)) {
+    persistSelectedRide(userId, payload.rideId);
+    openRideSettingsPeople(payload.rideId);
     return;
   }
 
-  if (isJoinRequestDecisionNotificationData(data)) {
-    if (data.status === 'accepted') {
-      persistSelectedRide(userId, data.rideId);
-      openHome(data.rideId);
+  if (isJoinRequestDecisionNotificationData(payload)) {
+    if (payload.status === 'accepted') {
+      persistSelectedRide(userId, payload.rideId);
+      openHome(payload.rideId);
     } else {
       openHome();
     }
     return;
   }
 
-  const rideId = rideIdFromNotificationData(data);
-  if (rideId) persistSelectedRide(userId, rideId);
-  const openCommentsPostId =
-    isSocialNotificationData(data) &&
-    (data.kind === 'social_comment' || data.kind === 'social_mention')
-      ? data.postId
-      : undefined;
-  openHome(rideId, openCommentsPostId);
+  const social = parseSocialNotificationData(payload);
+  if (social) {
+    persistSelectedRide(userId, social.rideId);
+    if (social.kind === 'social_comment' || social.kind === 'social_mention') {
+      // In-memory queue — Native Tabs often drop search params on `/`.
+      queueCommentDeepLink({ rideId: social.rideId, postId: social.postId });
+    }
+    openHome(social.rideId);
+    return;
+  }
+
+  const rideId = rideIdFromNotificationData(payload);
+  if (rideId) {
+    persistSelectedRide(userId, rideId);
+    openHome(rideId);
+    return;
+  }
+
+  openHome();
 }
 
 async function loadNotificationPlan(userId: string) {
