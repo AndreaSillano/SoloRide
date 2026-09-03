@@ -1,26 +1,26 @@
 export const colors = {
-  // Chalk studio — clean photo-app light
-  background: '#FFFFFF',
-  backgroundRaised: '#FFFFFF',
+  // Rhodeo sunrise — sampled from the coral/orange/gold app icon.
+  background: '#FFF9F3',
+  backgroundRaised: '#FFFCF8',
   surface: '#FFFFFF',
-  surfaceMuted: '#E4E9F0',
-  text: '#12151A',
-  textSoft: '#3E4651',
-  muted: '#7B8491',
-  // Near-black ink for primary actions
-  primary: '#1A1F2B',
-  primaryPressed: '#0F1218',
-  primarySoft: '#E6E9EF',
-  // Electric cobalt — athletic signal
-  accent: '#2F6BFF',
-  accentPressed: '#1F54DB',
-  accentSoft: '#DCE7FF',
-  border: '#D5DBE4',
-  borderStrong: '#AAB4C2',
-  danger: '#D63B3B',
-  dangerSurface: '#FCE8E8',
+  surfaceMuted: '#FCEAE1',
+  text: '#3B2527',
+  textSoft: '#684649',
+  muted: '#8E6664',
+  // Deep burnt orange stays legible when used for icons and solid controls.
+  primary: '#C6532F',
+  primaryPressed: '#A94126',
+  primarySoft: '#FFE5D6',
+  accent: '#B94C2F',
+  accentPressed: '#9F3D26',
+  accentSoft: '#FFF0CC',
+  highlight: '#F6C658',
+  border: '#F0D7CC',
+  borderStrong: '#DDAF9E',
+  danger: '#B72E43',
+  dangerSurface: '#FFE7EA',
   white: '#FFFFFF',
-  shadow: '#10141C',
+  shadow: '#77333B',
 } as const;
 
 export const spacing = {
@@ -44,15 +44,15 @@ export const radius = {
 export const shadows = {
   card: {
     shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.07,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 7 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
     elevation: 2,
   },
   floating: {
     shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.14,
+    shadowOpacity: 0.16,
     shadowRadius: 24,
     elevation: 5,
   },

@@ -254,7 +254,7 @@ export default function AuthLandingScreen() {
           <Image
             accessibilityLabel="Rhodeo"
             resizeMode="contain"
-            source={require('../../../assets/iconRide.png')}
+            source={require('../../../assets/Rhodeo-icon.png')}
             style={styles.logo}
           />
         </View>
@@ -338,7 +338,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(213, 219, 228, 0.9)',
+    borderColor: colors.border,
     padding: spacing.lg,
     gap: spacing.md,
     ...shadows.card,
@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
   // Auth button
   authButton: {
     alignItems: 'center',
-    backgroundColor: colors.accent,
+    backgroundColor: colors.primary,
     borderRadius: radius.sm,
     justifyContent: 'center',
     minHeight: 54,

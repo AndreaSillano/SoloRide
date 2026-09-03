@@ -283,7 +283,7 @@ export function AppMark({ compact = false }: { compact?: boolean }) {
     <View style={[styles.appMark, { borderRadius: corner, height: size, width: size }]}>
       <Image
         accessibilityLabel="Rhodeo"
-        source={require('../../assets/icon.png')}
+        source={require('../../assets/Rhodeo-icon.png')}
         style={{ borderRadius: corner, height: size, width: size }}
       />
     </View>
@@ -385,7 +385,9 @@ export function Button({
       {...pressableProps}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'secondary' ? colors.primary : colors.white} />
+        <ActivityIndicator
+          color={variant === 'secondary' ? colors.primary : colors.white}
+        />
       ) : (
         <Text
           style={[

@@ -1,6 +1,5 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { Platform } from 'react-native';
-import { Badge, Icon, Label, NativeTabs, VectorIcon } from 'expo-router/unstable-native-tabs';
+import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
 import { useCurrentUser } from '@/auth/auth-context';
 import { useRidesDueToday } from '@/features/rides';
@@ -17,7 +16,7 @@ export default function TabLayout() {
       // native translucent/Liquid Glass material. Android has no equivalent
       // glass material, so give it a solid, on-brand background instead.
       backgroundColor={Platform.OS === 'android' ? colors.surface : undefined}
-      badgeBackgroundColor={colors.accent}
+      badgeBackgroundColor={colors.primary}
       iconColor={{ default: colors.muted, selected: colors.primary }}
       labelStyle={{
         default: { color: colors.muted, fontSize: 11, fontWeight: '700' },
@@ -26,38 +25,29 @@ export default function TabLayout() {
       tintColor={colors.primary}
     >
       <NativeTabs.Trigger
+        disableAutomaticContentInsets
         name="index"
-        // Keep our ScrollView's contentInsetAdjustmentBehavior="never" so the
-        // collapsing header paddingTop isn't doubled by UIKit's automatic inset.
-        options={{ overrideScrollViewContentInsetAdjustmentBehavior: false }}
       >
-        <Label>Rides</Label>
-        <Icon
-          androidSrc={{
-            default: <VectorIcon family={Ionicons} name="images-outline" />,
-            selected: <VectorIcon family={Ionicons} name="images" />,
-          }}
+        <NativeTabs.Trigger.Label>Rides</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          md="photo_library"
           sf={{ default: 'photo.stack', selected: 'photo.stack.fill' }}
         />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="camera">
-        <Label>Camera</Label>
-        <Icon
-          androidSrc={{
-            default: <VectorIcon family={Ionicons} name="camera-outline" />,
-            selected: <VectorIcon family={Ionicons} name="camera" />,
-          }}
+      <NativeTabs.Trigger disableAutomaticContentInsets name="camera">
+        <NativeTabs.Trigger.Label>Camera</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          md="photo_camera"
           sf={{ default: 'camera', selected: 'camera.fill' }}
         />
-        <Badge hidden={!needsRequiredPhoto}>{needsRequiredPhoto ? '!' : undefined}</Badge>
+        <NativeTabs.Trigger.Badge hidden={!needsRequiredPhoto}>
+          {needsRequiredPhoto ? '!' : undefined}
+        </NativeTabs.Trigger.Badge>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
-        <Label>Profile</Label>
-        <Icon
-          androidSrc={{
-            default: <VectorIcon family={Ionicons} name="person-outline" />,
-            selected: <VectorIcon family={Ionicons} name="person" />,
-          }}
+        <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          md="person"
           sf={{ default: 'person', selected: 'person.fill' }}
         />
       </NativeTabs.Trigger>

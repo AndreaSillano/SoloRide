@@ -5,13 +5,15 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "soloride",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/Rhodeo-icon.png",
     "userInterfaceStyle": "light",
+    "backgroundColor": "#fff9f3",
+    "primaryColor": "#c6532f",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#ef8a4c"
     },
 
     "ios": {
@@ -31,7 +33,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#eb9151"
+        "backgroundColor": "#ef8a4c"
       },
       "edgeToEdgeEnabled": true,
       "versionCode": 6,
@@ -45,7 +47,7 @@
       "googleServicesFile": "./google-services.json"
     },
     "web": {
-      "favicon": "./assets/favicon.png",
+      "favicon": "./assets/Rhodeo-icon.png",
       "bundler": "metro"
     },
     "plugins": [
@@ -56,7 +58,7 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 100,
           "resizeMode": "contain",
-          "backgroundColor": "#eb9151"
+          "backgroundColor": "#ef8a4c"
         }
       ],
       "expo-router",

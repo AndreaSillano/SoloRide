@@ -46,6 +46,14 @@ const MAX_FONT = 72;
 const DEFAULT_FONT = 32;
 const DEFAULT_STROKE = 5;
 
+const absoluteFill = {
+  bottom: 0,
+  left: 0,
+  position: 'absolute',
+  right: 0,
+  top: 0,
+} as const;
+
 type Tool = 'text' | 'pen';
 type Point = { x: number; y: number };
 type Stroke = { color: string; width: number; points: Point[] };
@@ -670,7 +678,7 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
 const styles = StyleSheet.create({
   root: { backgroundColor: '#000', flex: 1 },
   canvasStage: {
-    ...StyleSheet.absoluteFillObject,
+    ...absoluteFill,
   },
   frameSlot: {
     alignItems: 'center',
@@ -683,7 +691,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   dismissOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...absoluteFill,
     zIndex: 2,
   },
   topBar: {
@@ -792,7 +800,7 @@ const styles = StyleSheet.create({
     width: 36,
   },
   colorPreviewRing: {
-    ...StyleSheet.absoluteFillObject,
+    ...absoluteFill,
     borderRadius: radius.pill,
     borderWidth: 2,
   },

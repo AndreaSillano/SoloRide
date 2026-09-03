@@ -45,6 +45,14 @@ import { colors, radius, spacing } from '@/theme';
 type Facing = 'back' | 'front';
 type CaptureMode = 'photo' | 'video';
 
+const absoluteFill = {
+  bottom: 0,
+  left: 0,
+  position: 'absolute',
+  right: 0,
+  top: 0,
+} as const;
+
 /** Native tab bar sits above the home indicator; safe-area bottom alone
  * doesn't clear the bar when chrome is absolutely positioned. */
 const TAB_BAR_CLEARANCE = POST_CAPTURE_TAB_BAR_CLEARANCE;
@@ -671,7 +679,7 @@ const styles = StyleSheet.create({
   },
   cameraRoot: { backgroundColor: '#000', flex: 1 },
   frameStage: {
-    ...StyleSheet.absoluteFillObject,
+    ...absoluteFill,
   },
   frameSlot: {
     alignItems: 'center',
@@ -684,16 +692,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   cameraPreview: {
-    ...StyleSheet.absoluteFillObject,
+    ...absoluteFill,
   },
   cameraBootOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...absoluteFill,
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.35)',
     justifyContent: 'center',
   },
   cameraFallback: {
-    ...StyleSheet.absoluteFillObject,
+    ...absoluteFill,
     backgroundColor: colors.background,
     gap: spacing.md,
     justifyContent: 'flex-start',
@@ -701,7 +709,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
   },
   cameraChrome: {
-    ...StyleSheet.absoluteFillObject,
+    ...absoluteFill,
     justifyContent: 'space-between',
   },
   topBar: {
