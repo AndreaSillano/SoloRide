@@ -65,3 +65,42 @@ export function useSelectedRide(
     isReady: isHydrated,
   };
 }
+
+const RIDES_STRIP_KEY_PREFIX = 'soloride:rides-strip-expanded:';
+
+/**
+ * Persists whether the Home “Your rides” strip is expanded, per account.
+ */
+export function useRidesStripExpanded(userId: string | null | undefined) {
+  const [expanded, setExpandedState] = useState(true);
+
+  useEffect(() => {
+    setExpandedState(true);
+    if (!userId) return;
+
+    let cancelled = false;
+    void AsyncStorage.getItem(RIDES_STRIP_KEY_PREFIX + userId).then((stored) => {
+      if (cancelled || stored == null) return;
+      setExpandedState(stored === '1');
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const setExpanded = useCallback(
+    (next: boolean | ((current: boolean) => boolean)) => {
+      setExpandedState((current) => {
+        const value = typeof next === 'function' ? next(current) : next;
+        if (userId) {
+          void AsyncStorage.setItem(RIDES_STRIP_KEY_PREFIX + userId, value ? '1' : '0');
+        }
+        return value;
+      });
+    },
+    [userId],
+  );
+
+  return [expanded, setExpanded] as const;
+}

@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Alert,
   Keyboard,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -15,8 +14,6 @@ import {
   type NativeSyntheticEvent,
   type TextInputSelectionChangeEventData,
 } from 'react-native';
-import { KeyboardStickyView } from 'react-native-keyboard-controller';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCurrentUser } from '@/auth/auth-context';
 import {
@@ -31,13 +28,12 @@ import {
 } from '@/features/posts';
 import { useRideMembers, type RideMember } from '@/features/rides';
 import { haptics } from '@/lib/haptics';
-import { colors, spacing } from '@/theme';
+import { colors, radius, spacing } from '@/theme';
 
+import { AppBottomSheet, GlassSurface } from './glass';
 import { SheetCloseButton } from './sheet-close-button';
-import { Avatar, Body } from './ui';
+import { Avatar, Body, CommentsSkeleton } from './ui';
 
-/** Approx. single-line composer height so the list clears the sticky bar. */
-const COMPOSER_BAR_HEIGHT = spacing.sm + 40 + spacing.sm;
 const SUGGESTION_ROW_HEIGHT = 52;
 /** Visible rows before the mention list scrolls (Instagram-like). */
 const VISIBLE_SUGGESTION_ROWS = 4;
@@ -144,8 +140,7 @@ export function CommentsModal({
   visible: boolean;
   onClose: () => void;
 }) {
-  const { user } = useCurrentUser();
-  const insets = useSafeAreaInsets();
+  const { user, profile } = useCurrentUser();
   const comments = useComments(postId);
   const members = useRideMembers(visible ? rideId : null);
   const createComment = useCreateComment();
@@ -154,9 +149,8 @@ export function CommentsModal({
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const inputRef = useRef<TextInput>(null);
-  // SafeAreaView already handles the home indicator, so cap the extra closed
-  // padding at the normal composer gap instead of adding the full inset twice.
-  const composerPad = keyboardOpen ? spacing.sm : Math.min(insets.bottom, spacing.md);
+  // Half sheets already sit above the home indicator — avoid stacking inset padding.
+  const composerPad = keyboardOpen ? spacing.xs : spacing.xxs;
 
   useEffect(() => {
     if (visible) return;
@@ -294,127 +288,125 @@ export function CommentsModal({
       : 0;
 
   return (
-    <Modal
-      allowSwipeDismissal
-      animationType="slide"
-      onRequestClose={onClose}
-      presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : undefined}
-      visible={visible}
-    >
-      <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
+    <AppBottomSheet onClose={onClose} visible={visible}>
+      <View style={styles.sheet}>
         <View style={styles.header}>
-          <Text style={styles.title}>Comments</Text>
+          <View style={styles.headerCopy}>
+            <Text style={styles.title}>Comments</Text>
+            <Text style={styles.subtitle}>
+              {comments.data?.length
+                ? `${comments.data.length} comment${comments.data.length === 1 ? '' : 's'}`
+                : 'Say something'}
+            </Text>
+          </View>
           <SheetCloseButton accessibilityLabel="Close comments" onPress={onClose} />
         </View>
 
-        <View style={styles.flex}>
-          <ScrollView
-            contentContainerStyle={[
-              styles.list,
-              {
-                paddingBottom:
-                  COMPOSER_BAR_HEIGHT + composerPad + suggestionHeight + spacing.md,
-              },
-            ]}
-            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-            keyboardShouldPersistTaps="handled"
-            style={styles.flex}
-          >
-            {comments.isPending ? (
-              <ActivityIndicator color={colors.primary} style={styles.spinner} />
-            ) : comments.isError ? (
-              <Body muted>Comments could not load.</Body>
-            ) : comments.data?.length ? (
-              comments.data.map((comment) => (
-                <View key={comment.id} style={styles.comment}>
-                  <Avatar profile={comment.profile} size={30} />
-                  <View style={styles.commentText}>
-                    <View style={styles.commentHeader}>
-                      <Text style={styles.author}>{formatProfileName(comment.profile)}</Text>
-                      <Text style={styles.commentTime}>
-                        {formatCommentTime(comment.created_at)}
-                      </Text>
-                    </View>
-                    <CommentBody content={comment.content} knownUsernames={knownUsernames} />
+        <ScrollView
+          contentContainerStyle={[
+            styles.list,
+            { paddingBottom: suggestionHeight + spacing.md },
+          ]}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          keyboardShouldPersistTaps="handled"
+          style={styles.flex}
+        >
+          {comments.isPending ? (
+            <CommentsSkeleton />
+          ) : comments.isError ? (
+            <Body muted>Comments could not load.</Body>
+          ) : comments.data?.length ? (
+            comments.data.map((comment) => (
+              <View key={comment.id} style={styles.comment}>
+                <Avatar profile={comment.profile} size={34} />
+                <View style={styles.commentText}>
+                  <View style={styles.commentHeader}>
+                    <Text style={styles.author}>{formatProfileName(comment.profile)}</Text>
+                    <Text style={styles.commentTime}>
+                      {formatCommentTime(comment.created_at)}
+                    </Text>
                   </View>
-                  {comment.user_id === user?.id ? (
-                    <Pressable
-                      accessibilityLabel="Delete comment"
-                      accessibilityRole="button"
-                      hitSlop={8}
-                      onPress={() => confirmDelete(comment.id)}
-                      style={styles.deleteButton}
-                    >
-                      <Ionicons color={colors.danger} name="trash-outline" size={18} />
-                    </Pressable>
-                  ) : null}
+                  <CommentBody content={comment.content} knownUsernames={knownUsernames} />
                 </View>
-              ))
-            ) : (
-              <Body muted>No comments yet. Keep it kind and simple.</Body>
-            )}
-          </ScrollView>
+                {comment.user_id === user?.id ? (
+                  <Pressable
+                    accessibilityLabel="Delete comment"
+                    accessibilityRole="button"
+                    hitSlop={8}
+                    onPress={() => confirmDelete(comment.id)}
+                    style={styles.deleteButton}
+                  >
+                    <Ionicons color={colors.danger} name="ellipsis-horizontal" size={18} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ))
+          ) : (
+            <Body muted>No comments yet. Keep it kind and simple.</Body>
+          )}
+        </ScrollView>
 
-          <KeyboardStickyView offset={{ closed: 0, opened: 0 }} style={styles.composerSticky}>
-            <MentionSuggestions members={suggestionMembers} onSelect={pickMention} />
-            <View style={[styles.inputRow, { paddingBottom: composerPad }]}>
+        {/* In-flow footer so half detents keep the input flush to the sheet bottom. */}
+        <View style={styles.composerSticky}>
+          <MentionSuggestions members={suggestionMembers} onSelect={pickMention} />
+          <View style={[styles.inputRow, { paddingBottom: composerPad }]}>
+            <Avatar profile={profile} size={32} />
+            <GlassSurface style={styles.inputGlass}>
               <TextInput
                 autoCapitalize="none"
                 autoCorrect={false}
+                keyboardAppearance="light"
                 maxLength={2000}
                 multiline
                 onChangeText={handleChangeText}
                 onSelectionChange={handleSelectionChange}
-                placeholder="Add a comment…"
+                placeholder="Say something..."
                 placeholderTextColor={colors.muted}
                 ref={inputRef}
                 style={styles.input}
                 value={content}
               />
-              <Pressable
-                accessibilityLabel="Post comment"
-                accessibilityRole="button"
-                disabled={!content.trim() || createComment.isPending}
-                hitSlop={8}
-                onPress={() => void submit()}
-                style={styles.sendButton}
-              >
-                {createComment.isPending ? (
-                  <ActivityIndicator color={colors.primary} size="small" />
-                ) : (
-                  <Ionicons
-                    color={content.trim() ? colors.primary : colors.muted}
-                    name="send"
-                    size={20}
-                  />
-                )}
-              </Pressable>
-            </View>
-          </KeyboardStickyView>
+            </GlassSurface>
+            <Pressable
+              accessibilityLabel="Post comment"
+              accessibilityRole="button"
+              disabled={!content.trim() || createComment.isPending}
+              hitSlop={8}
+              onPress={() => void submit()}
+              style={styles.sendButton}
+            >
+              {createComment.isPending ? (
+                <ActivityIndicator color={colors.white} size="small" />
+              ) : (
+                <Ionicons color={colors.white} name="arrow-up" size={20} />
+              )}
+            </Pressable>
+          </View>
         </View>
-      </SafeAreaView>
-    </Modal>
+      </View>
+    </AppBottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: colors.surface, flex: 1 },
+  sheet: { flex: 1, width: '100%' },
   flex: { flex: 1 },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
+    paddingBottom: spacing.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.md,
   },
+  headerCopy: { flex: 1, gap: 2, paddingRight: spacing.sm },
   title: {
     color: colors.text,
-    flex: 1,
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '800',
     letterSpacing: -0.3,
-    paddingRight: spacing.sm,
   },
+  subtitle: { color: colors.muted, fontSize: 13, fontWeight: '600' },
   list: { gap: spacing.md, padding: spacing.lg },
   spinner: { paddingTop: spacing.lg },
   comment: { alignItems: 'flex-start', flexDirection: 'row', gap: spacing.sm },
@@ -431,13 +423,11 @@ const styles = StyleSheet.create({
   mention: { color: colors.accent, fontWeight: '700' },
   deleteButton: { marginTop: 2, padding: spacing.xxs },
   composerSticky: {
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    right: 0,
+    backgroundColor: colors.background,
+    width: '100%',
   },
   suggestions: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.background,
     borderTopColor: colors.border,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
@@ -454,13 +444,18 @@ const styles = StyleSheet.create({
   suggestionDisplay: { color: colors.muted, fontSize: 12 },
   inputRow: {
     alignItems: 'flex-end',
-    backgroundColor: colors.surface,
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    backgroundColor: colors.background,
     flexDirection: 'row',
     gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
+  },
+  inputGlass: {
+    borderRadius: radius.pill,
+    flex: 1,
+    minHeight: 40,
+    overflow: 'hidden',
+    paddingHorizontal: spacing.md,
   },
   input: {
     color: colors.text,
@@ -471,6 +466,8 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: radius.pill,
     height: 36,
     justifyContent: 'center',
     marginBottom: 4,

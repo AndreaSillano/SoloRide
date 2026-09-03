@@ -10,12 +10,12 @@ import {
   Linking,
   Pressable,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from 'react-native';
 
 import { useAuth, useCurrentUser } from '@/auth/auth-context';
+import { NativeSwitch } from '@/components/glass';
 import {
   Avatar,
   Button,
@@ -506,13 +506,12 @@ export default function ProfileScreen() {
             {cameraBlocked ? <OpenSettingsLink /> : null}
           </View>
           {cameraPermission ? (
-            <Switch
+            <NativeSwitch
               disabled={busy === 'camera'}
               onValueChange={(value) => {
                 haptics.selection();
                 void toggleCamera(value);
               }}
-              trackColor={{ false: colors.borderStrong, true: colors.primary }}
               value={cameraGranted}
             />
           ) : (
@@ -530,13 +529,12 @@ export default function ProfileScreen() {
             </Text>
             {locationBlocked ? <OpenSettingsLink /> : null}
           </View>
-          <Switch
+          <NativeSwitch
             disabled={busy === 'location'}
             onValueChange={(value) => {
               haptics.selection();
               void toggleLocation(value);
             }}
-            trackColor={{ false: colors.borderStrong, true: colors.primary }}
             value={locationGranted}
           />
         </View>
@@ -558,13 +556,12 @@ export default function ProfileScreen() {
             ) : null}
           </View>
           {prefsReady ? (
-            <Switch
+            <NativeSwitch
               disabled={busy === 'toggle'}
               onValueChange={(value) => {
                 haptics.selection();
                 void toggleAlerts(value);
               }}
-              trackColor={{ false: colors.borderStrong, true: colors.primary }}
               value={alertsEnabled && permission !== 'denied'}
             />
           ) : (
@@ -635,8 +632,8 @@ const styles = StyleSheet.create({
   },
   row: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+    backgroundColor: colors.glassFill,
+    borderColor: colors.glassBorder,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',

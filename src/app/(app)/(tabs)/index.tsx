@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCurrentUser } from '@/auth/auth-context';
+import { GlassIconButton, GlassSurface } from '@/components/glass';
 import { RideCard } from '@/components/ride-card';
 import { RideOverview } from '@/components/ride-overview';
 import { FixedHeaderScreen, Body, Button, Heading, RideFeedSkeleton } from '@/components/ui';
@@ -23,14 +24,15 @@ import { POST_CAPTURE_TAB_BAR_CLEARANCE, useRideFeed } from '@/features/posts';
 import {
   groupUserRides,
   useRideJoinRequests,
-  useRidesDueToday,
+  useRidesStripExpanded,
   useSelectedRide,
   useUserRides,
 } from '@/features/rides';
 import { queryKeys } from '@/lib/queryKeys';
+import { haptics } from '@/lib/haptics';
 import { colors, radius, shadows, spacing } from '@/theme';
 
-type MenuState = 'switcher' | 'create' | null;
+type MenuState = 'create' | null;
 
 export default function HomeScreen() {
   const { user } = useCurrentUser();
@@ -42,19 +44,14 @@ export default function HomeScreen() {
   const rides = useUserRides(user?.id);
   const { selectedRideId, selectRide, isReady } = useSelectedRide(rides.data, user?.id);
   const feed = useRideFeed(selectedRideId);
-  const due = useRidesDueToday(user?.id);
   const commentDeepLink = useCommentDeepLink();
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [menu, setMenu] = useState<MenuState>(null);
+  const [ridesExpanded, setRidesExpanded] = useRidesStripExpanded(user?.id);
   const [refreshing, setRefreshing] = useState(false);
   const feedScrollRef = useRef<ScrollView>(null);
   const feedScrollOffsetRef = useRef(0);
-  const selectedNeedsPublication = Boolean(
-    due.data?.postableRides.some(
-      (ride) => ride.id === selectedRideId && ride.isRequiredToday,
-    ),
-  );
 
   // Lets other screens (join/create Ride) and notification taps hand off which
   // Ride should become selected once we land back on this tab. notificationOpenId
@@ -85,10 +82,11 @@ export default function HomeScreen() {
   const hasPendingJoinRequests = Boolean(pendingJoins.data && pendingJoins.data.length > 0);
 
   const closeMenu = () => setMenu(null);
-  const toggleMenu = (next: Exclude<MenuState, null>) =>
-    setMenu((current) => (current === next ? null : next));
+  const toggleCreateMenu = () =>
+    setMenu((current) => (current === 'create' ? null : 'create'));
 
   const handleSelectRide = (rideId: string) => {
+    if (rideId !== selectedRideId) haptics.light();
     selectRide(rideId);
     closeMenu();
   };
@@ -146,103 +144,22 @@ export default function HomeScreen() {
   };
 
   const header = (
-    <>
-      <View
-        style={[
-          styles.headerRow,
-          selectedRide?.description ? styles.headerRowWithDescription : null,
-        ]}
-      >
-        <View style={styles.switcherWrap}>
-          <Pressable
-            accessibilityLabel={
-              selectedNeedsPublication
-                ? `${selectedRide?.name ?? 'Your Rides'}, photo due today`
-                : undefined
-            }
-            accessibilityRole="button"
-            disabled={!hasRides}
-            onPress={() => toggleMenu('switcher')}
-            style={({ pressed }) => [styles.switcherTrigger, pressed && styles.pressed]}
-          >
-            <View style={styles.switcherTitleWrap}>
-              <Text ellipsizeMode="tail" numberOfLines={1} style={styles.switcherText}>
-                {rides.isPending ? 'Loading…' : (selectedRide?.name ?? 'Your Rides')}
-              </Text>
-              {selectedNeedsPublication ? (
-                <View
-                  accessibilityElementsHidden
-                  importantForAccessibility="no-hide-descendants"
-                  style={styles.dueBadge}
-                />
-              ) : null}
-            </View>
-            {hasRides ? (
-              <Ionicons
-                color={colors.text}
-                name={menu === 'switcher' ? 'chevron-up' : 'chevron-down'}
-                size={18}
-              />
-            ) : null}
-          </Pressable>
-
-          {menu === 'switcher' ? (
-            <View style={styles.switcherPanel}>
-              <ScrollView
-                contentContainerStyle={styles.switcherPanelContent}
-                nestedScrollEnabled
-                showsVerticalScrollIndicator
-              >
-                {groups.active.length ? (
-                  <>
-                    <Text style={styles.groupLabel}>Active</Text>
-                    {groups.active.map((ride) => (
-                      <RideCard
-                        key={ride.id}
-                        onPress={() => handleSelectRide(ride.id)}
-                        ride={ride}
-                        selected={ride.id === selectedRideId}
-                        userId={user?.id}
-                      />
-                    ))}
-                  </>
-                ) : null}
-                {groups.upcoming.length ? (
-                  <>
-                    <Text style={styles.groupLabel}>Upcoming</Text>
-                    {groups.upcoming.map((ride) => (
-                      <RideCard
-                        key={ride.id}
-                        onPress={() => handleSelectRide(ride.id)}
-                        ride={ride}
-                        selected={ride.id === selectedRideId}
-                        userId={user?.id}
-                      />
-                    ))}
-                  </>
-                ) : null}
-              </ScrollView>
-            </View>
-          ) : null}
-        </View>
-
+    <View style={styles.header}>
+      <View style={styles.headerRow}>
+        <Text style={styles.wordmark}>Rhodeo</Text>
         <View style={styles.headerActions}>
-          <Pressable
-            accessibilityLabel={
-              hasPendingJoinRequests
-                ? 'Ride settings, pending join requests'
-                : 'Ride settings'
-            }
-            accessibilityRole="button"
-            disabled={!selectedRideId}
-            hitSlop={8}
-            onPress={openSettings}
-            style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
-          >
-            <Ionicons
-              color={selectedRideId ? colors.text : colors.muted}
-              name="settings-outline"
-              size={22}
+          <View>
+            <GlassIconButton
+              accessibilityLabel={
+                hasPendingJoinRequests
+                  ? 'Ride settings, pending join requests'
+                  : 'Ride settings'
+              }
+              disabled={!selectedRideId}
+              icon="settings-outline"
+              iconSize={18}
+              onPress={openSettings}
+              size={36}
             />
             {hasPendingJoinRequests ? (
               <View
@@ -251,20 +168,20 @@ export default function HomeScreen() {
                 style={styles.settingsBadge}
               />
             ) : null}
-          </Pressable>
+          </View>
 
           <View style={styles.plusWrap}>
             <Pressable
               accessibilityLabel="Create or join a Ride"
               accessibilityRole="button"
-              onPress={() => toggleMenu('create')}
+              onPress={toggleCreateMenu}
               style={({ pressed }) => [styles.plusButton, pressed && styles.pressed]}
             >
               <Ionicons color={colors.white} name="add" size={22} />
             </Pressable>
 
             {menu === 'create' ? (
-              <View style={styles.createPanel}>
+              <GlassSurface style={styles.createPanel}>
                 <Pressable
                   accessibilityRole="button"
                   onPress={openCreateRide}
@@ -282,17 +199,71 @@ export default function HomeScreen() {
                   <Ionicons color={colors.text} name="key-outline" size={20} />
                   <Text style={styles.createRowText}>Join with code</Text>
                 </Pressable>
-              </View>
+              </GlassSurface>
             ) : null}
           </View>
         </View>
       </View>
-      {selectedRide?.description ? (
-        <Text numberOfLines={2} style={styles.rideDescription}>
-          {selectedRide.description}
-        </Text>
+
+      {hasRides ? (
+        <>
+          <View style={styles.ridesHeader}>
+            <Pressable
+              accessibilityLabel={
+                ridesExpanded
+                  ? selectedRide
+                    ? `Hide rides, viewing ${selectedRide.name}`
+                    : 'Hide rides'
+                  : selectedRide
+                    ? `Show rides, viewing ${selectedRide.name}`
+                    : 'Show rides'
+              }
+              accessibilityRole="button"
+              onPress={() => setRidesExpanded((current) => !current)}
+              style={({ pressed }) => [styles.ridesToggle, pressed && styles.pressed]}
+            >
+              <Text numberOfLines={1} style={styles.ridesCurrent}>
+                {selectedRide?.name ?? 'Your rides'}
+              </Text>
+              <Ionicons
+                color={colors.muted}
+                name={ridesExpanded ? 'chevron-up' : 'chevron-down'}
+                size={16}
+              />
+            </Pressable>
+          </View>
+
+          {ridesExpanded ? (
+            <ScrollView
+              contentContainerStyle={styles.ridesStripContent}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+            >
+              {groups.active.map((ride) => (
+                <RideCard
+                  key={ride.id}
+                  onPress={() => handleSelectRide(ride.id)}
+                  ride={ride}
+                  selected={ride.id === selectedRideId}
+                  userId={user?.id}
+                  variant="tile"
+                />
+              ))}
+              {groups.upcoming.map((ride) => (
+                <RideCard
+                  key={ride.id}
+                  onPress={() => handleSelectRide(ride.id)}
+                  ride={ride}
+                  selected={ride.id === selectedRideId}
+                  userId={user?.id}
+                  variant="tile"
+                />
+              ))}
+            </ScrollView>
+          ) : null}
+        </>
       ) : null}
-    </>
+    </View>
   );
 
   return (
@@ -387,102 +358,38 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingTop: spacing.xs,
   },
+  header: {
+    gap: spacing.xs,
+    paddingBottom: spacing.sm,
+    zIndex: 2,
+  },
   headerRow: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xs,
-    zIndex: 2,
   },
-  headerRowWithDescription: {
-    paddingBottom: 0,
-  },
-  rideDescription: {
-    color: colors.muted,
-    fontSize: 14,
-    fontWeight: '500',
-    lineHeight: 18,
-    paddingBottom: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingTop: 0,
-    zIndex: 0,
-  },
-  switcherWrap: { flex: 1, position: 'relative', zIndex: 2 },
-  switcherTrigger: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    gap: spacing.xs,
-    maxWidth: '100%',
-  },
-  switcherText: {
-    color: colors.text,
-    flexShrink: 1,
-    fontSize: 22,
+  wordmark: {
+    color: colors.primary,
+    flex: 1,
+    fontSize: 28,
     fontWeight: '800',
-    letterSpacing: -0.4,
+    letterSpacing: -0.8,
   },
-  switcherTitleWrap: {
-    flexShrink: 1,
-    position: 'relative',
-  },
-  dueBadge: {
-    backgroundColor: colors.highlight,
-    borderRadius: radius.pill,
-    height: 8,
-    position: 'absolute',
-    right: -8,
-    shadowColor: colors.highlight,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 5,
-    elevation: 4,
-    top: -1,
-    width: 8,
-  },
-  switcherPanel: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    left: 0,
-    marginTop: spacing.xxs,
-    maxHeight: 380,
-    overflow: 'hidden',
-    position: 'absolute',
-    right: 0,
-    top: '100%',
-    zIndex: 3,
-    ...shadows.floating,
-    elevation: 8,
-  },
-  switcherPanelContent: { gap: spacing.sm, padding: spacing.sm },
-  groupLabel: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    paddingHorizontal: spacing.xs,
-    paddingTop: spacing.xs,
-    textTransform: 'uppercase',
-  },
-  headerActions: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
-  settingsButton: {
-    position: 'relative',
-  },
+  headerActions: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm },
   settingsBadge: {
     backgroundColor: colors.highlight,
     borderRadius: radius.pill,
     elevation: 4,
     height: 8,
     position: 'absolute',
-    right: -3,
+    right: 0,
     shadowColor: colors.highlight,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
     shadowRadius: 5,
-    top: -2,
+    top: 0,
     width: 8,
   },
   plusWrap: { position: 'relative' },
@@ -490,21 +397,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.primary,
     borderRadius: radius.pill,
-    height: 34,
+    height: 36,
     justifyContent: 'center',
-    width: 34,
+    width: 36,
+    ...shadows.glow,
   },
   createPanel: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
     marginTop: spacing.xxs,
     minWidth: 190,
     overflow: 'hidden',
     position: 'absolute',
     right: 0,
     top: '100%',
+    zIndex: 4,
     ...shadows.floating,
   },
   createRow: {
@@ -516,5 +422,31 @@ const styles = StyleSheet.create({
   },
   createRowText: { color: colors.text, fontSize: 15, fontWeight: '600' },
   createDivider: { backgroundColor: colors.border, height: StyleSheet.hairlineWidth },
+  ridesHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xxs,
+  },
+  ridesToggle: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
+    maxWidth: '100%',
+    minWidth: 0,
+  },
+  ridesCurrent: {
+    color: colors.text,
+    flexShrink: 1,
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  ridesStripContent: {
+    gap: spacing.sm,
+    paddingBottom: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+  },
   pressed: { opacity: 0.7 },
 });

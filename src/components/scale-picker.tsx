@@ -7,16 +7,31 @@ import {
   type View as ViewType,
 } from 'react-native';
 
-import { reactionEmojiForScore } from '@/features/posts';
 import { haptics } from '@/lib/haptics';
-import { colors, spacing } from '@/theme';
+import { colors, radius, spacing } from '@/theme';
+
+import { GlassSurface } from './glass';
 
 const SCORES = [-3, -2, -1, 0, 1, 2, 3] as const;
-export const REACTION_STEP_WIDTH = 56;
-const TRACK_WIDTH = REACTION_STEP_WIDTH * SCORES.length;
+export const REACTION_STEP_WIDTH = 32;
+const TRACK_INNER_WIDTH = REACTION_STEP_WIDTH * SCORES.length;
+const THUMB_SIZE = 24;
+const DOT_SIZE = 6;
+const END_CAP_SIZE = 32;
 const SWIPE_THRESHOLD = 10;
 /** Keep the overlay open briefly after a swipe so the selection is readable. */
 const SWIPE_CONFIRM_DELAY_MS = 110;
+
+/** Red → yellow → green across dislike → like. */
+const DOT_COLORS = [
+  '#E4473A',
+  '#F06A2F',
+  '#F5A623',
+  '#F0D24A',
+  '#A8D45A',
+  '#5ECF6A',
+  '#2ECC71',
+] as const;
 
 type WindowRect = { x: number; y: number; width: number; height: number };
 
@@ -29,24 +44,14 @@ export function reactionScoreFromSwipe(startScore: number, dx: number) {
   return clampReactionScore(startScore + dx / REACTION_STEP_WIDTH);
 }
 
-function iconSizeForScore(score: number) {
-  const magnitude = Math.abs(score);
-  if (magnitude >= 3) return 44;
-  if (magnitude === 2) return 34;
-  if (magnitude === 1) return 26;
-  return 14;
-}
-
-function opacityForScore(score: number, active: boolean) {
-  if (score === 0) return active ? 1 : 0.55;
-  const magnitude = Math.abs(score);
-  const base = magnitude === 3 ? 1 : magnitude === 2 ? 0.85 : 0.65;
-  return active ? 1 : base * 0.7;
-}
-
 function scoreAtTrackX(xInTrack: number) {
   const index = Math.floor(xInTrack / REACTION_STEP_WIDTH);
   return SCORES[Math.max(0, Math.min(SCORES.length - 1, index))] ?? 0;
+}
+
+function indexForScore(score: number) {
+  const clamped = clampReactionScore(score);
+  return SCORES.indexOf(clamped as (typeof SCORES)[number]);
 }
 
 function measureWindow(view: ViewType | null): Promise<WindowRect | null> {
@@ -61,7 +66,13 @@ function measureWindow(view: ViewType | null): Promise<WindowRect | null> {
   });
 }
 
-/** Dark in-photo overlay: swipe anywhere or tap a step on a -3..+3 scale. */
+function hintForScore(score: number) {
+  if (score > 0) return 'Slide left to dislike ←';
+  if (score < 0) return 'Slide right to like →';
+  return 'Slide right to like →';
+}
+
+/** Glass capsule slider: swipe or tap a step on a -3..+3 like/dislike scale. */
 export function ScalePicker({
   visible,
   selectedScore,
@@ -189,51 +200,80 @@ export function ScalePicker({
 
   if (!visible) return null;
 
+  const activeIndex = Math.max(0, indexForScore(activeScore));
+  const thumbLeft =
+    activeIndex * REACTION_STEP_WIDTH + (REACTION_STEP_WIDTH - THUMB_SIZE) / 2;
+
   return (
     <View
       {...(interactive ? panResponder.panHandlers : {})}
+      accessibilityLabel="Reaction slider"
+      accessibilityRole="adjustable"
+      accessibilityValue={{
+        min: -3,
+        max: 3,
+        now: activeScore,
+        text:
+          activeScore === 0
+            ? 'Neutral'
+            : activeScore > 0
+              ? `Like ${activeScore}`
+              : `Dislike ${Math.abs(activeScore)}`,
+      }}
       pointerEvents={interactive ? 'auto' : 'none'}
       style={styles.overlay}
     >
       <View pointerEvents="box-none" style={styles.center}>
-        <View ref={trackRef} style={styles.track}>
-          {SCORES.map((score) => {
-            const active = score === activeScore;
-            const size = iconSizeForScore(score);
-            const opacity = opacityForScore(score, active);
-            return (
-              <View
-                accessibilityLabel={
-                  score === 0
-                    ? 'Clear reaction'
-                    : score > 0
-                      ? `Like ${score}`
-                      : `Dislike ${Math.abs(score)}`
-                }
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                key={score}
-                style={[styles.cell, active && styles.cellActive]}
-              >
-                {score === 0 ? (
-                  <View
-                    style={[
-                      styles.dot,
-                      {
-                        opacity,
-                        transform: [{ scale: active ? 1.25 : 1 }],
-                      },
-                    ]}
-                  />
-                ) : (
-                  <Text style={[styles.emoji, { fontSize: size, lineHeight: size + 4, opacity }]}>
-                    {reactionEmojiForScore(score)}
-                  </Text>
-                )}
-              </View>
-            );
-          })}
-        </View>
+        <GlassSurface dark style={styles.capsule}>
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={[
+              styles.endCap,
+              activeScore < 0 && styles.endCapActiveDislike,
+            ]}
+          >
+            <Text style={styles.endEmoji}>👎</Text>
+          </View>
+
+          <View ref={trackRef} style={styles.track}>
+            <View style={styles.dotsRow}>
+              {SCORES.map((score, index) => {
+                const active = score === activeScore;
+                return (
+                  <View key={score} style={styles.cell}>
+                    <View
+                      style={[
+                        styles.dot,
+                        {
+                          backgroundColor: DOT_COLORS[index],
+                          opacity: active ? 0 : 0.95,
+                          transform: [{ scale: active ? 0.5 : 1 }],
+                        },
+                      ]}
+                    />
+                  </View>
+                );
+              })}
+            </View>
+            <View
+              pointerEvents="none"
+              style={[styles.thumb, { left: thumbLeft }]}
+            />
+          </View>
+
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={[styles.endCap, activeScore > 0 && styles.endCapActiveLike]}
+          >
+            <Text style={styles.endEmoji}>👍</Text>
+          </View>
+        </GlassSurface>
+
+        <GlassSurface dark style={styles.hintPill}>
+          <Text style={styles.hintText}>{hintForScore(activeScore)}</Text>
+        </GlassSurface>
       </View>
     </View>
   );
@@ -241,47 +281,104 @@ export function ScalePicker({
 
 const styles = StyleSheet.create({
   overlay: {
+    backgroundColor: 'rgba(0, 0, 0, 0.28)',
     bottom: 0,
     left: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     position: 'absolute',
     right: 0,
     top: 0,
     zIndex: 5,
   },
   center: {
-    bottom: 0,
-    left: 0,
     alignItems: 'center',
+    bottom: 0,
+    gap: spacing.sm,
     justifyContent: 'center',
+    left: 0,
+    // Nudge above true center so it sits in the upper-middle of the photo.
+    paddingBottom: 72,
+    paddingHorizontal: spacing.md,
     position: 'absolute',
     right: 0,
     top: 0,
   },
+  capsule: {
+    alignItems: 'center',
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    gap: spacing.xxs,
+    maxWidth: '100%',
+    overflow: 'hidden',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  endCap: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: radius.pill,
+    flexShrink: 0,
+    height: END_CAP_SIZE,
+    justifyContent: 'center',
+    width: END_CAP_SIZE,
+  },
+  endCapActiveDislike: {
+    backgroundColor: 'rgba(228, 71, 58, 0.35)',
+  },
+  endCapActiveLike: {
+    backgroundColor: 'rgba(46, 204, 113, 0.35)',
+  },
+  endEmoji: {
+    fontSize: 16,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
   track: {
+    flexShrink: 0,
+    height: THUMB_SIZE,
+    justifyContent: 'center',
+    position: 'relative',
+    width: TRACK_INNER_WIDTH,
+  },
+  dotsRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    height: 88,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.sm,
-    width: TRACK_WIDTH,
+    height: THUMB_SIZE,
+    width: TRACK_INNER_WIDTH,
   },
   cell: {
     alignItems: 'center',
-    height: 72,
+    height: THUMB_SIZE,
     justifyContent: 'center',
     width: REACTION_STEP_WIDTH,
   },
-  cellActive: {
-    transform: [{ scale: 1.08 }],
-  },
   dot: {
-    backgroundColor: colors.white,
-    borderRadius: 5,
-    height: 10,
-    width: 10,
+    borderRadius: DOT_SIZE / 2,
+    height: DOT_SIZE,
+    width: DOT_SIZE,
   },
-  emoji: {
-    textAlign: 'center',
+  thumb: {
+    backgroundColor: colors.white,
+    borderRadius: THUMB_SIZE / 2,
+    elevation: 4,
+    height: THUMB_SIZE,
+    position: 'absolute',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    top: 0,
+    width: THUMB_SIZE,
+  },
+  hintPill: {
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  hintText: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
 });

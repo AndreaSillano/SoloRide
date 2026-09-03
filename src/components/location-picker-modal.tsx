@@ -1,7 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import {
   ActivityIndicator,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -10,11 +9,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { LocationSuggestion } from '@/features/posts';
 import { colors, radius, spacing } from '@/theme';
 
+import { AppBottomSheet } from './glass';
 import { SheetCloseButton } from './sheet-close-button';
 
 export function LocationPickerModal({
@@ -45,14 +44,8 @@ export function LocationPickerModal({
   onClose: () => void;
 }) {
   return (
-    <Modal
-      allowSwipeDismissal
-      animationType="slide"
-      onRequestClose={onClose}
-      presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : undefined}
-      visible={visible}
-    >
-      <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safeArea}>
+    <AppBottomSheet onClose={onClose} visible={visible}>
+      <View style={styles.sheet}>
         <View style={styles.header}>
           <Text style={styles.title}>Location</Text>
           <SheetCloseButton accessibilityLabel="Close location picker" onPress={onClose} />
@@ -133,13 +126,13 @@ export function LocationPickerModal({
             ))}
           </ScrollView>
         </View>
-      </SafeAreaView>
-    </Modal>
+      </View>
+    </AppBottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: colors.surface, flex: 1 },
+  sheet: { flex: 1, width: '100%' },
   flex: { flex: 1 },
   header: {
     alignItems: 'center',

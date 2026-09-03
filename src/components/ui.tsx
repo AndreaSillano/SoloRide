@@ -1,6 +1,7 @@
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image as ExpoImage } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { PropsWithChildren, ReactElement, ReactNode, RefObject } from 'react';
 import { cloneElement, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -8,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Easing,
   Image,
   KeyboardAvoidingView,
   PanResponder,
@@ -35,7 +37,6 @@ import {
   getReactionCount,
   getReactionScoreSum,
   reactionEmojiForScore,
-  reactionSumToStickerSize,
   POST_IMAGE_ASPECT_RATIO,
   useSignedPostImage,
   type PostRecord,
@@ -43,6 +44,7 @@ import {
 import { haptics } from '@/lib/haptics';
 import { colors, radius, shadows, spacing } from '@/theme';
 
+import { GlassIconButton, GlassSurface } from './glass';
 import { ReactionBurst } from './reaction-burst';
 import { FeedAudioNote } from './feed-audio-note';
 import { FeedVideoPlay } from './feed-video-play';
@@ -273,7 +275,7 @@ export function FixedHeaderScreen({
 }
 
 export function Card({ children }: PropsWithChildren) {
-  return <View style={styles.card}>{children}</View>;
+  return <GlassSurface style={styles.card}>{children}</GlassSurface>;
 }
 
 export function AppMark({ compact = false }: { compact?: boolean }) {
@@ -329,26 +331,29 @@ export function Field({
   return (
     <View style={styles.field}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
-      <TextInput
-        autoCapitalize="none"
-        placeholderTextColor={colors.muted}
-        onBlur={(event) => {
-          setFocused(false);
-          onBlur?.(event);
-        }}
-        onFocus={(event) => {
-          setFocused(true);
-          onFocus?.(event);
-        }}
-        selectionColor={colors.accent}
+      <GlassSurface
         style={[
-          styles.input,
-          focused && styles.inputFocused,
-          error && styles.inputError,
-          style,
+          styles.inputGlass,
+          focused && styles.inputGlassFocused,
+          error && styles.inputGlassError,
         ]}
-        {...inputProps}
-      />
+      >
+        <TextInput
+          autoCapitalize="none"
+          placeholderTextColor={colors.muted}
+          onBlur={(event) => {
+            setFocused(false);
+            onBlur?.(event);
+          }}
+          onFocus={(event) => {
+            setFocused(true);
+            onFocus?.(event);
+          }}
+          selectionColor={colors.accent}
+          style={[styles.input, style]}
+          {...inputProps}
+        />
+      </GlassSurface>
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
   );
@@ -454,36 +459,54 @@ export function StatePanel({
   );
 }
 
-/** Soft pulsing placeholder block — use to sketch layouts while data loads. */
+/** Soft shimmer placeholder — use to sketch layouts while data loads. */
 export function Skeleton({ style }: { style?: StyleProp<ViewStyle> }) {
-  const opacity = useRef(new Animated.Value(0.45)).current;
+  const shift = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 700,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0.45,
-          duration: 700,
-          useNativeDriver: true,
-        }),
-      ]),
+    const loop = Animated.loop(
+      Animated.timing(shift, {
+        toValue: 1,
+        duration: 1400,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      }),
     );
-    pulse.start();
-    return () => pulse.stop();
-  }, [opacity]);
+    loop.start();
+    return () => loop.stop();
+  }, [shift]);
 
-  return <Animated.View style={[styles.skeleton, { opacity }, style]} />;
+  const translateX = shift.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-180, 180],
+  });
+
+  return (
+    <View style={[styles.skeleton, style]}>
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.skeletonShimmer, { transform: [{ translateX }] }]}
+      >
+        <LinearGradient
+          colors={[
+            'rgba(255,255,255,0)',
+            'rgba(255,255,255,0.55)',
+            'rgba(255,255,255,0)',
+          ]}
+          end={{ x: 1, y: 0.5 }}
+          start={{ x: 0, y: 0.5 }}
+          style={styles.skeletonShimmerFill}
+        />
+      </Animated.View>
+    </View>
+  );
 }
 
 /** Centered loading copy without a card/panel chrome. */
 export function CenteredBusy({ message }: { message: string }) {
   return (
     <View style={styles.centeredBusy}>
+      <Skeleton style={styles.centeredBusyPulse} />
       <Text style={styles.centeredBusyText}>{message}</Text>
     </View>
   );
@@ -495,19 +518,37 @@ export function RideFeedSkeleton({ count = 2 }: { count?: number }) {
     <View style={styles.rideSkeleton}>
       {Array.from({ length: count }, (_, index) => (
         <View key={index} style={styles.feedItem}>
-          <View style={styles.feedHeader}>
-            <Skeleton style={styles.skeletonAvatar} />
-            <View style={styles.feedHeaderText}>
-              <Skeleton style={styles.skeletonAuthor} />
-              <Skeleton style={styles.skeletonMeta} />
+          <View style={styles.skeletonPost}>
+            <View style={styles.skeletonPostHeader}>
+              <Skeleton style={styles.skeletonAvatar} />
+              <View style={styles.skeletonPostHeaderCopy}>
+                <Skeleton style={styles.skeletonLineShort} />
+                <Skeleton style={styles.skeletonLineTiny} />
+              </View>
             </View>
-            <Skeleton style={styles.skeletonTime} />
+            <Skeleton style={styles.skeletonImage} />
+            <View style={styles.skeletonPostFooter}>
+              <Skeleton style={styles.skeletonLineCaption} />
+              <Skeleton style={styles.skeletonAction} />
+            </View>
           </View>
-          <Skeleton style={styles.skeletonImage} />
-          <View style={styles.feedActions}>
-            <Skeleton style={styles.skeletonAction} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** Compact comment-row skeletons for the comments sheet. */
+export function CommentsSkeleton({ count = 4 }: { count?: number }) {
+  return (
+    <View style={styles.commentsSkeleton}>
+      {Array.from({ length: count }, (_, index) => (
+        <View key={index} style={styles.commentSkeletonRow}>
+          <Skeleton style={styles.skeletonAvatar} />
+          <View style={styles.commentSkeletonCopy}>
+            <Skeleton style={styles.skeletonLineShort} />
+            <Skeleton style={styles.skeletonLineCaption} />
           </View>
-          <Skeleton style={styles.skeletonCaption} />
         </View>
       ))}
     </View>
@@ -600,8 +641,8 @@ export function PostImage({
 
   if (image.isPending) {
     return (
-      <View style={[styles.photo, { aspectRatio }, styles.photoLoading, style]}>
-        <ActivityIndicator color={colors.primary} />
+      <View style={[styles.photo, { aspectRatio }, styles.photoFrame, style]}>
+        <Skeleton style={styles.photoSkeleton} />
       </View>
     );
   }
@@ -613,16 +654,31 @@ export function PostImage({
     );
   }
 
+  const source = { uri: image.data.url, cacheKey: post.image_path };
+
   return (
-    <ExpoImage
-      accessibilityLabel={`Photo by ${author}`}
-      cachePolicy="memory-disk"
-      contentFit="contain"
-      recyclingKey={post.image_path}
-      source={{ uri: image.data.url, cacheKey: post.image_path }}
-      style={[styles.photo, { aspectRatio }, style]}
-      transition={150}
-    />
+    <View style={[styles.photo, { aspectRatio }, styles.photoFrame, style]}>
+      {/* Soft blurred fill for letterbox sides when the photo doesn't match frame. */}
+      <ExpoImage
+        accessibilityElementsHidden
+        blurRadius={48}
+        cachePolicy="memory-disk"
+        contentFit="cover"
+        importantForAccessibility="no"
+        recyclingKey={`${post.image_path}-blur`}
+        source={source}
+        style={styles.photoBlurFill}
+      />
+      <ExpoImage
+        accessibilityLabel={`Photo by ${author}`}
+        cachePolicy="memory-disk"
+        contentFit="contain"
+        recyclingKey={post.image_path}
+        source={source}
+        style={styles.photoSharp}
+        transition={150}
+      />
+    </View>
   );
 }
 
@@ -884,251 +940,131 @@ export function FeedPost({
 
   const reactionStickerEmoji =
     reactionCount > 0 ? reactionEmojiForScore(reactionSum <= -1 ? -1 : 1) : null;
-  const reactionStickerSize = reactionSumToStickerSize(reactionSum === 0 ? 1 : reactionSum);
-  // Large emoji glyphs overhang their em-box; pad the box so the top isn't clipped.
-  const reactionStickerBox = Math.ceil(reactionStickerSize * 1.28);
-  const reactionStickerDislike = reactionSum <= -1;
-  // Hang a similar fraction of the hand off the corner as size grows.
-  const isMaxSticker = reactionStickerSize >= 240;
-  const reactionStickerBottom =
-    -Math.round(reactionStickerBox * (reactionStickerDislike ? 0.48 : 0.3)) +
-    (isMaxSticker ? 36 : 0);
-  const reactionStickerRight =
-    -Math.round(reactionStickerBox * 0.06) - (isMaxSticker ? 18 : 0);
-
-  const reactionSticker =
-    reactionStickerEmoji && onPressReactions ? (
-      <Pressable
-        accessibilityLabel={
-          reactionCount === 1
-            ? 'View 1 reaction'
-            : `View all ${reactionCount} reactions`
-        }
-        accessibilityRole="button"
-        hitSlop={8}
-        onPress={onPressReactions}
-        style={({ pressed }) => [
-          styles.feedReactionSticker,
-          {
-            bottom: reactionStickerBottom,
-            right: reactionStickerRight,
-            transform: [{ rotate: reactionStickerDislike ? '-14deg' : '14deg' }],
-          },
-          pressed && styles.pressed,
-        ]}
-      >
-        <Text
-          allowFontScaling={false}
-          style={[
-            styles.feedReactionStickerEmoji,
-            {
-              fontSize: reactionStickerSize,
-              height: reactionStickerBox,
-              lineHeight: reactionStickerBox,
-              width: reactionStickerBox,
-            },
-          ]}
-        >
-          {reactionStickerEmoji}
-        </Text>
-      </Pressable>
-    ) : null;
-
-  const actionsRow = (
-    <View style={styles.feedActions}>
-      <Pressable
-        accessibilityLabel={commentLabel}
-        accessibilityRole="button"
-        hitSlop={10}
-        onPress={onPress}
-        style={({ pressed }) => [styles.feedCommentAction, pressed && styles.pressed]}
-      >
-        <Ionicons
-          color={commentCount > 0 ? colors.textSoft : colors.muted}
-          name="chatbubble-outline"
-          size={23}
-        />
-        <Text
-          numberOfLines={1}
-          style={[
-            styles.feedViewCommentsInline,
-            commentCount > 0 ? styles.feedViewCommentsActive : null,
-          ]}
-        >
-          {commentLabel}
-        </Text>
-      </Pressable>
-    </View>
-  );
-
-  const overflowButton = (
-    <Pressable
-      accessibilityLabel="Post options"
-      accessibilityRole="button"
-      hitSlop={10}
-      onPress={openPostOverflowMenu}
-      style={({ pressed }) => [styles.feedOverflow, pressed && styles.pressed]}
-    >
-      <Ionicons color={colors.muted} name="ellipsis-horizontal" size={18} />
-    </Pressable>
-  );
-
-  const overflowButtonOnDark = (
-    <Pressable
-      accessibilityLabel="Post options"
-      accessibilityRole="button"
-      hitSlop={10}
-      onPress={openPostOverflowMenu}
-      style={({ pressed }) => [styles.feedOverflow, pressed && styles.pressed]}
-    >
-      <Ionicons color={colors.white} name="ellipsis-horizontal" size={18} />
-    </Pressable>
-  );
-
-  if (post.is_temporary) {
-    return (
-      <View style={styles.feedItemTemporary}>
-        <View
-          style={styles.feedPhotoBlock}
-        >
-          <View style={styles.tempPhotoWrap} {...photoPanResponder.panHandlers}>
-            <View
-              accessibilityHint="Double-tap or long-press to react"
-              accessibilityRole="imagebutton"
-            >
-              <PostImage aspectRatio={POST_IMAGE_ASPECT_RATIO} post={post} style={styles.tempPhoto} />
-            </View>
-            {post.video_path ? (
-              <FeedVideoPlay
-                durationMs={post.video_duration_ms}
-                videoPath={post.video_path}
-              />
-            ) : null}
-            <View style={styles.tempOverlay} pointerEvents="box-none">
-              <Avatar profile={post.profile} size={34} />
-              <View style={styles.feedHeaderText}>
-                <Text style={styles.tempAuthor}>{author}</Text>
-                {post.location_name ? (
-                  <Text style={styles.tempMeta} numberOfLines={1}>
-                    ⌖ {post.location_name}
-                  </Text>
-                ) : null}
-              </View>
-              {overflowButtonOnDark}
-              {isOwnPost && onDelete ? (
-                <Pressable
-                  accessibilityLabel="Delete photo"
-                  accessibilityRole="button"
-                  disabled={deleting}
-                  hitSlop={10}
-                  onPress={onDelete}
-                  style={({ pressed }) => [styles.feedDelete, pressed && styles.pressed]}
-                >
-                  {deleting ? (
-                    <ActivityIndicator color={colors.white} size="small" />
-                  ) : (
-                    <Ionicons color={colors.white} name="trash-outline" size={18} />
-                  )}
-                </Pressable>
-              ) : null}
-            </View>
-            {remaining ? (
-              <View
-                style={[
-                  styles.tempTimerBadge,
-                  post.audio_path && !post.video_path
-                    ? styles.tempTimerBadgeAboveAudio
-                    : null,
-                ]}
-                pointerEvents="none"
-              >
-                <Text style={styles.tempTimerText}>{remaining}</Text>
-              </View>
-            ) : null}
-            {!post.video_path && post.audio_path ? (
-              <FeedAudioNote audioPath={post.audio_path} />
-            ) : null}
-            {reactionPicker}
-          </View>
-          {reactionBurst}
-          {reactionSticker}
-        </View>
-
-        {actionsRow}
-
-        {post.description ? (
-          <Text style={styles.feedCaption}>
-            <Text style={styles.feedAuthor}>{author} </Text>
-            {post.description}
-          </Text>
-        ) : null}
-      </View>
-    );
-  }
 
   return (
     <View style={styles.feedItem}>
-      <View style={styles.feedHeader}>
-        <Avatar profile={post.profile} size={34} />
-        <View style={styles.feedHeaderText}>
-          <Text style={styles.feedAuthor}>{author}</Text>
-          {post.location_name ? (
-            <Text style={styles.feedLocation} numberOfLines={1}>
-              ⌖ {post.location_name}
-            </Text>
-          ) : null}
-        </View>
-        <View style={styles.feedTimeRow}>
-          <Text style={styles.feedTime}>{formatFeedTimestamp(post.created_at)}</Text>
-          {overflowButton}
-        </View>
-        {isOwnPost && onDelete ? (
-          <Pressable
-            accessibilityLabel="Delete photo"
-            accessibilityRole="button"
-            disabled={deleting}
-            hitSlop={10}
-            onPress={onDelete}
-            style={({ pressed }) => [styles.feedDelete, pressed && styles.pressed]}
-          >
-            {deleting ? (
-              <ActivityIndicator color={colors.muted} size="small" />
-            ) : (
-              <Ionicons color={colors.muted} name="trash-outline" size={18} />
-            )}
-          </Pressable>
-        ) : null}
-      </View>
-
-      <View
-        style={styles.feedPhotoBlock}
-      >
+      <View style={styles.feedPhotoBlock}>
         <View style={styles.feedImageWrap} {...photoPanResponder.panHandlers}>
           <View
             accessibilityHint="Double-tap or long-press to react"
             accessibilityRole="imagebutton"
           >
-            <PostImage aspectRatio={POST_IMAGE_ASPECT_RATIO} post={post} style={styles.feedImage} />
+            <PostImage
+              aspectRatio={POST_IMAGE_ASPECT_RATIO}
+              post={post}
+              style={styles.feedImage}
+            />
           </View>
           {post.video_path ? (
             <FeedVideoPlay durationMs={post.video_duration_ms} videoPath={post.video_path} />
           ) : post.audio_path ? (
             <FeedAudioNote audioPath={post.audio_path} />
           ) : null}
+
+          <View pointerEvents="box-none" style={styles.feedOverlayTop}>
+            <Avatar profile={post.profile} size={34} />
+            <View style={styles.feedHeaderText}>
+              <Text style={styles.feedOverlayAuthor}>{author}</Text>
+              <Text style={styles.feedOverlayMeta}>
+                {formatFeedTimestamp(post.created_at)}
+                {post.is_temporary && remaining ? ` · ${remaining}` : ''}
+              </Text>
+            </View>
+            <GlassIconButton
+              accessibilityLabel="Post options"
+              color={colors.white}
+              dark
+              icon="ellipsis-horizontal"
+              iconSize={16}
+              onPress={openPostOverflowMenu}
+              size={32}
+            />
+            {isOwnPost && onDelete ? (
+              deleting ? (
+                <ActivityIndicator color={colors.white} size="small" />
+              ) : (
+                <GlassIconButton
+                  accessibilityLabel="Delete photo"
+                  color={colors.white}
+                  dark
+                  icon="trash-outline"
+                  iconSize={16}
+                  onPress={onDelete}
+                  size={32}
+                />
+              )
+            ) : null}
+          </View>
+
+          <View pointerEvents="box-none" style={styles.feedOverlayBottom}>
+            <View pointerEvents="box-none" style={styles.feedOverlayCopy}>
+              {post.description ? (
+                <Text numberOfLines={3} style={styles.feedOverlayCaption}>
+                  {post.description}
+                </Text>
+              ) : null}
+              {post.location_name ? (
+                <View style={styles.feedLocationPill}>
+                  <Ionicons color={colors.primary} name="location-sharp" size={15} />
+                  <Text numberOfLines={1} style={styles.feedLocationPillText}>
+                    {post.location_name}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <View pointerEvents="box-none" style={styles.feedBottomActions}>
+              {onPressReactions ? (
+                <Pressable
+                  accessibilityLabel={
+                    reactionCount === 1
+                      ? 'View 1 reaction'
+                      : `View all ${reactionCount} reactions`
+                  }
+                  accessibilityRole="button"
+                  onPress={onPressReactions}
+                  style={({ pressed }) => [styles.feedSideAction, pressed && styles.pressed]}
+                >
+                  <GlassSurface dark isInteractive style={styles.feedSideBubble}>
+                    <Text style={styles.feedSideEmoji}>
+                      {reactionStickerEmoji ?? '👍'}
+                    </Text>
+                  </GlassSurface>
+                  {reactionCount > 0 ? (
+                    <Text style={styles.feedSideCount}>{reactionCount}</Text>
+                  ) : null}
+                </Pressable>
+              ) : null}
+              <Pressable
+                accessibilityLabel={commentLabel}
+                accessibilityRole="button"
+                onPress={onPress}
+                style={({ pressed }) => [styles.feedSideAction, pressed && styles.pressed]}
+              >
+                <GlassSurface dark isInteractive style={styles.feedSideBubble}>
+                  <Ionicons color={colors.white} name="chatbubble-outline" size={18} />
+                </GlassSurface>
+                {commentCount > 0 ? (
+                  <Text style={styles.feedSideCount}>{commentCount}</Text>
+                ) : null}
+              </Pressable>
+              <Pressable
+                accessibilityLabel={commentLabel}
+                accessibilityRole="button"
+                onPress={onPress}
+                style={({ pressed }) => pressed && styles.pressed}
+              >
+                <GlassSurface dark isInteractive style={styles.feedCommentsPill}>
+                  <Text style={styles.feedCommentsPillText}>{commentLabel}</Text>
+                  <Ionicons color={colors.white} name="chevron-forward" size={14} />
+                </GlassSurface>
+              </Pressable>
+            </View>
+          </View>
+
           {reactionPicker}
         </View>
         {reactionBurst}
-        {reactionSticker}
       </View>
-
-      {actionsRow}
-
-      {post.description ? (
-        <Text style={styles.feedCaption}>
-          <Text style={styles.feedAuthor}>{author} </Text>
-          {post.description}
-        </Text>
-      ) : null}
     </View>
   );
 }
@@ -1150,7 +1086,7 @@ const styles = StyleSheet.create({
   /** Home feed: posts sit flush under the collapsing ride header. */
   feedScrollContent: {
     flexGrow: 1,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingBottom: spacing.lg,
     paddingTop: 0,
   },
@@ -1173,11 +1109,9 @@ const styles = StyleSheet.create({
   },
   centered: { justifyContent: 'center' },
   card: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
     borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
     gap: spacing.md,
+    overflow: 'hidden',
     padding: spacing.lg,
     ...shadows.card,
   },
@@ -1209,18 +1143,25 @@ const styles = StyleSheet.create({
   muted: { color: colors.muted },
   field: { gap: spacing.xs },
   label: { color: colors.textSoft, fontSize: 13, fontWeight: '700', letterSpacing: 0.2 },
+  inputGlass: {
+    borderRadius: radius.md,
+    overflow: 'hidden',
+  },
+  inputGlassFocused: {
+    borderColor: colors.primary,
+    borderWidth: 1.5,
+  },
+  inputGlassError: {
+    borderColor: colors.danger,
+    borderWidth: 1.5,
+  },
   input: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    borderWidth: 1,
+    backgroundColor: 'transparent',
     color: colors.text,
     fontSize: 16,
     minHeight: 54,
     paddingHorizontal: spacing.md,
   },
-  inputFocused: { borderColor: colors.primary, borderWidth: 1.5 },
-  inputError: { borderColor: colors.danger },
   error: { color: colors.danger, fontSize: 13, lineHeight: 18 },
   errorBanner: {
     backgroundColor: colors.dangerSurface,
@@ -1244,13 +1185,27 @@ const styles = StyleSheet.create({
   skeleton: {
     backgroundColor: colors.surfaceMuted,
     borderRadius: radius.xs,
+    overflow: 'hidden',
+  },
+  skeletonShimmer: {
+    ...StyleSheet.absoluteFill,
+    width: 120,
+  },
+  skeletonShimmerFill: {
+    flex: 1,
   },
   centeredBusy: {
     alignItems: 'center',
     flexGrow: 1,
+    gap: spacing.md,
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xxl,
+  },
+  centeredBusyPulse: {
+    borderRadius: radius.pill,
+    height: 10,
+    width: 72,
   },
   centeredBusyText: {
     color: colors.muted,
@@ -1259,20 +1214,74 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   rideSkeleton: {
-    marginHorizontal: -spacing.lg,
+    gap: spacing.md,
   },
-  skeletonAvatar: { borderRadius: 17, height: 34, width: 34 },
-  skeletonAuthor: { borderRadius: radius.pill, height: 12, width: 110 },
-  skeletonMeta: { borderRadius: radius.pill, height: 10, marginTop: 4, width: 72 },
-  skeletonTime: { borderRadius: radius.pill, height: 10, width: 28 },
-  skeletonImage: { aspectRatio: POST_IMAGE_ASPECT_RATIO, borderRadius: 0, width: '100%' },
-  skeletonAction: { borderRadius: radius.pill, height: 22, width: 22 },
-  skeletonCaption: {
+  skeletonPost: {
+    gap: spacing.sm,
+  },
+  skeletonPostHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xxs,
+  },
+  skeletonPostHeaderCopy: {
+    flex: 1,
+    gap: 6,
+  },
+  skeletonAvatar: {
+    borderRadius: radius.pill,
+    height: 34,
+    width: 34,
+  },
+  skeletonLineShort: {
     borderRadius: radius.pill,
     height: 12,
-    marginHorizontal: spacing.md,
-    marginTop: spacing.xs,
-    width: '55%',
+    width: '42%',
+  },
+  skeletonLineTiny: {
+    borderRadius: radius.pill,
+    height: 10,
+    width: '28%',
+  },
+  skeletonLineCaption: {
+    borderRadius: radius.pill,
+    flex: 1,
+    height: 12,
+  },
+  skeletonAction: {
+    borderRadius: radius.pill,
+    height: 36,
+    width: 36,
+  },
+  skeletonPostFooter: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xxs,
+  },
+  skeletonImage: {
+    aspectRatio: POST_IMAGE_ASPECT_RATIO,
+    borderRadius: radius.lg,
+    width: '100%',
+  },
+  photoSkeleton: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: 0,
+  },
+  commentsSkeleton: {
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  commentSkeletonRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  commentSkeletonCopy: {
+    flex: 1,
+    gap: 8,
+    paddingTop: 4,
   },
   weekdays: {
     flexDirection: 'row',
@@ -1282,10 +1291,10 @@ const styles = StyleSheet.create({
   },
   weekday: {
     alignItems: 'center',
-    backgroundColor: colors.backgroundRaised,
-    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.glassBorder,
     borderRadius: radius.pill,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     flexGrow: 1,
     flexBasis: '12%',
     minWidth: 36,
@@ -1296,6 +1305,14 @@ const styles = StyleSheet.create({
   weekdayText: { color: colors.text, fontSize: 11, fontWeight: '600' },
   weekdayTextSelected: { color: colors.surface },
   photo: { backgroundColor: colors.surfaceMuted, width: '100%' },
+  photoFrame: { overflow: 'hidden' },
+  photoBlurFill: {
+    ...StyleSheet.absoluteFill,
+    transform: [{ scale: 1.08 }],
+  },
+  photoSharp: {
+    ...StyleSheet.absoluteFill,
+  },
   photoLoading: { alignItems: 'center', justifyContent: 'center' },
   avatarImage: { backgroundColor: colors.surfaceMuted },
   avatarFallback: {
@@ -1305,39 +1322,11 @@ const styles = StyleSheet.create({
   },
   avatarInitials: { color: colors.primary, fontWeight: '800' },
   feedItem: {
-    backgroundColor: colors.surface,
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     overflow: 'visible',
-    paddingBottom: spacing.sm,
-  },
-  feedItemTemporary: {
-    backgroundColor: colors.background,
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    overflow: 'visible',
-    paddingBottom: spacing.sm,
-  },
-  feedHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingBottom: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
   },
   feedHeaderText: { flex: 1, gap: 1 },
-  feedAuthor: { color: colors.text, fontSize: 14, fontWeight: '700' },
-  feedLocation: { color: colors.muted, fontSize: 12 },
-  feedTimeRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.xxs,
-  },
-  feedTime: { color: colors.muted, fontSize: 12 },
-  feedOverflow: { paddingHorizontal: 2, paddingVertical: 2 },
-  feedDelete: { paddingLeft: spacing.xs },
-  feedImage: { aspectRatio: POST_IMAGE_ASPECT_RATIO },
+  feedImage: { aspectRatio: POST_IMAGE_ASPECT_RATIO, width: '100%' },
   feedPhotoBlock: {
     overflow: 'visible',
     position: 'relative',
@@ -1345,116 +1334,144 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   feedImageWrap: {
+    borderRadius: radius.lg,
     overflow: 'hidden',
     position: 'relative',
     width: '100%',
+    ...shadows.card,
   },
-  tempPhotoWrap: {
-    overflow: 'hidden',
-    position: 'relative',
-    width: '100%',
-  },
-  tempPhoto: {
-    aspectRatio: POST_IMAGE_ASPECT_RATIO,
-    width: '100%',
-  },
-  tempOverlay: {
+  feedOverlayTop: {
     alignItems: 'center',
-    backgroundColor: 'rgba(12, 18, 15, 0.42)',
     flexDirection: 'row',
     gap: spacing.sm,
     left: 0,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
     position: 'absolute',
     right: 0,
     top: 0,
-    zIndex: 5,
+    zIndex: 6,
   },
-  tempAuthor: { color: colors.white, fontSize: 14, fontWeight: '800' },
-  tempMeta: { color: 'rgba(255,255,255,0.82)', fontSize: 12, fontWeight: '600' },
-  tempTimerBadge: {
-    backgroundColor: 'rgba(12, 18, 15, 0.55)',
-    borderRadius: radius.pill,
-    bottom: spacing.sm,
-    left: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xxs,
+  feedOverlayAuthor: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '800',
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  feedOverlayMeta: {
+    color: 'rgba(255,255,255,0.86)',
+    fontSize: 12,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  feedBottomActions: {
+    alignItems: 'flex-end',
+    gap: spacing.sm,
+  },
+  feedSideAction: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  feedSideBubble: {
+    alignItems: 'center',
+    borderRadius: 22,
+    height: 44,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    width: 44,
+  },
+  feedSideEmoji: {
+    fontSize: 18,
+  },
+  feedSideCount: {
+    color: colors.white,
+    fontSize: 11,
+    fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  feedOverlayBottom: {
+    alignItems: 'flex-end',
+    bottom: 0,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
+    left: 0,
+    padding: spacing.sm,
     position: 'absolute',
-    zIndex: 5,
+    right: 0,
+    zIndex: 6,
   },
-  tempTimerBadgeAboveAudio: {
-    bottom: spacing.sm + 52,
+  feedOverlayCopy: {
+    flex: 1,
+    gap: spacing.xs,
+    justifyContent: 'flex-end',
+    minWidth: 0,
+    paddingRight: spacing.xs,
   },
-  tempTimerText: {
+  feedOverlayCaption: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 20,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  feedLocationPill: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(20,12,10,0.45)',
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    flexShrink: 1,
+    gap: 5,
+    maxWidth: '100%',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 7,
+  },
+  feedLocationPillText: {
+    color: colors.white,
+    flexShrink: 1,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  feedCommentsPill: {
+    alignItems: 'center',
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    gap: 4,
+    overflow: 'hidden',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 8,
+  },
+  feedCommentsPillText: {
     color: colors.white,
     fontSize: 12,
     fontWeight: '700',
   },
-
-  feedActions: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.md,
-    paddingBottom: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    zIndex: 1,
-  },
-  feedCommentAction: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flexShrink: 1,
-    gap: spacing.xs,
-    maxWidth: '90%',
-  },
-  feedReactionSticker: {
-    overflow: 'visible',
-    position: 'absolute',
-    zIndex: 4,
-  },
-  feedReactionStickerEmoji: {
-    includeFontPadding: false,
-    overflow: 'visible',
-    textAlign: 'center',
-    textAlignVertical: 'center',
-    textShadowColor: 'rgba(0,0,0,0.28)',
-    textShadowOffset: { width: 0, height: 3 },
-    textShadowRadius: 6,
-  },
-  feedCaption: {
-    color: colors.textSoft,
-    fontSize: 14,
-    lineHeight: 20,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.xs,
-  },
-  feedViewCommentsInline: {
-    color: colors.muted,
-    flexShrink: 1,
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  feedViewCommentsActive: {
-    color: colors.textSoft,
-  },
   button: {
     alignItems: 'center',
     backgroundColor: colors.primary,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     justifyContent: 'center',
     minHeight: 54,
     paddingHorizontal: spacing.lg,
-    ...shadows.card,
+    ...shadows.glow,
   },
   buttonCompact: {
     minHeight: 36,
     paddingHorizontal: spacing.sm,
   },
   buttonSecondary: {
-    backgroundColor: colors.primarySoft,
-    borderColor: 'transparent',
-    borderWidth: 1,
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.glassBorder,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   buttonAccent: { backgroundColor: colors.accent },
   buttonDanger: { backgroundColor: colors.danger },

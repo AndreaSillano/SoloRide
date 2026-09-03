@@ -95,7 +95,6 @@ export default function JoinRideScreen() {
       />
       <Button
         loading={requestJoin.isPending}
-        variant="accent"
         onPress={() => void submitRequest()}
       >
         Request to join

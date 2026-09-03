@@ -1,6 +1,6 @@
 export const colors = {
   // Rhodeo sunrise — sampled from the coral/orange/gold app icon.
-  background: '#FFF9F3',
+  background: '#FFF6EE',
   backgroundRaised: '#FFFCF8',
   surface: '#FFFFFF',
   surfaceMuted: '#FCEAE1',
@@ -8,8 +8,8 @@ export const colors = {
   textSoft: '#684649',
   muted: '#8E6664',
   // Bright apricot-orange from the center of the Rhodeo icon.
-  primary: '#F77343',
-  primaryPressed: '#D96F3B',
+  primary: '#FF5C1A',
+  primaryPressed: '#E04E12',
   primarySoft: '#FFE4D3',
   accent: '#E87645',
   accentPressed: '#CF5F35',
@@ -21,6 +21,10 @@ export const colors = {
   dangerSurface: '#FFE7EA',
   white: '#FFFFFF',
   shadow: '#77333B',
+  glassFill: 'rgba(255, 246, 238, 0.72)',
+  glassBorder: 'rgba(221, 175, 158, 0.45)',
+  glassFillDark: 'rgba(28, 16, 14, 0.38)',
+  glassBorderDark: 'rgba(255, 255, 255, 0.28)',
 } as const;
 
 export const spacing = {
@@ -35,25 +39,33 @@ export const spacing = {
 
 export const radius = {
   xs: 10,
-  sm: 14,
-  md: 20,
-  lg: 28,
+  sm: 16,
+  md: 22,
+  lg: 30,
+  xl: 36,
   pill: 999,
 } as const;
 
 export const shadows = {
   card: {
     shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 7 },
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 3,
   },
   floating: {
     shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.16,
-    shadowRadius: 24,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 26,
+    elevation: 6,
+  },
+  glow: {
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
+    elevation: 8,
   },
 } as const;

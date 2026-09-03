@@ -387,8 +387,7 @@ const styles = StyleSheet.create({
   nextLabel: { color: colors.primary, fontSize: 18, fontWeight: '700' },
   actions: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
   code: { fontWeight: '800', letterSpacing: 1 },
-  // Cancels ScrollScreen's horizontal padding so feed photos run edge-to-edge.
-  feed: { marginHorizontal: -spacing.lg },
+  feed: { gap: spacing.xs },
   loadMore: {
     alignItems: 'center',
     paddingVertical: spacing.lg,

@@ -2,7 +2,7 @@ import DateTimePicker, {
   type DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
-import { Platform, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import {
   SCHEDULE_KIND_OPTIONS,
@@ -13,6 +13,7 @@ import {
 import { haptics } from '@/lib/haptics';
 import { colors, radius, spacing } from '@/theme';
 
+import { NativeSwitch, GlassSurface } from './glass';
 import { Body, Field, WeekdaySelector } from './ui';
 
 type PickerField = 'startDate' | 'endDate' | 'notificationTime';
@@ -114,7 +115,7 @@ export function RideForm({
 
   const pickerPanel =
     picker ? (
-      <View style={styles.picker}>
+      <GlassSurface style={styles.picker}>
         <DateTimePicker
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           mode={pickerMode}
@@ -126,7 +127,7 @@ export function RideForm({
             <Text style={styles.doneText}>Done</Text>
           </Pressable>
         ) : null}
-      </View>
+      </GlassSurface>
     ) : null;
 
   return (
@@ -179,14 +180,13 @@ export function RideForm({
           <Text style={styles.label}>Never ends</Text>
           <Body muted>Keep the Ride open with no end date.</Body>
         </View>
-        <Switch
+        <NativeSwitch
           disabled={disabled}
           onValueChange={(neverEnds) => {
             haptics.selection();
             set('neverEnds', neverEnds);
             if (neverEnds && picker === 'endDate') setPicker(null);
           }}
-          trackColor={{ true: colors.primary }}
           value={value.neverEnds}
         />
       </View>
@@ -293,22 +293,24 @@ export function RideForm({
         {value.scheduleKind === 'monthly_date' ? (
           <View style={styles.monthDayRow}>
             <Text style={styles.monthDayLabel}>On day</Text>
-            <TextInput
-              editable={!disabled}
-              keyboardType="number-pad"
-              maxLength={2}
-              onChangeText={(text) => {
-                const digits = text.replace(/\D/g, '');
-                if (!digits) {
-                  set('monthDay', 1);
-                  return;
-                }
-                const next = Math.min(31, Math.max(1, Number(digits)));
-                set('monthDay', next);
-              }}
-              style={styles.monthDayInput}
-              value={String(value.monthDay || 1)}
-            />
+            <GlassSurface style={styles.monthDayInputGlass}>
+              <TextInput
+                editable={!disabled}
+                keyboardType="number-pad"
+                maxLength={2}
+                onChangeText={(text) => {
+                  const digits = text.replace(/\D/g, '');
+                  if (!digits) {
+                    set('monthDay', 1);
+                    return;
+                  }
+                  const next = Math.min(31, Math.max(1, Number(digits)));
+                  set('monthDay', next);
+                }}
+                style={styles.monthDayInput}
+                value={String(value.monthDay || 1)}
+              />
+            </GlassSurface>
             <Body muted>Short months use the last day.</Body>
           </View>
         ) : null}
@@ -376,13 +378,12 @@ export function RideForm({
                   : 'Members can post on any one selected day each week.'}
               </Body>
             </View>
-            <Switch
+            <NativeSwitch
               disabled={disabled}
               onValueChange={(strictSchedule) => {
                 haptics.selection();
                 set('strictSchedule', strictSchedule);
               }}
-              trackColor={{ true: colors.primary }}
               value={value.strictSchedule}
             />
           </View>
@@ -423,14 +424,13 @@ function PickerButton({
         accessibilityRole="button"
         disabled={disabled}
         onPress={onPress}
-        style={({ pressed }) => [
-          styles.pickerButton,
-          active && styles.pickerButtonActive,
-          pressed && styles.pressed,
-          disabled && styles.disabled,
-        ]}
+        style={({ pressed }) => [pressed && styles.pressed, disabled && styles.disabled]}
       >
-        <Text style={styles.pickerButtonText}>{value}</Text>
+        <GlassSurface
+          style={[styles.pickerButton, active && styles.pickerButtonActive]}
+        >
+          <Text style={styles.pickerButtonText}>{value}</Text>
+        </GlassSurface>
       </Pressable>
     </View>
   );
@@ -454,10 +454,10 @@ const styles = StyleSheet.create({
   dateRow: { flexDirection: 'row', gap: spacing.sm },
   rhythmRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   rhythmPill: {
-    backgroundColor: colors.backgroundRaised,
-    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.glassBorder,
     borderRadius: radius.pill,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: spacing.sm,
     paddingVertical: 6,
   },
@@ -466,13 +466,13 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   rhythmPillText: { color: colors.text, fontSize: 12, fontWeight: '600' },
-  rhythmPillTextSelected: { color: colors.surface },
+  rhythmPillTextSelected: { color: colors.white },
   ordinalRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   ordinalPill: {
-    backgroundColor: colors.backgroundRaised,
-    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.glassBorder,
     borderRadius: radius.pill,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     minWidth: 44,
     paddingHorizontal: spacing.sm,
     paddingVertical: 6,
@@ -485,10 +485,7 @@ const styles = StyleSheet.create({
   },
   monthDayLabel: { color: colors.text, fontSize: 14, fontWeight: '600' },
   monthDayInput: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    borderWidth: 1,
+    backgroundColor: 'transparent',
     color: colors.text,
     fontSize: 16,
     fontWeight: '700',
@@ -497,14 +494,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     textAlign: 'center',
   },
+  monthDayInputGlass: {
+    borderRadius: radius.md,
+    overflow: 'hidden',
+  },
   pickerButtonWrap: { flex: 1, gap: spacing.xs },
   pickerButton: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    borderWidth: 1,
+    borderRadius: radius.md,
     justifyContent: 'center',
     minHeight: 48,
+    overflow: 'hidden',
     paddingHorizontal: spacing.md,
   },
   pickerButtonActive: {
@@ -513,10 +512,7 @@ const styles = StyleSheet.create({
   },
   pickerButtonText: { color: colors.text, fontSize: 16 },
   picker: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
     borderRadius: radius.md,
-    borderWidth: 1,
     overflow: 'hidden',
   },
   done: { alignItems: 'center', padding: spacing.md },

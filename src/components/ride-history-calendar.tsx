@@ -1,7 +1,6 @@
 import { format, parseISO } from 'date-fns';
 import { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Modal,
   Platform,
@@ -21,7 +20,7 @@ import { useCurrentUser } from '@/auth/auth-context';
 import { CommentsModal } from '@/components/comments-modal';
 import { ReactionsModal } from '@/components/reactions-modal';
 import { SheetCloseButton } from '@/components/sheet-close-button';
-import { Body, FeedPost, StatePanel } from '@/components/ui';
+import { Body, FeedPost, RideFeedSkeleton, StatePanel } from '@/components/ui';
 import {
   getOwnReactionScore,
   useDeletePost,
@@ -140,7 +139,7 @@ function DayFeedScreen({
         style={styles.feedScroll}
       >
         {dayPosts.isPending ? (
-          <ActivityIndicator color={colors.primary} style={styles.dayBusy} />
+          <RideFeedSkeleton count={2} />
         ) : dayPosts.isError ? (
           <View style={styles.feedMessage}>
             <StatePanel
@@ -321,13 +320,13 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   feedScroll: { flex: 1 },
-  // Edge-to-edge photos, stacked flush like the main Ride feed.
+  // Match the main Ride feed side inset so photos aren't edge-to-edge.
   feedContent: {
+    paddingHorizontal: spacing.md,
     paddingTop: 0,
   },
   feedMessage: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
   },
-  dayBusy: { paddingVertical: spacing.xl },
 });

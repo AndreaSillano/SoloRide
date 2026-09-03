@@ -23,6 +23,7 @@ import {
   AudioNotePreview,
   PublishAudioFooter,
 } from '@/components/audio-note-recorder';
+import { GlassSurface } from '@/components/glass';
 import { LocationPickerModal } from '@/components/location-picker-modal';
 import { PublishVideoPreview } from '@/components/publish-video-preview';
 import { RidePickerModal } from '@/components/ride-picker-modal';
@@ -499,7 +500,7 @@ export default function PublishScreen() {
               </Pressable>
             </View>
 
-            <View style={styles.captionBlock}>
+            <GlassSurface style={styles.captionBlock}>
               <TextInput
                 autoCapitalize="sentences"
                 maxLength={50}
@@ -512,7 +513,7 @@ export default function PublishScreen() {
                 value={description}
               />
               <Text style={styles.captionCounter}>{description.length}/50</Text>
-            </View>
+            </GlassSurface>
           </View>
 
           <View style={styles.composeForm}>
@@ -731,6 +732,7 @@ const styles = StyleSheet.create({
   },
   previewFrame: {
     alignSelf: 'center',
+    borderRadius: radius.lg,
     overflow: 'hidden',
     position: 'relative',
     width: '52%',
@@ -770,10 +772,10 @@ const styles = StyleSheet.create({
   postToBlock: { gap: spacing.xs },
   pickerTrigger: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    borderWidth: 1,
+    backgroundColor: colors.glassFill,
+    borderColor: colors.glassBorder,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
@@ -807,10 +809,10 @@ const styles = StyleSheet.create({
   modeBlock: { gap: spacing.xs },
   modeRow: { flexDirection: 'row', gap: spacing.sm },
   modeChip: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
+    backgroundColor: colors.glassFill,
+    borderColor: colors.glassBorder,
     borderRadius: radius.pill,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     flex: 1,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
@@ -826,7 +828,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   modeChipTextSelected: { color: colors.primary },
-  captionBlock: { gap: spacing.xxs, paddingHorizontal: spacing.xxs },
+  captionBlock: {
+    borderRadius: radius.md,
+    gap: spacing.xxs,
+    overflow: 'hidden',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
   postToLabelRow: {
     alignItems: 'baseline',
     flexDirection: 'row',
@@ -856,6 +864,7 @@ const styles = StyleSheet.create({
   locationBlock: { gap: spacing.xs },
   hint: { color: colors.muted, fontSize: 13, fontWeight: '500', marginTop: 2 },
   composeFooterSticky: {
+    backgroundColor: colors.background,
     bottom: 0,
     left: 0,
     position: 'absolute',

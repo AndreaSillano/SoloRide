@@ -14,6 +14,7 @@ import {
 import { useAuth } from '@/auth/auth-context';
 import { loginSchema, registerSchema, type LoginValues, type RegisterValues } from '@/auth/schemas';
 import { ErrorBanner, Field, Screen } from '@/components/ui';
+import { GlassSurface } from '@/components/glass';
 import { envConfigurationError } from '@/lib/env';
 import { haptics } from '@/lib/haptics';
 import { colors, radius, shadows, spacing } from '@/theme';
@@ -265,7 +266,7 @@ export default function AuthLandingScreen() {
       </View>
 
       {/* Auth card */}
-      <View style={styles.card}>
+      <GlassSurface style={styles.card}>
         <ErrorBanner message={envConfigurationError} />
 
         {/* Tab switcher */}
@@ -287,7 +288,7 @@ export default function AuthLandingScreen() {
 
         {/* Form */}
         {activeTab === 'login' ? <LoginForm /> : <RegisterForm />}
-      </View>
+      </GlassSurface>
 
       {/* Legal / spacer */}
       <Text style={styles.legal}>
@@ -316,8 +317,8 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   brandName: {
-    color: colors.text,
-    fontSize: 28,
+    color: colors.primary,
+    fontSize: 32,
     fontWeight: '800',
     letterSpacing: -0.8,
     marginTop: spacing.xs,
@@ -335,10 +336,8 @@ const styles = StyleSheet.create({
 
   // Card
   card: {
-    backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    overflow: 'hidden',
     padding: spacing.lg,
     gap: spacing.md,
     ...shadows.card,
@@ -347,15 +346,15 @@ const styles = StyleSheet.create({
   // Tabs
   tabs: {
     flexDirection: 'row',
-    backgroundColor: colors.background,
-    borderRadius: radius.sm,
+    backgroundColor: colors.glassFill,
+    borderRadius: radius.md,
     padding: 4,
   },
   tab: {
     flex: 1,
     alignItems: 'center',
     paddingVertical: 10,
-    borderRadius: radius.xs,
+    borderRadius: radius.sm,
   },
   tabActive: {
     backgroundColor: colors.surface,
@@ -384,12 +383,12 @@ const styles = StyleSheet.create({
   authButton: {
     alignItems: 'center',
     backgroundColor: colors.primary,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     justifyContent: 'center',
     minHeight: 54,
     paddingHorizontal: spacing.lg,
     marginTop: spacing.xs,
-    ...shadows.card,
+    ...shadows.glow,
   },
   authButtonText: {
     color: colors.white,

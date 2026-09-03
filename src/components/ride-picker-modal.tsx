@@ -1,18 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import {
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { CameraRide } from '@/features/rides';
 import { colors, radius, spacing } from '@/theme';
 
+import { AppBottomSheet } from './glass';
 import { SheetCloseButton } from './sheet-close-button';
 
 export function RidePickerModal({
@@ -31,14 +23,8 @@ export function RidePickerModal({
   onClose: () => void;
 }) {
   return (
-    <Modal
-      allowSwipeDismissal
-      animationType="slide"
-      onRequestClose={onClose}
-      presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : undefined}
-      visible={visible}
-    >
-      <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safeArea}>
+    <AppBottomSheet onClose={onClose} visible={visible}>
+      <View style={styles.sheet}>
         <View style={styles.header}>
           <Text style={styles.title}>{isTemporary ? 'Choose a Ride' : 'Choose Rides'}</Text>
           <SheetCloseButton accessibilityLabel="Close ride picker" onPress={onClose} />
@@ -58,8 +44,8 @@ export function RidePickerModal({
             />
           ))}
         </ScrollView>
-      </SafeAreaView>
-    </Modal>
+      </View>
+    </AppBottomSheet>
   );
 }
 
@@ -110,7 +96,7 @@ function RideOption({
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: colors.surface, flex: 1 },
+  sheet: { flex: 1, width: '100%' },
   flex: { flex: 1 },
   header: {
     alignItems: 'center',

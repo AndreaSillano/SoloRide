@@ -20,6 +20,7 @@ import { SafeAreaView, useSafeAreaInsets, type Edge } from 'react-native-safe-ar
 
 import { useCurrentUser } from '@/auth/auth-context';
 import { RideForm } from '@/components/ride-form';
+import { GlassSurface } from '@/components/glass';
 import { RideHistoryCalendar } from '@/components/ride-history-calendar';
 import {
   Avatar,
@@ -29,6 +30,7 @@ import {
   ErrorBanner,
   StatePanel,
 } from '@/components/ui';
+import { SegmentedControl } from '@expo/ui/community/segmented-control';
 import {
   requestNotificationRefresh,
   useSoloRideNotifications,
@@ -553,40 +555,32 @@ export default function RideSettingsScreen() {
 
   const tabBar = (
     <View style={styles.tabBar}>
-      {TABS.map((item) => {
-        const selected = tab === item.id;
-        const showPendingDot = item.id === 'people' && owner && pendingCount > 0;
-        return (
-          <Pressable
-            key={item.id}
-            accessibilityRole="tab"
-            accessibilityState={{ selected }}
-            accessibilityLabel={
-              showPendingDot ? `${item.label}, pending join requests` : item.label
-            }
-            onPress={() => {
-              haptics.selection();
-              setTab(item.id);
-              setError(null);
-              if (item.id !== 'details') setEditing(false);
-            }}
-            style={[styles.tab, selected && styles.tabSelected]}
-          >
-            <View style={styles.tabLabelWrap}>
-              <Text style={[styles.tabLabel, selected && styles.tabLabelSelected]}>
-                {item.label}
-              </Text>
-              {showPendingDot ? (
-                <View
-                  accessibilityElementsHidden
-                  importantForAccessibility="no-hide-descendants"
-                  style={styles.tabDot}
-                />
-              ) : null}
-            </View>
-          </Pressable>
-        );
-      })}
+      <SegmentedControl
+        appearance="light"
+        onValueChange={(value) => {
+          const item = TABS.find((tabItem) => tabItem.label === value);
+          if (!item) return;
+          haptics.selection();
+          setTab(item.id);
+          setError(null);
+          if (item.id !== 'details') setEditing(false);
+        }}
+        selectedIndex={Math.max(
+          0,
+          TABS.findIndex((item) => item.id === tab),
+        )}
+        style={styles.segmented}
+        tintColor={colors.primary}
+        values={TABS.map((item) => item.label)}
+      />
+      {owner && pendingCount > 0 ? (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          pointerEvents="none"
+          style={styles.tabDot}
+        />
+      ) : null}
     </View>
   );
 
@@ -597,7 +591,7 @@ export default function RideSettingsScreen() {
       {tab === 'details' ? (
         <View style={styles.tabBody}>
           <SectionLabel>Invite code</SectionLabel>
-          <View style={styles.inviteBlock}>
+          <GlassSurface style={styles.inviteBlock}>
             <Text style={styles.code}>{ride.data.code}</Text>
             <Body muted>
               Share this code so someone can request to join. You approve them in People.
@@ -614,7 +608,7 @@ export default function RideSettingsScreen() {
               <Ionicons color={colors.white} name="share-outline" size={20} />
               <Text style={styles.shareButtonText}>Share invite code</Text>
             </Pressable>
-          </View>
+          </GlassSurface>
 
           <View style={styles.dottedDivider} />
 
@@ -673,7 +667,7 @@ export default function RideSettingsScreen() {
             </>
           ) : (
             <>
-              <View style={styles.metaGroup}>
+              <GlassSurface style={styles.metaGroup}>
                 <MetaRow label="Name" value={ride.data.name} />
                 <MetaRow
                   label="Description"
@@ -706,7 +700,7 @@ export default function RideSettingsScreen() {
                     weekdayOrdinal: ride.data.weekday_ordinal,
                   })}
                 />
-              </View>
+              </GlassSurface>
               {!owner ? (
                 <Body muted>Only the owner can edit schedule and details.</Body>
               ) : null}
@@ -844,7 +838,8 @@ export default function RideSettingsScreen() {
               onAction={() => void members.refetch()}
             />
           ) : (
-            members.data?.map((member, index) => {
+            <GlassSurface style={styles.peopleCard}>
+            {members.data?.map((member, index) => {
               const canRemove = owner && member.role !== 'creator' && !ride.data.is_archived;
               const last = index === (members.data?.length ?? 0) - 1;
               return (
@@ -876,7 +871,8 @@ export default function RideSettingsScreen() {
                   ) : null}
                 </View>
               );
-            })
+            })}
+            </GlassSurface>
           )}
           {!members.isPending && !members.isError ? (
             <Body muted>
@@ -913,36 +909,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   tabBar: {
+    backgroundColor: colors.background,
     borderBottomColor: colors.border,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: spacing.xs,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs,
-  },
-  tab: {
-    alignItems: 'center',
-    borderRadius: radius.pill,
-    flexDirection: 'row',
-    gap: 6,
-    justifyContent: 'center',
-    minHeight: 36,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  tabSelected: {
-    backgroundColor: colors.primarySoft,
-  },
-  tabLabelWrap: {
+    paddingVertical: spacing.sm,
     position: 'relative',
   },
-  tabLabel: {
-    color: colors.muted,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  tabLabelSelected: {
-    color: colors.primary,
+  segmented: {
+    width: '100%',
   },
   tabDot: {
     backgroundColor: colors.highlight,
@@ -950,12 +925,13 @@ const styles = StyleSheet.create({
     elevation: 4,
     height: 8,
     position: 'absolute',
-    right: -10,
+    // People is the middle segment of three.
+    right: '36%',
     shadowColor: colors.highlight,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
     shadowRadius: 5,
-    top: -2,
+    top: spacing.sm + 2,
     width: 8,
   },
   tabBody: {
@@ -982,7 +958,10 @@ const styles = StyleSheet.create({
     width: 36,
   },
   inviteBlock: {
+    borderRadius: radius.lg,
     gap: spacing.sm,
+    overflow: 'hidden',
+    padding: spacing.md,
   },
   code: {
     color: colors.text,
@@ -993,7 +972,7 @@ const styles = StyleSheet.create({
   shareButton: {
     alignItems: 'center',
     backgroundColor: colors.accent,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     flexDirection: 'row',
     gap: spacing.xs,
     justifyContent: 'center',
@@ -1013,7 +992,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   metaGroup: {
+    borderRadius: radius.lg,
     gap: 0,
+    overflow: 'hidden',
+    paddingHorizontal: spacing.md,
   },
   metaRow: {
     alignItems: 'flex-start',
@@ -1040,6 +1022,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 21,
     textAlign: 'right',
+  },
+  peopleCard: {
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    paddingHorizontal: spacing.md,
   },
   personRow: {
     alignItems: 'center',

@@ -21,10 +21,6 @@ export default function YourRidesScreen() {
   const groups = groupUserRides(rides.data ?? []);
   const pendingRequests = pending.data ?? [];
 
-  const openRide = (rideId: string) => {
-    router.replace({ pathname: '/', params: { selectRideId: rideId } });
-  };
-
   if (rides.isPending || pending.isPending) {
     return (
       <ScrollScreen>
@@ -68,7 +64,6 @@ export default function YourRidesScreen() {
 
   return (
     <ScrollScreen>
-      <Body muted>Tap a Ride to open it in the Rides tab.</Body>
       {hasPending ? (
         <View style={styles.group}>
           <Text style={styles.groupLabel}>
@@ -84,23 +79,13 @@ export default function YourRidesScreen() {
         </View>
       ) : null}
       {groups.active.length ? (
-        <RideGroup label="Active" onSelect={openRide} rides={groups.active} userId={user?.id} />
+        <RideGroup label="Active" rides={groups.active} userId={user?.id} />
       ) : null}
       {groups.upcoming.length ? (
-        <RideGroup
-          label="Upcoming"
-          onSelect={openRide}
-          rides={groups.upcoming}
-          userId={user?.id}
-        />
+        <RideGroup label="Upcoming" rides={groups.upcoming} userId={user?.id} />
       ) : null}
       {groups.archived.length ? (
-        <RideGroup
-          label="Archived"
-          onSelect={openRide}
-          rides={groups.archived}
-          userId={user?.id}
-        />
+        <RideGroup label="Archived" rides={groups.archived} userId={user?.id} />
       ) : null}
     </ScrollScreen>
   );
@@ -130,23 +115,16 @@ function RideGroup({
   label,
   rides,
   userId,
-  onSelect,
 }: {
   label: string;
   rides: readonly UserRide[];
   userId: string | null | undefined;
-  onSelect: (rideId: string) => void;
 }) {
   return (
     <View style={styles.group}>
       <Text style={styles.groupLabel}>{label}</Text>
       {rides.map((ride) => (
-        <RideCard
-          key={ride.id}
-          onPress={() => onSelect(ride.id)}
-          ride={ride}
-          userId={userId}
-        />
+        <RideCard key={ride.id} ride={ride} userId={userId} />
       ))}
     </View>
   );
@@ -165,9 +143,9 @@ const styles = StyleSheet.create({
   },
   pendingCard: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
+    backgroundColor: colors.glassFill,
+    borderColor: colors.glassBorder,
+    borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: spacing.sm,

@@ -1,4 +1,3 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -16,6 +15,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCurrentUser } from '@/auth/auth-context';
+import { GlassIconButton } from '@/components/glass';
 import { PhotoTextEditor } from '@/components/photo-text-editor';
 import {
   Body,
@@ -510,40 +510,36 @@ export default function CameraScreen() {
       >
         <View pointerEvents="box-none" style={styles.topBar}>
           {mode === 'photo' && facing === 'back' ? (
-            <Pressable
+            <GlassIconButton
               accessibilityLabel={torchOn ? 'Turn flashlight off' : 'Turn flashlight on'}
-              accessibilityRole="button"
+              color={colors.white}
+              dark
               disabled={!cameraAllowed}
-              hitSlop={10}
+              icon={torchOn ? 'flash' : 'flash-outline'}
+              iconSize={20}
               onPress={() => {
                 setTorchOn((current) => !current);
                 haptics.selection();
               }}
-              style={({ pressed }) => [pressed && styles.pressed]}
-            >
-              <Ionicons
-                color={colors.white}
-                name={torchOn ? 'flash' : 'flash-outline'}
-                size={26}
-              />
-            </Pressable>
+              size={40}
+            />
           ) : (
             <View style={styles.topBarSpacer} />
           )}
-          <Pressable
+          <GlassIconButton
             accessibilityLabel="Flip camera"
-            accessibilityRole="button"
+            color={colors.white}
+            dark
             disabled={!cameraAllowed || isRecording}
-            hitSlop={10}
+            icon="camera-reverse-outline"
+            iconSize={22}
             onPress={() => {
               setTorchOn(false);
               markCameraBooting();
               setFacing((current) => (current === 'back' ? 'front' : 'back'));
             }}
-            style={({ pressed }) => [pressed && styles.pressed, isRecording && styles.disabled]}
-          >
-            <Ionicons color={colors.white} name="camera-reverse-outline" size={28} />
-          </Pressable>
+            size={40}
+          />
         </View>
 
         <View
@@ -596,19 +592,16 @@ export default function CameraScreen() {
 
           <View style={styles.shutterRow}>
             {mode === 'photo' ? (
-              <Pressable
+              <GlassIconButton
                 accessibilityLabel="Choose from gallery"
-                accessibilityRole="button"
+                color={colors.white}
+                dark
                 disabled={busy === 'gallery'}
+                icon="images-outline"
+                iconSize={22}
                 onPress={() => void chooseFromGallery()}
-                style={({ pressed }) => [styles.galleryButton, pressed && styles.pressed]}
-              >
-                {busy === 'gallery' ? (
-                  <ActivityIndicator color={colors.white} />
-                ) : (
-                  <Ionicons color={colors.white} name="images-outline" size={26} />
-                )}
-              </Pressable>
+                size={48}
+              />
             ) : (
               <View style={styles.galleryButton} />
             )}
@@ -689,6 +682,7 @@ const styles = StyleSheet.create({
   },
   captureFrame: {
     backgroundColor: '#000',
+    borderRadius: radius.xl,
     overflow: 'hidden',
   },
   cameraPreview: {
@@ -734,6 +728,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   modeChip: {
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,

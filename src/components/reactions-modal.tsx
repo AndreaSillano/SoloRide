@@ -1,13 +1,10 @@
 import {
   ActivityIndicator,
-  Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   formatProfileName,
@@ -17,6 +14,7 @@ import {
 } from '@/features/posts';
 import { colors, spacing } from '@/theme';
 
+import { AppBottomSheet } from './glass';
 import { SheetCloseButton } from './sheet-close-button';
 import { Avatar, Body } from './ui';
 
@@ -41,14 +39,8 @@ export function ReactionsModal({
   const reactions = useReactions(postId);
 
   return (
-    <Modal
-      allowSwipeDismissal
-      animationType="slide"
-      onRequestClose={onClose}
-      presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : undefined}
-      visible={visible}
-    >
-      <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safeArea}>
+    <AppBottomSheet onClose={onClose} visible={visible}>
+      <View style={styles.sheet}>
         <View style={styles.header}>
           <Text style={styles.title}>Reactions</Text>
           <SheetCloseButton accessibilityLabel="Close reactions" onPress={onClose} />
@@ -81,13 +73,13 @@ export function ReactionsModal({
             <Body muted>No reactions yet. Double-tap or long-press a photo to react.</Body>
           )}
         </ScrollView>
-      </SafeAreaView>
-    </Modal>
+      </View>
+    </AppBottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { backgroundColor: colors.surface, flex: 1 },
+  sheet: { flex: 1, width: '100%' },
   flex: { flex: 1 },
   header: {
     alignItems: 'center',
@@ -99,7 +91,7 @@ const styles = StyleSheet.create({
   title: {
     color: colors.text,
     flex: 1,
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '800',
     letterSpacing: -0.3,
     paddingRight: spacing.sm,

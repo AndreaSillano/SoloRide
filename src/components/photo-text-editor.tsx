@@ -688,6 +688,7 @@ const styles = StyleSheet.create({
   },
   canvas: {
     backgroundColor: '#111',
+    borderRadius: radius.xl,
     overflow: 'hidden',
   },
   dismissOverlay: {
