@@ -1,7 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useNavigation } from '@react-navigation/native';
 import { addDays, format } from 'date-fns';
-import { router } from 'expo-router';
+import { router,useNavigation } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Share, StyleSheet, Text, View } from 'react-native';
 
