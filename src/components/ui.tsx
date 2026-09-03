@@ -282,7 +282,7 @@ export function AppMark({ compact = false }: { compact?: boolean }) {
   return (
     <View style={[styles.appMark, { borderRadius: corner, height: size, width: size }]}>
       <Image
-        accessibilityLabel="SoloRide"
+        accessibilityLabel="Rhodeo"
         source={require('../../assets/icon.png')}
         style={{ borderRadius: corner, height: size, width: size }}
       />

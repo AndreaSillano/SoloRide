@@ -130,7 +130,7 @@ export function PublishAudioFooter({
       if (!permission.granted) {
         Alert.alert(
           'Microphone needed',
-          'Allow SoloRide to use the microphone to record a voice note.',
+          'Allow Rhodeo to use the microphone to record a voice note.',
         );
         return;
       }

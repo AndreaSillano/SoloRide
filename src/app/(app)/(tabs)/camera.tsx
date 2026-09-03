@@ -479,7 +479,7 @@ export default function CameraScreen() {
                   {permission === null
                     ? 'Checking camera permission…'
                     : permission?.canAskAgain === false
-                      ? 'Camera access is blocked for SoloRide. Enable it in system Settings.'
+                      ? 'Camera access is blocked for Rhodeo. Enable it in system Settings.'
                       : 'Camera access is off. Allow it, or choose a photo from your library.'}
                 </Body>
                 {permission != null ? (

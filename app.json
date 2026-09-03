@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "SoloRide",
+    "name": "Rhodeo",
     "slug": "soloride",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -15,23 +15,23 @@
     },
 
     "ios": {
-      "icon": "./assets/SoloRideIcon.icon",
+      "icon": "./assets/RhodeoIcon.icon",
       "supportsTablet": true,
       "config": {
         "usesNonExemptEncryption": false
       },
       "infoPlist": {
-        "NSCameraUsageDescription": "SoloRide uses the camera to add photos to your rides.",
-        "NSLocationWhenInUseUsageDescription": "SoloRide uses your location to optionally tag photos with where they were taken.",
-        "NSMicrophoneUsageDescription": "SoloRide uses the microphone to attach voice notes to your photos.",
-        "NSPhotoLibraryUsageDescription": "SoloRide uses your photo library to add photos to your rides."
+        "NSCameraUsageDescription": "Rhodeo uses the camera to add photos to your rides.",
+        "NSLocationWhenInUseUsageDescription": "Rhodeo uses your location to optionally tag photos with where they were taken.",
+        "NSMicrophoneUsageDescription": "Rhodeo uses the microphone to attach voice notes to your photos.",
+        "NSPhotoLibraryUsageDescription": "Rhodeo uses your photo library to add photos to your rides."
       },
       "bundleIdentifier": "com.anonymous.SoloRide"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#eb9151"
       },
       "edgeToEdgeEnabled": true,
       "versionCode": 6,
@@ -56,29 +56,29 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 100,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#eb9151"
         }
       ],
       "expo-router",
       [
         "expo-camera",
         {
-          "cameraPermission": "SoloRide uses the camera to add photos to your rides.",
-          "microphonePermission": "SoloRide uses the microphone to record sound with your videos.",
+          "cameraPermission": "Rhodeo uses the camera to add photos to your rides.",
+          "microphonePermission": "Rhodeo uses the microphone to record sound with your videos.",
           "recordAudioAndroid": true
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "SoloRide uses your photo library to add photos to your rides.",
-          "cameraPermission": "SoloRide uses the camera to add photos to your rides."
+          "photosPermission": "Rhodeo uses your photo library to add photos to your rides.",
+          "cameraPermission": "Rhodeo uses the camera to add photos to your rides."
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "SoloRide uses your location to optionally tag photos with where they were taken.",
+          "locationWhenInUsePermission": "Rhodeo uses your location to optionally tag photos with where they were taken.",
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false
         }
@@ -95,7 +95,7 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "SoloRide uses the microphone to attach voice notes to your photos.",
+          "microphonePermission": "Rhodeo uses the microphone to attach voice notes to your photos.",
           "recordAudioAndroid": true
         }
       ],

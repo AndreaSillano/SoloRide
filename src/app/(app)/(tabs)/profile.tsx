@@ -43,7 +43,7 @@ import { colors, radius, spacing } from '@/theme';
 function OpenSettingsLink({ onOpen }: { onOpen?: () => void }) {
   return (
     <Pressable
-      accessibilityHint="Opens SoloRide settings on this device"
+      accessibilityHint="Opens Rhodeo settings on this device"
       accessibilityRole="button"
       hitSlop={8}
       onPress={() => {
@@ -254,7 +254,7 @@ export default function ProfileScreen() {
         if (!result.granted) {
           setError(
             result.canAskAgain === false
-              ? 'Camera access is blocked for SoloRide. Enable it in system Settings.'
+              ? 'Camera access is blocked for Rhodeo. Enable it in system Settings.'
               : 'Camera access was not granted.',
           );
         }
@@ -262,7 +262,7 @@ export default function ProfileScreen() {
       }
       Alert.alert(
         'Turn off camera?',
-        'SoloRide can’t revoke camera access itself. You can disable it in system Settings.',
+        'Rhodeo can’t revoke camera access itself. You can disable it in system Settings.',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Open Settings', onPress: () => void Linking.openSettings() },
@@ -292,7 +292,7 @@ export default function ProfileScreen() {
         if (result.status !== 'granted') {
           setError(
             result.canAskAgain === false
-              ? 'Location access is blocked for SoloRide. Enable it in system Settings.'
+              ? 'Location access is blocked for Rhodeo. Enable it in system Settings.'
               : 'Location access was not granted.',
           );
         }
@@ -300,7 +300,7 @@ export default function ProfileScreen() {
       }
       Alert.alert(
         'Turn off location?',
-        'SoloRide can’t revoke location access itself. You can disable it in system Settings.',
+        'Rhodeo can’t revoke location access itself. You can disable it in system Settings.',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Open Settings', onPress: () => void Linking.openSettings() },
@@ -327,7 +327,7 @@ export default function ProfileScreen() {
           awaitingNotificationSettings.current = true;
           Alert.alert(
             'Enable notifications in Settings',
-            'iOS won’t ask again from SoloRide. Turn on Allow Notifications (and Badges) for SoloRide, then return here.',
+            'iOS won’t ask again from Rhodeo. Turn on Allow Notifications (and Badges) for Rhodeo, then return here.',
             [
               {
                 text: 'Cancel',
@@ -352,7 +352,7 @@ export default function ProfileScreen() {
             awaitingNotificationSettings.current = true;
             Alert.alert(
               'Enable notifications in Settings',
-              'iOS won’t ask again from SoloRide. Turn on Allow Notifications (and Badges) for SoloRide, then return here.',
+              'iOS won’t ask again from Rhodeo. Turn on Allow Notifications (and Badges) for Rhodeo, then return here.',
               [
                 {
                   text: 'Cancel',
@@ -576,7 +576,7 @@ export default function ProfileScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Account</Text>
         <Text style={styles.helpCopy}>
-          Forgot your password? SoloRide usernames use private internal accounts, so recovery
+          Forgot your password? Rhodeo usernames use private internal accounts, so recovery
           must go through an administrator. Never share your current password.
         </Text>
       </View>

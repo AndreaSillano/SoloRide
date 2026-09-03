@@ -252,13 +252,13 @@ export default function AuthLandingScreen() {
       <View style={[styles.hero, isRegister && styles.heroCompact]}>
         <View style={[styles.logoWrap, isRegister && styles.logoWrapCompact]}>
           <Image
-            accessibilityLabel="SoloRide"
+            accessibilityLabel="Rhodeo"
             resizeMode="contain"
             source={require('../../../assets/iconRide.png')}
             style={styles.logo}
           />
         </View>
-        <Text style={[styles.brandName, isRegister && styles.brandNameCompact]}>SoloRide</Text>
+        <Text style={[styles.brandName, isRegister && styles.brandNameCompact]}>Rhodeo</Text>
         {!isRegister ? (
           <Text style={styles.brandTagline}>Share your ride with the people that matter.</Text>
         ) : null}

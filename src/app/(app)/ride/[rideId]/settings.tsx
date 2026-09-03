@@ -606,7 +606,7 @@ export default function RideSettingsScreen() {
               accessibilityRole="button"
               onPress={() =>
                 void Share.share({
-                  message: `Join my SoloRide “${ride.data.name}” with code ${ride.data.code}`,
+                  message: `Join my Rhodeo “${ride.data.name}” with code ${ride.data.code}`,
                 })
               }
               style={({ pressed }) => [styles.shareButton, pressed && styles.shareButtonPressed]}

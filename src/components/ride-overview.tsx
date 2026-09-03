@@ -264,7 +264,7 @@ export function RideOverview({
               variant="secondary"
               onPress={() =>
                 void Share.share({
-                  message: `Join my SoloRide “${data.name}” with code ${data.code}`,
+                  message: `Join my Rhodeo “${data.name}” with code ${data.code}`,
                 })
               }
             >

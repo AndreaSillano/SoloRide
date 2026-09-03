@@ -90,7 +90,7 @@ async function listManagedNotifications(): Promise<ExistingManagedNotification[]
 export async function ensureSoloRideAndroidChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
   await Notifications.setNotificationChannelAsync(SOLO_RIDE_CHANNEL_ID, {
-    name: 'SoloRide',
+    name: 'Rhodeo',
     description: 'Ride reminders, new photos, and comments',
     importance: Notifications.AndroidImportance.HIGH,
   });

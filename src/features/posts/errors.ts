@@ -98,7 +98,7 @@ export function mapDatabaseError(error: unknown, fallback: string): PostDataErro
   ) {
     return new PostDataError(
       'DATABASE',
-      'Reactions need a database update. Apply the latest SoloRide migrations (and reload the API schema), then try again.',
+      'Reactions need a database update. Apply the latest Rhodeo migrations (and reload the API schema), then try again.',
       { cause: error },
     );
   }
@@ -106,7 +106,7 @@ export function mapDatabaseError(error: unknown, fallback: string): PostDataErro
     return new PostDataError(
       'DATABASE',
       message.toLowerCase().includes('post_reactions')
-        ? 'Reactions need a database update. Apply the latest SoloRide migrations and try again.'
+        ? 'Reactions need a database update. Apply the latest Rhodeo migrations and try again.'
         : 'Please sign in again, then try again.',
       { cause: error },
     );
@@ -124,7 +124,7 @@ export function mapDatabaseError(error: unknown, fallback: string): PostDataErro
   ) {
     return new PostDataError(
       'DATABASE',
-      'Post delete needs a database update. Apply the latest SoloRide migrations and try again.',
+      'Post delete needs a database update. Apply the latest Rhodeo migrations and try again.',
       { cause: error },
     );
   }
@@ -135,7 +135,7 @@ export function mapDatabaseError(error: unknown, fallback: string): PostDataErro
   ) {
     return new PostDataError(
       'DATABASE',
-      'Temporary posts need a database update. Apply the latest SoloRide migrations and try again.',
+      'Temporary posts need a database update. Apply the latest Rhodeo migrations and try again.',
       { cause: error },
     );
   }

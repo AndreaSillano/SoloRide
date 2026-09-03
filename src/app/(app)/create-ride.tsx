@@ -118,7 +118,7 @@ export default function CreateRideScreen() {
           <Button
             onPress={() =>
               void Share.share({
-                message: `Join my SoloRide “${created.name}” with code ${created.code}`,
+                message: `Join my Rhodeo “${created.name}” with code ${created.code}`,
               })
             }
           >
