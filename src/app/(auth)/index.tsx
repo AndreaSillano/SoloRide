@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { isAuthApiError } from '@supabase/supabase-js';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
@@ -292,7 +293,15 @@ export default function AuthLandingScreen() {
 
       {/* Legal / spacer */}
       <Text style={styles.legal}>
-        By continuing you agree to our Terms of Service and Privacy Policy.
+        By continuing you agree to our{' '}
+        <Text
+          accessibilityRole="link"
+          onPress={() => router.push('/privacy-policy')}
+          style={styles.legalLink}
+        >
+          Privacy Policy
+        </Text>
+        .
       </Text>
     </Screen>
   );
@@ -405,5 +414,10 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     textAlign: 'center',
     paddingHorizontal: spacing.md,
+  },
+  legalLink: {
+    color: colors.primary,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
 });

@@ -15,6 +15,15 @@ export default function AuthLayout() {
         headerTitle: '',
         headerTransparent: true,
       }}
-    />
+    >
+      <Stack.Screen name="index" />
+      <Stack.Screen
+        name="privacy-policy"
+        options={{
+          headerTitle: 'Privacy',
+          headerTitleStyle: { color: colors.text, fontWeight: '800' },
+        }}
+      />
+    </Stack>
   );
 }

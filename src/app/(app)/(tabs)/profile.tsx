@@ -572,6 +572,24 @@ export default function ProfileScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Account</Text>
+        <Pressable
+          accessibilityHint="Opens the Rhodeo privacy policy"
+          accessibilityLabel="Privacy Policy"
+          accessibilityRole="button"
+          onPress={() => router.push('/privacy-policy')}
+          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+        >
+          <View style={styles.rowIcon}>
+            <Ionicons color={colors.primary} name="document-text-outline" size={20} />
+          </View>
+          <View style={styles.rowBody}>
+            <Text style={styles.rowTitle}>Privacy Policy</Text>
+            <Text style={styles.rowSubtitle}>
+              How posts, account data, and analytics are handled.
+            </Text>
+          </View>
+          <Ionicons color={colors.muted} name="chevron-forward" size={18} />
+        </Pressable>
         <Text style={styles.helpCopy}>
           Forgot your password? Rhodeo usernames use private internal accounts, so recovery
           must go through an administrator. Never share your current password.
