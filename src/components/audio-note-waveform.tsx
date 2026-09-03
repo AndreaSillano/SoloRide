@@ -21,18 +21,25 @@ function WaveBar({
   index,
   active,
   color,
-  maxHeight,
+  maxExtent,
   animate,
   opacity = 1,
+  vertical = false,
 }: {
   index: number;
   active: boolean;
   color: string;
-  maxHeight: number;
+  /** Varying dimension: height (horizontal wave) or width (vertical wave). */
+  maxExtent: number;
   animate: boolean;
   opacity?: number;
+  vertical?: boolean;
 }) {
   const scale = useSharedValue(animate ? 0.4 + (index % 4) * 0.06 : 1);
+  const extent = Math.max(
+    5,
+    Math.min(maxExtent, BAR_HEIGHTS[index % BAR_HEIGHTS.length] ?? 12),
+  );
 
   useEffect(() => {
     if (!animate) {
@@ -53,20 +60,20 @@ function WaveBar({
     );
   }, [active, animate, index, scale]);
 
-  const style = useAnimatedStyle(() => ({
-    transform: [{ scaleY: Math.max(0.25, scale.value) }],
-  }));
+  const style = useAnimatedStyle(() => {
+    const value = Math.max(0.25, scale.value);
+    return {
+      transform: [vertical ? { scaleX: value } : { scaleY: value }],
+    };
+  });
 
   return (
     <Animated.View
       style={[
-        styles.bar,
+        vertical ? styles.barVertical : styles.bar,
         {
           backgroundColor: color,
-          height: Math.max(
-            5,
-            Math.min(maxHeight, BAR_HEIGHTS[index % BAR_HEIGHTS.length] ?? 12),
-          ),
+          ...(vertical ? { width: extent } : { height: extent }),
           opacity,
         },
         style,
@@ -78,22 +85,32 @@ function WaveBar({
 function WaveRow({
   bars,
   color,
-  maxHeight,
+  maxExtent,
   active,
   animate,
   opacity = 1,
-  width,
+  size,
+  vertical = false,
 }: {
   bars: number[];
   color: string;
-  maxHeight: number;
+  maxExtent: number;
   active: boolean;
   animate: boolean;
   opacity?: number;
-  width?: number | string;
+  /** Fixed size along the progress axis (width horizontal / height vertical). */
+  size?: number | string;
+  vertical?: boolean;
 }) {
   return (
-    <View style={[styles.row, { height: maxHeight, width: width ?? '100%' }]}>
+    <View
+      style={[
+        vertical ? styles.column : styles.row,
+        vertical
+          ? { width: maxExtent, height: size ?? '100%' }
+          : { height: maxExtent, width: size ?? '100%' },
+      ]}
+    >
       {bars.map((index) => (
         <WaveBar
           active={active}
@@ -101,8 +118,9 @@ function WaveRow({
           color={color}
           index={index}
           key={index}
-          maxHeight={maxHeight}
+          maxExtent={maxExtent}
           opacity={opacity}
+          vertical={vertical}
         />
       ))}
     </View>
@@ -121,22 +139,25 @@ export function AudioNoteWaveform({
   durationSec = 0,
   maxHeight = 22,
   progress,
+  vertical = false,
 }: {
   active?: boolean;
   barCount?: number;
   color?: string;
   /** Total duration in seconds — used to run a continuous fill while playing. */
   durationSec?: number;
+  /** Max bar extent: height when horizontal, width when vertical. */
   maxHeight?: number;
-  /** 0–1 playback position. When set, bars fill left → right. */
+  /** 0–1 playback position. Fills left→right, or bottom→top when vertical. */
   progress?: number;
+  vertical?: boolean;
 }) {
   const bars = useMemo(
     () => Array.from({ length: barCount }, (_, index) => index),
     [barCount],
   );
   const useProgress = typeof progress === 'number';
-  const [trackWidth, setTrackWidth] = useState(0);
+  const [trackSize, setTrackSize] = useState(0);
   const fill = useSharedValue(0);
   const progressRef = useRef(0);
 
@@ -155,7 +176,6 @@ export function AudioNoteWaveform({
       return;
     }
 
-    // Seed from the latest known position, then run continuously to the end.
     fill.value = next;
     if (durationSec <= 0 || next >= 0.999) return;
 
@@ -168,7 +188,6 @@ export function AudioNoteWaveform({
   useEffect(() => {
     if (!useProgress || !active) return;
     const next = clamp01(progress);
-    // Restart / seek backwards while playing.
     if (next > fill.value - 0.05) return;
     cancelAnimation(fill);
     fill.value = next;
@@ -179,48 +198,85 @@ export function AudioNoteWaveform({
     });
   }, [active, durationSec, fill, progress, useProgress]);
 
-  const fillStyle = useAnimatedStyle(() => ({
-    width: trackWidth * fill.value,
-  }));
+  const fillStyle = useAnimatedStyle(() =>
+    vertical
+      ? { height: trackSize * fill.value }
+      : { width: trackSize * fill.value },
+  );
 
   const onLayout = (event: LayoutChangeEvent) => {
-    const next = Math.round(event.nativeEvent.layout.width);
-    if (next > 0 && next !== trackWidth) setTrackWidth(next);
+    const layout = event.nativeEvent.layout;
+    const next = Math.round(vertical ? layout.height : layout.width);
+    if (next > 0 && next !== trackSize) setTrackSize(next);
   };
 
   if (!useProgress) {
     return (
       <WaveRow
         active={active}
-        animate
+        animate={active}
         bars={bars}
         color={color}
-        maxHeight={maxHeight}
+        maxExtent={maxHeight}
+        vertical={vertical}
+      />
+    );
+  }
+
+  // Idle: solid wave. Progress dual-layer only after playback has started.
+  const started = active || clamp01(progress) > 0.001;
+  if (!started) {
+    return (
+      <WaveRow
+        active={false}
+        animate={false}
+        bars={bars}
+        color={color}
+        maxExtent={maxHeight}
+        vertical={vertical}
       />
     );
   }
 
   return (
-    <View onLayout={onLayout} style={[styles.track, { height: maxHeight }]}>
+    <View
+      onLayout={onLayout}
+      style={[
+        styles.track,
+        vertical ? { width: maxHeight, flex: 1 } : { height: maxHeight },
+      ]}
+    >
       <View style={styles.layer}>
         <WaveRow
           active={false}
           animate={false}
           bars={bars}
           color={color}
-          maxHeight={maxHeight}
-          opacity={0.3}
+          maxExtent={maxHeight}
+          opacity={0.35}
+          vertical={vertical}
         />
       </View>
-      <Animated.View style={[styles.fillClip, fillStyle]}>
-        <View style={[styles.fillWave, { width: trackWidth || '100%' }]}>
+      <Animated.View
+        style={[vertical ? styles.fillClipVertical : styles.fillClip, fillStyle]}
+      >
+        <View
+          style={[
+            vertical ? styles.fillWaveVertical : styles.fillWave,
+            vertical
+              ? { height: trackSize || '100%' }
+              : { width: trackSize || '100%' },
+          ]}
+        >
           <WaveRow
             active={false}
             animate={false}
             bars={bars}
             color={color}
-            maxHeight={maxHeight}
+            maxExtent={maxHeight}
             opacity={1}
+            size={trackSize || '100%'}
+            vertical={vertical}
           />
         </View>
       </Animated.View>
@@ -245,11 +301,24 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
   },
+  fillClipVertical: {
+    bottom: 0,
+    left: 0,
+    overflow: 'hidden',
+    position: 'absolute',
+    right: 0,
+  },
   fillWave: {
     bottom: 0,
     left: 0,
     position: 'absolute',
     top: 0,
+  },
+  fillWaveVertical: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
   },
   row: {
     alignItems: 'center',
@@ -260,11 +329,27 @@ const styles = StyleSheet.create({
     minWidth: 0,
     width: '100%',
   },
+  column: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'column',
+    gap: 2.5,
+    height: '100%',
+    justifyContent: 'space-between',
+    minHeight: 0,
+  },
   bar: {
     borderRadius: 1.5,
     flexGrow: 1,
     maxWidth: 3.5,
     minWidth: 2,
     width: 2.5,
+  },
+  barVertical: {
+    borderRadius: 1.5,
+    flexGrow: 1,
+    height: 2.5,
+    maxHeight: 3.5,
+    minHeight: 2,
   },
 });

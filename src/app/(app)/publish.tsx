@@ -347,11 +347,15 @@ export default function PublishScreen() {
         );
       }
       haptics.success();
-      // Reset camera draft, then land on Rides for the published ride.
-      // beforeRemove cleans local drafts as we leave.
-      router.replace({
-        pathname: '/camera',
-        params: { retake: '1', selectRideId: primaryRide.id },
+      // Clear the Camera-tab draft without visiting Camera (avoids a flash),
+      // then land on Rides for the published ride. beforeRemove cleans local files.
+      requestCaptureRetake();
+      router.dismissTo({
+        pathname: '/',
+        params: {
+          selectRideId: primaryRide.id,
+          notificationOpenId: String(Date.now()),
+        },
       });
     } catch (cause) {
       haptics.error();

@@ -7,6 +7,15 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/auth/auth-context';
 import { NotificationLifecycle } from '@/features/notifications/NotificationLifecycle';
 import { requestCoreAppPermissions } from '@/features/permissions';
+import { initAnalytics } from '@/lib/analytics';
+
+function InitAnalytics() {
+  useEffect(() => {
+    void initAnalytics();
+  }, []);
+
+  return null;
+}
 
 /** Drops cached rides/feed/errors when the signed-in account changes so a
  * failed fetch during logout can't stick around after the next login. */
@@ -71,6 +80,7 @@ export function AppProviders({ children }: PropsWithChildren) {
       <KeyboardProvider>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
+            <InitAnalytics />
             <ClearQueryCacheOnAuthChange />
             <RequestPermissionsOnSignIn />
             <NotificationLifecycle />

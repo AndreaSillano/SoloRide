@@ -15,6 +15,12 @@ function isClientSafeSupabaseKey(value: string) {
   }
 }
 
+/** Optional; when unset, Amplitude calls are no-ops. */
+function parseAmplitudeApiKey(value: string | undefined): string | null {
+  const trimmed = value?.trim() ?? '';
+  return trimmed.length >= 10 ? trimmed : null;
+}
+
 const publicEnvSchema = z.object({
   EXPO_PUBLIC_SUPABASE_URL: z.string().url().refine(
     (value) => value.startsWith('https://'),
@@ -34,7 +40,12 @@ const result = publicEnvSchema.safeParse({
   EXPO_PUBLIC_SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
 });
 
+const amplitudeApiKey = parseAmplitudeApiKey(
+  process.env.EXPO_PUBLIC_AMPLITUDE_API_KEY,
+);
+
 export const isSupabaseConfigured = result.success;
+export const isAmplitudeConfigured = amplitudeApiKey !== null;
 export const envConfigurationError = result.success
   ? null
   : `Add a client-safe Supabase publishable key to .env (${result.error.issues
@@ -42,8 +53,12 @@ export const envConfigurationError = result.success
       .join(', ')}).`;
 
 export const env = result.success
-  ? result.data
+  ? {
+      ...result.data,
+      EXPO_PUBLIC_AMPLITUDE_API_KEY: amplitudeApiKey,
+    }
   : {
       EXPO_PUBLIC_SUPABASE_URL: 'https://placeholder.supabase.co',
       EXPO_PUBLIC_SUPABASE_ANON_KEY: 'sb_publishable_not_configured',
+      EXPO_PUBLIC_AMPLITUDE_API_KEY: amplitudeApiKey,
     };

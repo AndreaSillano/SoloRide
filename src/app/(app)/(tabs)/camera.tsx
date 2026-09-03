@@ -63,11 +63,9 @@ export default function CameraScreen() {
   const {
     rideId: preferredRideId,
     retake,
-    selectRideId,
   } = useLocalSearchParams<{
     rideId?: string;
     retake?: string;
-    selectRideId?: string;
   }>();
   const { user } = useCurrentUser();
   const insets = useSafeAreaInsets();
@@ -201,15 +199,13 @@ export default function CameraScreen() {
 
   useEffect(() => stopElapsedTimer, [stopElapsedTimer]);
 
+  // Retake deep-link (e.g. publish fallback when the stack can't pop).
+  // Post-success goes straight to Rides via requestCaptureRetake + dismissTo.
   useEffect(() => {
     if (retake !== '1') return;
     resetCapture();
-    router.setParams({ retake: undefined, selectRideId: undefined });
-    if (selectRideId) {
-      // NativeTabs needs navigate (NAVIGATE), not replace, to leave Camera for Rides.
-      router.navigate({ pathname: '/', params: { selectRideId } });
-    }
-  }, [resetCapture, retake, selectRideId]);
+    router.setParams({ retake: undefined });
+  }, [resetCapture, retake]);
 
   const takePhoto = async () => {
     if (!camera.current || busy || !cameraReady) return;

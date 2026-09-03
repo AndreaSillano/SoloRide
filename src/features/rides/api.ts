@@ -1,6 +1,11 @@
 import { format } from 'date-fns';
 
 import { removeRidePostFiles } from '@/features/posts/service';
+import {
+  trackRideCreated,
+  trackRideJoined,
+  trackRideJoinRequested,
+} from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 import { DATE_FORMAT } from '@/utils/schedule';
 
@@ -110,7 +115,9 @@ export async function createRide(input: CreateRideInput): Promise<Ride> {
     p_local_date: localDateParam(),
   });
   if (error) throw mapRideError(error);
-  return unwrapRide(data);
+  const ride = unwrapRide(data);
+  trackRideCreated(ride.id);
+  return ride;
 }
 
 export async function updateRide(input: UpdateRideInput): Promise<Ride> {
@@ -311,7 +318,9 @@ export async function joinRideByCode(code: string): Promise<Ride> {
   });
 
   if (error) throw mapRideError(error);
-  return unwrapRide(data);
+  const ride = unwrapRide(data);
+  trackRideJoinRequested(ride.id);
+  return ride;
 }
 
 /** Creates a pending join request; membership starts only after the owner accepts. */
@@ -327,6 +336,7 @@ export async function acceptRideJoinRequest(requestId: string): Promise<RideJoin
   if (error) throw mapRideError(error);
   const request = firstOrSelf(data as Omit<RideJoinRequest, 'profile'> | null);
   if (!request) throw new RideProductError('not_found');
+  trackRideJoined(request.ride_id, request.user_id);
   return { ...request, profile: null };
 }
 

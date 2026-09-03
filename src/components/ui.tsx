@@ -957,44 +957,50 @@ export function FeedPost({
           </View>
           {post.video_path ? (
             <FeedVideoPlay durationMs={post.video_duration_ms} videoPath={post.video_path} />
-          ) : post.audio_path ? (
-            <FeedAudioNote audioPath={post.audio_path} />
           ) : null}
 
           <View pointerEvents="box-none" style={styles.feedOverlayTop}>
-            <Avatar profile={post.profile} size={34} />
-            <View style={styles.feedHeaderText}>
-              <Text style={styles.feedOverlayAuthor}>{author}</Text>
-              <Text style={styles.feedOverlayMeta}>
-                {formatFeedTimestamp(post.created_at)}
-                {post.is_temporary && remaining ? ` · ${remaining}` : ''}
-              </Text>
+            <View pointerEvents="box-none" style={styles.feedOverlayTopRow}>
+              <Avatar profile={post.profile} size={34} />
+              <View style={styles.feedHeaderText}>
+                <Text style={styles.feedOverlayAuthor}>{author}</Text>
+                <Text style={styles.feedOverlayMeta}>
+                  {formatFeedTimestamp(post.created_at)}
+                  {post.is_temporary && remaining ? ` · ${remaining}` : ''}
+                </Text>
+              </View>
+              <GlassIconButton
+                accessibilityLabel="Post options"
+                color={colors.white}
+                dark
+                icon="ellipsis-horizontal"
+                iconSize={16}
+                onPress={openPostOverflowMenu}
+                size={32}
+              />
+              {isOwnPost && onDelete ? (
+                deleting ? (
+                  <ActivityIndicator color={colors.white} size="small" />
+                ) : (
+                  <GlassIconButton
+                    accessibilityLabel="Delete photo"
+                    color={colors.white}
+                    dark
+                    icon="trash-outline"
+                    iconSize={16}
+                    onPress={onDelete}
+                    size={32}
+                  />
+                )
+              ) : null}
             </View>
-            <GlassIconButton
-              accessibilityLabel="Post options"
-              color={colors.white}
-              dark
-              icon="ellipsis-horizontal"
-              iconSize={16}
-              onPress={openPostOverflowMenu}
-              size={32}
-            />
-            {isOwnPost && onDelete ? (
-              deleting ? (
-                <ActivityIndicator color={colors.white} size="small" />
-              ) : (
-                <GlassIconButton
-                  accessibilityLabel="Delete photo"
-                  color={colors.white}
-                  dark
-                  icon="trash-outline"
-                  iconSize={16}
-                  onPress={onDelete}
-                  size={32}
-                />
-              )
-            ) : null}
           </View>
+
+          {!post.video_path && post.audio_path ? (
+            <View pointerEvents="box-none" style={styles.feedAudioSide}>
+              <FeedAudioNote audioPath={post.audio_path} />
+            </View>
+          ) : null}
 
           <View pointerEvents="box-none" style={styles.feedOverlayBottom}>
             <View pointerEvents="box-none" style={styles.feedOverlayCopy}>
@@ -1004,12 +1010,12 @@ export function FeedPost({
                 </Text>
               ) : null}
               {post.location_name ? (
-                <View style={styles.feedLocationPill}>
+                <GlassSurface dark style={styles.feedLocationPill}>
                   <Ionicons color={colors.primary} name="location-sharp" size={15} />
                   <Text numberOfLines={1} style={styles.feedLocationPillText}>
                     {post.location_name}
                   </Text>
-                </View>
+                </GlassSurface>
               ) : null}
             </View>
             <View pointerEvents="box-none" style={styles.feedBottomActions}>
@@ -1341,15 +1347,25 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   feedOverlayTop: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
     left: 0,
     paddingHorizontal: spacing.sm,
     paddingTop: spacing.sm,
     position: 'absolute',
     right: 0,
     top: 0,
+    zIndex: 6,
+  },
+  feedOverlayTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  feedAudioSide: {
+    // Sit between the author row and the bottom action stack on the right.
+    bottom: 200,
+    position: 'absolute',
+    right: spacing.sm,
+    top: 52,
     zIndex: 6,
   },
   feedOverlayAuthor: {
@@ -1426,12 +1442,12 @@ const styles = StyleSheet.create({
   feedLocationPill: {
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(20,12,10,0.45)',
     borderRadius: radius.pill,
     flexDirection: 'row',
     flexShrink: 1,
     gap: 5,
     maxWidth: '100%',
+    overflow: 'hidden',
     paddingHorizontal: spacing.sm,
     paddingVertical: 7,
   },

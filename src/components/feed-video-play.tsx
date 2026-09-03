@@ -4,6 +4,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { GlassIconButton, GlassSurface } from '@/components/glass';
 import { formatAudioDuration, useSignedPostVideo } from '@/features/posts';
 import { haptics } from '@/lib/haptics';
 import { colors, radius, spacing } from '@/theme';
@@ -14,6 +15,8 @@ type FeedVideoPlayProps = {
 };
 
 const CONTROLS_HIDE_MS = 2500;
+const PLAY_SIZE = 64;
+const VOLUME_SIZE = 36;
 
 function FeedVideoPlayer({
   url,
@@ -122,39 +125,39 @@ function FeedVideoPlayer({
       />
 
       {timerLabel ? (
-        <View pointerEvents="none" style={styles.durationBadge}>
-          <Text style={styles.durationText}>{timerLabel}</Text>
+        <View pointerEvents="none" style={styles.durationBadgeWrap}>
+          <GlassSurface dark style={styles.durationBadge}>
+            <Text style={styles.durationText}>{timerLabel}</Text>
+          </GlassSurface>
         </View>
       ) : null}
 
       {controlsVisible ? (
         <View pointerEvents="box-none" style={styles.controlsCluster}>
-          <Pressable
+          <GlassIconButton
             accessibilityLabel={muted ? 'Unmute video' : 'Mute video'}
-            accessibilityRole="button"
-            hitSlop={8}
+            color={colors.white}
+            dark
+            icon={muted ? 'volume-mute' : 'volume-high'}
+            iconSize={20}
             onPress={toggleMute}
-            style={({ pressed }) => [styles.volumeButton, pressed && styles.pressed]}
-          >
-            <Ionicons
-              color={colors.white}
-              name={muted ? 'volume-mute' : 'volume-high'}
-              size={20}
-            />
-          </Pressable>
+            size={VOLUME_SIZE}
+          />
           <Pressable
             accessibilityLabel={isPlaying ? 'Pause video' : 'Play video'}
             accessibilityRole="button"
             hitSlop={8}
             onPress={togglePlay}
-            style={({ pressed }) => [styles.playControl, pressed && styles.pressed]}
+            style={({ pressed }) => pressed && styles.pressed}
           >
-            <Ionicons
-              color={colors.white}
-              name={isPlaying ? 'pause' : 'play'}
-              size={28}
-              style={isPlaying ? undefined : styles.playIcon}
-            />
+            <GlassSurface dark isInteractive style={styles.playControl}>
+              <Ionicons
+                color={colors.white}
+                name={isPlaying ? 'pause' : 'play'}
+                size={28}
+                style={isPlaying ? undefined : styles.playIcon}
+              />
+            </GlassSurface>
           </Pressable>
         </View>
       ) : (
@@ -199,21 +202,23 @@ export function FeedVideoPlay({ videoPath, durationMs }: FeedVideoPlayProps) {
             haptics.light();
             setActivated(true);
           }}
-          style={({ pressed }) => [styles.playButton, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.playButtonWrap, pressed && styles.pressed]}
         >
-          <Ionicons color={colors.white} name="play" size={28} style={styles.playIcon} />
+          <GlassSurface dark isInteractive style={styles.playControl}>
+            <Ionicons color={colors.white} name="play" size={28} style={styles.playIcon} />
+          </GlassSurface>
         </Pressable>
       ) : null}
       {durationMs ? (
-        <View pointerEvents="none" style={styles.durationBadge}>
-          <Text style={styles.durationText}>{formatAudioDuration(durationMs / 1000)}</Text>
+        <View pointerEvents="none" style={styles.durationBadgeWrap}>
+          <GlassSurface dark style={styles.durationBadge}>
+            <Text style={styles.durationText}>{formatAudioDuration(durationMs / 1000)}</Text>
+          </GlassSurface>
         </View>
       ) : null}
     </View>
   );
 }
-
-const PLAY_SIZE = 64;
 
 const styles = StyleSheet.create({
   dim: {
@@ -228,45 +233,25 @@ const styles = StyleSheet.create({
     left: '50%',
     marginLeft: -PLAY_SIZE / 2,
     // Play control stays on the old center; volume sits above it.
-    marginTop: -(PLAY_SIZE / 2 + 36 + spacing.sm),
+    marginTop: -(PLAY_SIZE / 2 + VOLUME_SIZE + spacing.sm),
     position: 'absolute',
     top: '50%',
     width: PLAY_SIZE,
   },
-  volumeButton: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(16, 20, 28, 0.58)',
-    borderColor: 'rgba(255, 255, 255, 0.4)',
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
   playControl: {
     alignItems: 'center',
-    backgroundColor: 'rgba(16, 20, 28, 0.58)',
-    borderColor: 'rgba(255, 255, 255, 0.4)',
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: PLAY_SIZE / 2,
     height: PLAY_SIZE,
     justifyContent: 'center',
+    overflow: 'hidden',
     width: PLAY_SIZE,
   },
-  playButton: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(16, 20, 28, 0.58)',
-    borderColor: 'rgba(255, 255, 255, 0.4)',
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: PLAY_SIZE,
-    justifyContent: 'center',
+  playButtonWrap: {
     left: '50%',
     marginLeft: -PLAY_SIZE / 2,
     marginTop: -PLAY_SIZE / 2,
     position: 'absolute',
     top: '50%',
-    width: PLAY_SIZE,
   },
   playButtonHit: {
     height: PLAY_SIZE,
@@ -278,16 +263,18 @@ const styles = StyleSheet.create({
     width: PLAY_SIZE,
   },
   playIcon: { marginLeft: 4 },
-  durationBadge: {
-    // Sit below the temporary-post author row (avatar 34 + vertical padding).
-    backgroundColor: 'rgba(16, 20, 28, 0.58)',
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xxs,
+  durationBadgeWrap: {
     position: 'absolute',
     right: spacing.sm,
+    // Sit below the temporary-post author row (avatar 34 + vertical padding).
     top: spacing.sm * 2 + 34 + spacing.xs,
     zIndex: 6,
+  },
+  durationBadge: {
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
   },
   durationText: {
     color: colors.white,

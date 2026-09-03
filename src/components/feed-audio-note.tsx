@@ -3,6 +3,7 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AudioNoteWaveform } from '@/components/audio-note-waveform';
+import { GlassSurface } from '@/components/glass';
 import { formatAudioDuration, useSignedPostAudio } from '@/features/posts';
 import { haptics } from '@/lib/haptics';
 import { colors, radius, spacing } from '@/theme';
@@ -35,41 +36,44 @@ function FeedAudioNotePlayer({ url }: { url: string }) {
       accessibilityLabel={playing ? 'Pause voice note' : 'Play voice note'}
       accessibilityRole="button"
       onPress={toggle}
-      style={({ pressed }) => [styles.bar, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.hit, pressed && styles.pressed]}
     >
-      <Ionicons
-        color={colors.white}
-        name={playing ? 'pause' : 'play'}
-        size={18}
-        style={styles.playIcon}
-      />
-      <View style={styles.wave}>
-        <AudioNoteWaveform
-          active={playing}
-          barCount={40}
+      <GlassSurface dark isInteractive style={styles.pill}>
+        <Text style={styles.duration}>
+          {formatAudioDuration(playing ? current : total)}
+        </Text>
+        <View style={styles.wave}>
+          <AudioNoteWaveform
+            active={playing}
+            barCount={28}
+            color={colors.white}
+            durationSec={total}
+            maxHeight={16}
+            progress={total > 0 ? current / total : undefined}
+            vertical
+          />
+        </View>
+        <Ionicons
           color={colors.white}
-          durationSec={total}
-          maxHeight={18}
-          progress={total > 0 ? current / total : 0}
+          name={playing ? 'pause' : 'play'}
+          size={16}
+          style={styles.playIcon}
         />
-      </View>
-      <Text style={styles.duration}>
-        {formatAudioDuration(playing ? current : total)}
-      </Text>
+      </GlassSurface>
     </Pressable>
   );
 }
 
-/** Glass voice-note control overlaid on the bottom of a feed photo. */
+/** Vertical glass voice-note control on the right edge of a feed photo. */
 export function FeedAudioNote({ audioPath }: FeedAudioNoteProps) {
   const signed = useSignedPostAudio(audioPath);
   const url = signed.data?.url ?? null;
 
   if (signed.isPending) {
     return (
-      <View style={styles.bar}>
+      <GlassSurface dark style={styles.pill}>
         <ActivityIndicator color={colors.white} size="small" />
-      </View>
+      </GlassSurface>
     );
   }
 
@@ -79,38 +83,36 @@ export function FeedAudioNote({ audioPath }: FeedAudioNoteProps) {
 }
 
 const styles = StyleSheet.create({
-  bar: {
+  hit: {
+    flex: 1,
+  },
+  pill: {
     alignItems: 'center',
-    backgroundColor: 'rgba(16, 20, 28, 0.58)',
-    borderColor: 'rgba(255, 255, 255, 0.18)',
     borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    bottom: spacing.sm,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    left: spacing.sm,
-    minHeight: 44,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    position: 'absolute',
-    right: spacing.sm,
-    zIndex: 4,
+    flex: 1,
+    gap: spacing.xs,
+    justifyContent: 'space-between',
+    overflow: 'hidden',
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.sm,
+    width: 44,
   },
   playIcon: {
-    marginLeft: 2,
-    width: 18,
+    marginBottom: 2,
   },
   wave: {
+    alignItems: 'center',
     flex: 1,
-    minWidth: 0,
+    minHeight: 0,
+    width: '100%',
   },
   duration: {
     color: colors.white,
-    fontSize: 12,
+    fontSize: 10,
     fontVariant: ['tabular-nums'],
     fontWeight: '700',
-    minWidth: 32,
-    textAlign: 'right',
+    letterSpacing: -0.2,
+    marginTop: 2,
   },
   pressed: { opacity: 0.85 },
 });

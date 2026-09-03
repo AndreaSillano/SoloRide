@@ -11,8 +11,9 @@ import {
 
 import { usernameSchema, usernameToInternalEmail } from '@/auth/username';
 import { unregisterExpoPushToken } from '@/features/notifications/push';
-import { supabase } from '@/lib/supabase';
+import { identifyUser, resetAnalytics } from '@/lib/analytics';
 import { envConfigurationError, isSupabaseConfigured } from '@/lib/env';
+import { supabase } from '@/lib/supabase';
 
 export type Profile = {
   id: string;
@@ -55,6 +56,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     setProfile(data);
     setProfileError(data ? null : 'Your profile is still being prepared.');
+    if (data) {
+      identifyUser(data.id, { username: data.username });
+    }
   }, []);
 
   useEffect(() => {
@@ -70,6 +74,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (!mounted) return;
       setSession(data.session);
       if (data.session?.user) {
+        identifyUser(data.session.user.id);
         void loadProfile(data.session.user.id);
       }
       setIsLoading(false);
@@ -81,8 +86,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setSession(nextSession);
       setIsLoading(false);
       if (nextSession?.user) {
+        identifyUser(nextSession.user.id);
         void loadProfile(nextSession.user.id);
       } else {
+        resetAnalytics();
         setProfile(null);
         setProfileError(null);
       }
@@ -139,6 +146,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     await unregisterExpoPushToken().catch(() => undefined);
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
+    resetAnalytics();
   }, []);
 
   const refreshProfile = useCallback(async () => {

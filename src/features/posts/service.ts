@@ -1,5 +1,6 @@
 import * as Crypto from 'expo-crypto';
 
+import { trackCommentCreated, trackPostCreated } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 
 import {
@@ -523,7 +524,15 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord[]> 
       throw mapDatabaseError(insertError, 'The post could not be saved.');
     }
 
-    return parseFeedPosts(inserted ?? []);
+    const posts = parseFeedPosts(inserted ?? []);
+    trackPostCreated({
+      rideIds: prepared.map((entry) => entry.rideId),
+      postCount: posts.length,
+      hasAudio: Boolean(audioBytes),
+      hasVideo: Boolean(videoBytes),
+      isTemporary,
+    });
+    return posts;
   } catch (error) {
     if (uploadedPaths.length) {
       await supabase.storage.from(POST_MEDIA_BUCKET).remove(uploadedPaths);
@@ -707,7 +716,9 @@ export async function createComment(
     .single();
 
   if (error) throw mapDatabaseError(error, 'The comment could not be posted.');
-  return parseFeedComments([data])[0]!;
+  const comment = parseFeedComments([data])[0]!;
+  trackCommentCreated(parsed.data.postId, comment.id);
+  return comment;
 }
 
 export async function deleteComment(commentId: string): Promise<void> {

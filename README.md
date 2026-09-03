@@ -102,6 +102,14 @@ on a physical device with a development build; Expo Go is limited.
 Notification times for schedule reminders use each member device's local
 timezone. Tapping a social push opens that Ride in the Rides tab.
 
+## Analytics
+
+Product usage (sessions, retention, ride/post/comment events) is logged in
+**Amplitude**. Rodeo/group content KPIs (size, survival, posts/comments per
+user) are computed in **Supabase** via `supabase/analytics_kpis.sql`.
+
+See [ANALYTICS.md](./ANALYTICS.md) for the full event and KPI definitions.
+
 ## Checks
 
 ```sh
