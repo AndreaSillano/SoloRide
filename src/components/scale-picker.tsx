@@ -241,14 +241,22 @@ export function ScalePicker({
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    bottom: 0,
+    left: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    position: 'absolute',
+    right: 0,
+    top: 0,
     zIndex: 5,
   },
   center: {
-    ...StyleSheet.absoluteFillObject,
+    bottom: 0,
+    left: 0,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   track: {
     alignItems: 'center',

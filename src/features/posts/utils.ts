@@ -107,7 +107,7 @@ export function reactionEmojiForScore(score: number) {
  */
 export function reactionSumToStickerSize(sum: number) {
   const level = Math.min(10, Math.max(1, Math.abs(sum)));
-  const sizes = [56, 80, 104, 128, 152, 176, 200, 220, 230, 240] as const;
+  const sizes = [56, 80, 104, 128, 152, 176, 200, 220, 230, 250] as const;
   return sizes[level - 1] ?? sizes[0];
 }
 

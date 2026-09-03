@@ -106,10 +106,14 @@ export function ReactionBurst({
 
 const styles = StyleSheet.create({
   burst: {
-    ...StyleSheet.absoluteFillObject,
+    bottom: 0,
+    left: 0,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
+    position: 'absolute',
+    right: 0,
+    top: 0,
     zIndex: 6,
   },
   emoji: {
