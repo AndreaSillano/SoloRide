@@ -154,9 +154,9 @@ export function CommentsModal({
   const [selection, setSelection] = useState({ start: 0, end: 0 });
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const inputRef = useRef<TextInput>(null);
-  // Home-indicator padding only when the keyboard is closed; keeping it open
-  // leaves a gap between the composer and the keyboard.
-  const composerPad = keyboardOpen ? spacing.sm : Math.max(insets.bottom, spacing.sm);
+  // SafeAreaView already handles the home indicator, so cap the extra closed
+  // padding at the normal composer gap instead of adding the full inset twice.
+  const composerPad = keyboardOpen ? spacing.sm : Math.min(insets.bottom, spacing.md);
 
   useEffect(() => {
     if (visible) return;
