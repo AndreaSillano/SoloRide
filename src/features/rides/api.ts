@@ -442,6 +442,8 @@ export async function fetchPostedTodayStatus(
     .eq('user_id', userId)
     .eq('scheduled_date', scheduledDate)
     .eq('is_temporary', false)
+    // Challenge permanents do not consume the cadence slot.
+    .is('ride_challenge_id', null)
     .maybeSingle();
 
   if (error) throw mapRideError(error);
@@ -462,6 +464,8 @@ export async function fetchWeekPostStatus(
     .eq('ride_id', rideId)
     .eq('user_id', userId)
     .eq('is_temporary', false)
+    // Challenge permanents do not satisfy flexible-week cadence.
+    .is('ride_challenge_id', null)
     .gte('scheduled_date', weekStart)
     .lte('scheduled_date', weekEnd)
     .maybeSingle();

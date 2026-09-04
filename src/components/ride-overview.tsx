@@ -4,7 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Share, StyleSheet, Text, View } from 'react-native';
 
 import { useCurrentUser } from '@/auth/auth-context';
-import { isChallengeEnded } from '@/features/challenges';
+import {
+  areChallengeInteractionsLocked,
+  isChallengeEnded,
+  useUnlockedRideChallengeIds,
+} from '@/features/challenges';
 import {
   formatProfileName,
   getOwnReactionScore,
@@ -60,6 +64,7 @@ export function RideOverview({
   const members = useRideMembers(compact ? null : rideId);
   const feed = useRideFeed(rideId);
   const posting = usePostingStatus(rideId, user?.id);
+  const unlockedChallenges = useUnlockedRideChallengeIds(rideId);
   const deletePost = useDeletePost();
   const upsertReaction = useUpsertReaction();
   const removeReaction = useRemoveReaction();
@@ -207,22 +212,33 @@ export function RideOverview({
 
   const data = ride.data;
 
-  const mediaLocked =
+  const cadenceMediaLocked =
     !posting.isPending &&
     !posting.isArchived &&
     posting.isRequiredToday &&
     !posting.hasPosted;
+
+  const unlockedChallengeIds = unlockedChallenges.data ?? new Set<string>();
+  const challengesUnlockPending = unlockedChallenges.isPending;
+
+  const openCamera = () => {
+    router.push({ pathname: '/camera', params: { rideId } });
+  };
+
+  const openChallenge = (rideChallengeId: string) => {
+    haptics.light();
+    router.push({
+      pathname: '/ride/[rideId]/challenge/[rideChallengeId]',
+      params: { rideId, rideChallengeId },
+    });
+  };
 
   const activePost = activePostId
     ? feed.data?.find((post) => post.id === activePostId)
     : undefined;
   const commentsReadOnly =
     Boolean(activePost?.ride_challenge_id) &&
-    isChallengeEnded(activePost?.ride_challenge?.ends_at);
-
-  const openCamera = () => {
-    router.push({ pathname: '/camera', params: { rideId } });
-  };
+    areChallengeInteractionsLocked(activePost?.ride_challenge);
 
   return (
     <>
@@ -327,10 +343,15 @@ export function RideOverview({
       ) : feed.data.length ? (
         <View style={styles.feed}>
           {feed.data.map((post) => {
-            const challengeEnded =
-              Boolean(post.ride_challenge_id) &&
-              isChallengeEnded(post.ride_challenge?.ends_at);
-            const reactionsLocked = mediaLocked || challengeEnded;
+            const isChallengePost = Boolean(post.ride_challenge_id);
+            const mediaLocked = isChallengePost
+              ? challengesUnlockPending ||
+                !unlockedChallengeIds.has(post.ride_challenge_id!)
+              : cadenceMediaLocked;
+            const challengeInteractionsLocked =
+              isChallengePost &&
+              areChallengeInteractionsLocked(post.ride_challenge);
+            const reactionsLocked = mediaLocked || challengeInteractionsLocked;
             return (
             <View
               key={post.id}
@@ -354,19 +375,18 @@ export function RideOverview({
                 onPress={() => setActivePostId(post.id)}
                 onPressChallenge={
                   post.ride_challenge_id
-                    ? () => {
-                        haptics.light();
-                        router.push({
-                          pathname: '/ride/[rideId]/challenge/[rideChallengeId]',
-                          params: {
-                            rideId,
-                            rideChallengeId: post.ride_challenge_id!,
-                          },
-                        });
-                      }
+                    ? () => openChallenge(post.ride_challenge_id!)
                     : undefined
                 }
-                onPressLockedMedia={mediaLocked ? openCamera : undefined}
+                onPressLockedMedia={
+                  mediaLocked
+                    ? isChallengePost &&
+                      post.ride_challenge_id &&
+                      isChallengeEnded(post.ride_challenge?.ends_at)
+                      ? () => openChallenge(post.ride_challenge_id!)
+                      : openCamera
+                    : undefined
+                }
                 onPressReactions={() => setReactionsPostId(post.id)}
                 onSelectReaction={
                   reactionsLocked

@@ -25,21 +25,22 @@ import {
 import { getPostFrameSize } from '@/features/posts/utils';
 import { colors, radius, spacing } from '@/theme';
 
+// Rhodeo sunrise ink swatches — warm cream / coral / gold (no cool blue drift).
 const PALETTE = [
   '#FFFFFF',
-  '#F3F5F8',
-  '#12151A',
+  '#FFF6EE',
+  '#FCEAE1',
+  '#FFE4D3',
+  '#3B2527',
   '#000000',
-  '#2F6BFF',
-  '#60A5FA',
-  '#1A1F2B',
-  '#34D399',
-  '#F97316',
-  '#A855F7',
-  '#EF4444',
-  '#F59E0B',
-  '#EC4899',
-  '#06B6D4',
+  '#FF5C1A',
+  '#E87645',
+  '#E04E12',
+  '#F8C957',
+  '#B72E43',
+  '#77333B',
+  '#CF5F35',
+  '#8E6664',
 ] as const;
 const MIN_FONT = 12;
 const MAX_FONT = 72;
@@ -105,12 +106,13 @@ function clamp(value: number, min: number, max: number) {
 function isLightInk(color: string) {
   return (
     color === '#FFFFFF' ||
-    color === '#F3F5F8' ||
-    color === '#60A5FA' ||
-    color === '#34D399' ||
-    color === '#F59E0B' ||
-    color === '#F97316' ||
-    color === '#06B6D4'
+    color === '#FFF6EE' ||
+    color === '#FCEAE1' ||
+    color === '#FFE4D3' ||
+    color === '#FF5C1A' ||
+    color === '#E87645' ||
+    color === '#F8C957' ||
+    color === '#CF5F35'
   );
 }
 
@@ -651,7 +653,7 @@ export function PhotoTextEditor({ imageUri, onCancel, onSkip, onDone }: PhotoTex
                 >
                   {selected ? (
                     <Ionicons
-                      color={light ? '#12151A' : '#FFFFFF'}
+                      color={light ? colors.text : colors.white}
                       name="checkmark"
                       size={16}
                     />

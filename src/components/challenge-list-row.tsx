@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ChallengeHatIcon } from '@/components/challenge-hat-icon';
 import {
   formatChallengeRemaining,
+  isChallengeVisible,
   type RideChallenge,
 } from '@/features/challenges';
 import { colors, radius, spacing } from '@/theme';
@@ -19,7 +20,7 @@ export function ChallengeListRow({
   last?: boolean;
 }) {
   const title = challenge.challenge?.title ?? 'Challenge';
-  const active = new Date(challenge.ends_at).getTime() > Date.now();
+  const active = isChallengeVisible(challenge.ends_at);
   const timeLabel = formatChallengeRemaining(challenge.ends_at);
   const completions = challenge.completers.length;
   const meta = [

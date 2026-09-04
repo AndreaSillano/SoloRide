@@ -6,6 +6,7 @@ import { ChallengeHatIcon } from '@/components/challenge-hat-icon';
 import { Avatar } from '@/components/ui';
 import {
   formatChallengeRemaining,
+  isChallengeVisible,
   type RideChallenge,
 } from '@/features/challenges';
 import { colors, radius, shadows, spacing } from '@/theme';
@@ -23,8 +24,8 @@ export function ChallengeBanner({
   const description = challenge.challenge?.description?.trim() ?? '';
   const completers = challenge.completers.slice(0, MAX_AVATARS);
   const extra = Math.max(0, challenge.completers.length - completers.length);
+  const ended = !isChallengeVisible(challenge.ends_at);
   const timeLabel = formatChallengeRemaining(challenge.ends_at);
-  const ended = timeLabel === 'Ended';
 
   return (
     <Pressable

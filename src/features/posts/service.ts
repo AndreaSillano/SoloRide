@@ -47,7 +47,7 @@ const POST_SELECT = `
   comments(count),
   post_reactions(user_id, score, updated_at),
   ride_challenge:ride_challenges!posts_ride_challenge_id_fkey(
-    id, ends_at, winner_user_id,
+    id, ends_at, winner_user_id, winner_post_id, winner_declared_at,
     challenge:challenges!ride_challenges_challenge_id_fkey(id, title, description)
   )
 `;

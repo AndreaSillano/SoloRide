@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -27,6 +26,8 @@ export type ProposeOffer = {
   when: string;
   image: ImageSourcePropType;
 };
+
+const OFFER_IMAGE_SIZE = 96;
 
 export function ProposeToRideSheet({
   visible,
@@ -71,8 +72,8 @@ export function ProposeToRideSheet({
   };
 
   return (
-    <AppBottomSheet onClose={onClose} visible={visible}>
-      <View style={styles.sheet}>
+    <AppBottomSheet fitContent onClose={onClose} visible={visible}>
+      <View style={[styles.sheet, { paddingBottom: spacing.lg + insets.bottom }]}>
         <View style={styles.header}>
           <View style={styles.headerCopy}>
             <Text style={styles.title}>Propose to Ride</Text>
@@ -81,31 +82,22 @@ export function ProposeToRideSheet({
           <SheetCloseButton accessibilityLabel="Close propose sheet" onPress={onClose} />
         </View>
 
-        <ScrollView
-          contentContainerStyle={[
-            styles.body,
-            { paddingBottom: spacing.xl + insets.bottom },
-          ]}
-          keyboardShouldPersistTaps="handled"
-          style={styles.flex}
-        >
+        <View style={styles.body}>
           {offer ? (
             <View style={styles.offerCard}>
-              <View style={styles.offerImageWrap}>
-                <Image
-                  resizeMode="cover"
-                  source={offer.image}
-                  style={styles.offerImage}
-                />
-              </View>
+              <Image
+                resizeMode="cover"
+                source={offer.image}
+                style={styles.offerImage}
+              />
               <View style={styles.offerCopy}>
-                <Text ellipsizeMode="tail" numberOfLines={1} style={styles.offerVenue}>
+                <Text ellipsizeMode="tail" numberOfLines={2} style={styles.offerVenue}>
                   {offer.offer}
                 </Text>
                 <Text ellipsizeMode="tail" numberOfLines={1} style={styles.offerDeal}>
                   {offer.detail}
                 </Text>
-                <Text style={styles.offerMeta}>
+                <Text numberOfLines={1} style={styles.offerMeta}>
                   {offer.when} · {offer.area}
                 </Text>
               </View>
@@ -168,7 +160,7 @@ export function ProposeToRideSheet({
               {selectedRide ? `Send to ${selectedRide.name}` : 'Send to Ride'}
             </Text>
           </Pressable>
-        </ScrollView>
+        </View>
       </View>
     </AppBottomSheet>
   );
@@ -206,8 +198,9 @@ function RideChoice({
 }
 
 const styles = StyleSheet.create({
-  sheet: { flex: 1, width: '100%' },
-  flex: { flex: 1 },
+  sheet: {
+    width: '100%',
+  },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -237,7 +230,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xs,
   },
   offerCard: {
-    alignItems: 'stretch',
+    alignItems: 'center',
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radius.md,
@@ -246,14 +239,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...shadows.card,
   },
-  offerImageWrap: {
-    backgroundColor: colors.surfaceMuted,
-    width: 88,
-  },
   offerImage: {
-    height: '100%',
-    minHeight: 88,
-    width: '100%',
+    backgroundColor: colors.surfaceMuted,
+    height: OFFER_IMAGE_SIZE,
+    width: OFFER_IMAGE_SIZE,
   },
   offerCopy: {
     flex: 1,
@@ -348,7 +337,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
     fontWeight: '500',
-    minHeight: 96,
+    minHeight: 84,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },

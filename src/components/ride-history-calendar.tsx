@@ -24,6 +24,11 @@ import { ReactionsModal } from '@/components/reactions-modal';
 import { SheetCloseButton } from '@/components/sheet-close-button';
 import { Body, FeedPost, RideFeedSkeleton } from '@/components/ui';
 import {
+  areChallengeInteractionsLocked,
+  isChallengeEnded,
+  useUnlockedRideChallengeIds,
+} from '@/features/challenges';
+import {
   getOwnReactionScore,
   useDeletePost,
   useRemoveReaction,
@@ -70,15 +75,26 @@ function DayFeedScreen({
   const removeReaction = useRemoveReaction();
   const dayPosts = useRidePostsForDate(rideId, date);
   const posting = usePostingStatus(rideId, user?.id);
+  const unlockedChallenges = useUnlockedRideChallengeIds(rideId);
 
-  const mediaLocked =
+  const cadenceMediaLocked =
     !posting.isPending &&
     !posting.isArchived &&
     posting.isRequiredToday &&
     !posting.hasPosted;
+  const unlockedChallengeIds = unlockedChallenges.data ?? new Set<string>();
+  const challengesUnlockPending = unlockedChallenges.isPending;
 
   const openCamera = () => {
     router.push({ pathname: '/camera', params: { rideId } });
+  };
+
+  const openChallenge = (rideChallengeId: string) => {
+    haptics.light();
+    router.push({
+      pathname: '/ride/[rideId]/challenge/[rideChallengeId]',
+      params: { rideId, rideChallengeId },
+    });
   };
 
   const confirmDeletePost = (postId: string) => {
@@ -158,18 +174,28 @@ function DayFeedScreen({
             />
           </View>
         ) : dayPosts.data?.length ? (
-          dayPosts.data.map((post: PostRecord) => (
+          dayPosts.data.map((post: PostRecord) => {
+            const isChallengePost = Boolean(post.ride_challenge_id);
+            const mediaLocked = isChallengePost
+              ? challengesUnlockPending ||
+                !unlockedChallengeIds.has(post.ride_challenge_id!)
+              : cadenceMediaLocked;
+            const challengeInteractionsLocked =
+              isChallengePost &&
+              areChallengeInteractionsLocked(post.ride_challenge);
+            const reactionsLocked = mediaLocked || challengeInteractionsLocked;
+            return (
             <FeedPost
               key={post.id}
               deleting={deletingPostId === post.id}
               isOwnPost={post.user_id === user?.id}
               mediaLocked={mediaLocked}
               onCloseReactionPicker={
-                mediaLocked ? undefined : () => setPickerPostId(null)
+                reactionsLocked ? undefined : () => setPickerPostId(null)
               }
               onDelete={() => confirmDeletePost(post.id)}
               onDoubleTapImage={
-                mediaLocked
+                reactionsLocked
                   ? undefined
                   : () => {
                       haptics.light();
@@ -177,18 +203,32 @@ function DayFeedScreen({
                     }
               }
               onPress={() => setActivePostId(post.id)}
-              onPressLockedMedia={mediaLocked ? openCamera : undefined}
+              onPressChallenge={
+                post.ride_challenge_id
+                  ? () => openChallenge(post.ride_challenge_id!)
+                  : undefined
+              }
+              onPressLockedMedia={
+                mediaLocked
+                  ? isChallengePost &&
+                    post.ride_challenge_id &&
+                    isChallengeEnded(post.ride_challenge?.ends_at)
+                    ? () => openChallenge(post.ride_challenge_id!)
+                    : openCamera
+                  : undefined
+              }
               onPressReactions={() => setReactionsPostId(post.id)}
               onSelectReaction={
-                mediaLocked
+                reactionsLocked
                   ? undefined
                   : (score) => handleSelectReaction(post.id, score)
               }
               ownReactionScore={getOwnReactionScore(post, user?.id)}
               post={post}
-              reactionPickerVisible={!mediaLocked && pickerPostId === post.id}
+              reactionPickerVisible={!reactionsLocked && pickerPostId === post.id}
             />
-          ))
+            );
+          })
         ) : (
           <View style={styles.feedMessage}>
             <Body muted>No photos on this day.</Body>

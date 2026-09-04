@@ -58,6 +58,8 @@ async function loadRidesDueToday(userId: string): Promise<{
     .select('ride_id,scheduled_date')
     .eq('user_id', userId)
     .eq('is_temporary', false)
+    // Challenge permanents do not consume the cadence slot / unlock spoiler.
+    .is('ride_challenge_id', null)
     .gte('scheduled_date', week.start)
     .lte('scheduled_date', today);
 
@@ -133,6 +135,8 @@ async function loadCameraRides(userId: string): Promise<CameraRide[]> {
         .select('ride_id,scheduled_date')
         .eq('user_id', userId)
         .eq('is_temporary', false)
+        // Challenge permanents do not consume the cadence slot.
+        .is('ride_challenge_id', null)
         .gte('scheduled_date', week.start)
         .lte('scheduled_date', today),
       supabase

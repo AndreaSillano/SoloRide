@@ -31,7 +31,7 @@ import {
 } from 'react-native';import { SafeAreaView, useSafeAreaInsets, type Edge } from 'react-native-safe-area-context';
 
 import { WEEKDAYS, WEEKDAY_SHORT_LABELS } from '@/features/rides';
-import { formatChallengeRemaining, isChallengeEnded } from '@/features/challenges';
+import { areChallengeInteractionsLocked, formatChallengeRemaining, isChallengeEnded } from '@/features/challenges';
 import {
   getCommentCount,
   formatProfileName,
@@ -802,10 +802,12 @@ export function FeedPost({
   const challengeTitle =
     post.ride_challenge?.challenge?.title?.trim() || 'Challenge';
   const challengeEndsAt = post.ride_challenge?.ends_at ?? null;
-  const challengeEnded =
-    Boolean(post.ride_challenge_id) && isChallengeEnded(challengeEndsAt);
-  /** Block new reactions (cadence lock or finished challenge). Photos stay visible when only challengeEnded. */
-  const reactionsLocked = mediaLocked || challengeEnded;
+  const challengeEnded = isChallenge && isChallengeEnded(challengeEndsAt);
+  /** Block new reactions after the 1h post-close reaction window. */
+  const challengeInteractionsLocked =
+    Boolean(post.ride_challenge_id) &&
+    areChallengeInteractionsLocked(post.ride_challenge);
+  const reactionsLocked = mediaLocked || challengeInteractionsLocked;
   const challengeTimeLeft = challengeEndsAt
     ? formatChallengeRemaining(challengeEndsAt)
     : null;
@@ -1012,12 +1014,22 @@ export function FeedPost({
       <View
         accessibilityHint={
           mediaLocked
-            ? 'Opens the camera to post today\'s photo'
+            ? challengeEnded
+              ? 'Opens the challenge'
+              : 'Opens the camera to post'
             : reactionsLocked
               ? undefined
               : 'Double-tap or long-press to react'
         }
-        accessibilityLabel={mediaLocked ? 'Blurred photo. Post to unlock' : undefined}
+        accessibilityLabel={
+          mediaLocked
+            ? isChallenge
+              ? challengeEnded
+                ? 'Blurred photo. Open the challenge to view'
+                : 'Blurred photo. Post to the challenge to unlock'
+              : 'Blurred photo. Post to unlock'
+            : undefined
+        }
         accessibilityRole="imagebutton"
       >
         <PostImage
@@ -1031,7 +1043,15 @@ export function FeedPost({
         <View pointerEvents="none" style={styles.feedLockedHint}>
           <View style={styles.feedLockedHintClip}>
             <GlassSurface dark style={styles.feedLockedHintPill}>
-              <Ionicons color={colors.white} name="camera-outline" size={20} />
+              {challengeEnded ? (
+                <ChallengeHatIcon color={colors.primary} size={20} />
+              ) : (
+                <Ionicons
+                  color={isChallenge ? colors.primary : colors.white}
+                  name={isChallenge ? 'camera' : 'camera-outline'}
+                  size={20}
+                />
+              )}
             </GlassSurface>
           </View>
         </View>

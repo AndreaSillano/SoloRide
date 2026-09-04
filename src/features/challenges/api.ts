@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 
+import { CHALLENGE_INTERACTION_GRACE_MS, isChallengeVisible } from './format';
 import type {
   ChallengeCatalogItem,
   OpenRideChallengeInput,
@@ -11,7 +12,7 @@ const CHALLENGE_EMBED =
   'id,title,description';
 
 const RIDE_CHALLENGE_SELECT = `
-  id,ride_id,challenge_id,starts_at,ends_at,source,opened_by_user_id,winner_user_id,created_at,
+  id,ride_id,challenge_id,starts_at,ends_at,source,opened_by_user_id,winner_user_id,winner_post_id,winner_declared_at,created_at,
   challenge:challenges!ride_challenges_challenge_id_fkey(${CHALLENGE_EMBED})
 `;
 
@@ -49,12 +50,13 @@ async function attachCompleters(
   if (rows.length === 0) return [];
 
   const ids = rows.map((row) => row.id);
-  const { data: posts, error } = await supabase
-    .from('posts')
+  // Durable unlocks — survive challenge post delete.
+  const { data: completions, error } = await supabase
+    .from('ride_challenge_completions')
     .select(
       `
       ride_challenge_id,user_id,
-      profile:profiles!posts_user_id_fkey(id,username,display_name,avatar_url)
+      profile:profiles!ride_challenge_completions_user_id_fkey(id,username,display_name,avatar_url)
     `,
     )
     .in('ride_challenge_id', ids);
@@ -64,13 +66,13 @@ async function attachCompleters(
   const byChallenge = new Map<string, RideChallengeCompleter[]>();
   const completedIds = new Set<string>();
 
-  for (const post of posts ?? []) {
-    const challengeId = String(post.ride_challenge_id ?? '');
+  for (const row of completions ?? []) {
+    const challengeId = String(row.ride_challenge_id ?? '');
     if (!challengeId) continue;
-    if (post.user_id === userId) completedIds.add(challengeId);
+    if (row.user_id === userId) completedIds.add(challengeId);
 
     const profile = firstOrSelf(
-      post.profile as RideChallengeCompleter | RideChallengeCompleter[] | null,
+      row.profile as RideChallengeCompleter | RideChallengeCompleter[] | null,
     );
     if (!profile) continue;
 
@@ -90,11 +92,45 @@ async function attachCompleters(
     source: row.source,
     opened_by_user_id: row.opened_by_user_id,
     winner_user_id: row.winner_user_id ?? null,
+    winner_post_id: row.winner_post_id ?? null,
+    winner_declared_at: row.winner_declared_at ?? null,
     created_at: row.created_at,
     challenge: firstOrSelf(row.challenge),
     completers: byChallenge.get(row.id) ?? [],
     current_user_completed: completedIds.has(row.id),
   }));
+}
+
+/** Ride challenge IDs the current user has permanently unlocked. */
+export async function fetchUnlockedRideChallengeIds(
+  rideId: string,
+): Promise<string[]> {
+  const userId = await requireUserId();
+
+  const { data: challenges, error: challengesError } = await supabase
+    .from('ride_challenges')
+    .select('id')
+    .eq('ride_id', rideId);
+
+  if (challengesError) {
+    throw mapError(challengesError, 'Challenge unlocks could not be loaded.');
+  }
+
+  const challengeIds = (challenges ?? []).map((row) => String(row.id));
+  if (challengeIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('ride_challenge_completions')
+    .select('ride_challenge_id')
+    .eq('user_id', userId)
+    .in('ride_challenge_id', challengeIds);
+
+  if (error) throw mapError(error, 'Challenge unlocks could not be loaded.');
+
+  return (data ?? [])
+    .map((row) => row.ride_challenge_id)
+    .filter((id): id is string => Boolean(id))
+    .map(String);
 }
 
 export async function fetchChallengeCatalog(): Promise<ChallengeCatalogItem[]> {
@@ -112,19 +148,22 @@ export async function fetchActiveRideChallenge(
   rideId: string,
 ): Promise<RideChallenge | null> {
   const userId = await requireUserId();
+  // Include the 1h post-close reaction window (visible, no new posts).
+  const visibleAfter = new Date(Date.now() - CHALLENGE_INTERACTION_GRACE_MS).toISOString();
   const { data, error } = await supabase
     .from('ride_challenges')
     .select(RIDE_CHALLENGE_SELECT)
     .eq('ride_id', rideId)
-    .gt('ends_at', new Date().toISOString())
+    .gt('ends_at', visibleAfter)
     .order('starts_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(3);
 
   if (error) throw mapError(error, 'The active challenge could not be loaded.');
-  if (!data) return null;
+  const rows = (data ?? []) as RideChallengeRow[];
+  const visible = rows.find((row) => isChallengeVisible(row.ends_at));
+  if (!visible) return null;
 
-  const [mapped] = await attachCompleters([data as RideChallengeRow], userId);
+  const [mapped] = await attachCompleters([visible], userId);
   return mapped ?? null;
 }
 
@@ -183,6 +222,8 @@ export async function openRideChallenge(
       completers: [],
       current_user_completed: false,
       winner_user_id: opened.winner_user_id ?? null,
+      winner_post_id: opened.winner_post_id ?? null,
+      winner_declared_at: opened.winner_declared_at ?? null,
       opened_by_user_id: opened.opened_by_user_id ?? userId,
     };
   }

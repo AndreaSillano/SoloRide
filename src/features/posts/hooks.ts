@@ -260,6 +260,9 @@ export function useCreatePost() {
           void queryClient.invalidateQueries({
             queryKey: queryKeys.challengePosts(post.ride_challenge_id),
           });
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.unlockedRideChallenges(post.ride_id),
+          });
         }
       }
       void queryClient.invalidateQueries({ queryKey: ['rides-due-today'] });

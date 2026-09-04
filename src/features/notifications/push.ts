@@ -18,7 +18,7 @@ export type SocialNotificationData = {
 };
 
 export type RideChallengeNotificationData = {
-  kind: 'ride_challenge' | 'ride_challenge_finished';
+  kind: 'ride_challenge' | 'ride_challenge_completed' | 'ride_challenge_finished';
   rideId: string;
   rideChallengeId: string;
 };
@@ -74,7 +74,9 @@ export function isRideChallengeNotificationData(
   if (!value || typeof value !== 'object') return false;
   const data = value as Record<string, unknown>;
   return (
-    (data.kind === 'ride_challenge' || data.kind === 'ride_challenge_finished') &&
+    (data.kind === 'ride_challenge' ||
+      data.kind === 'ride_challenge_completed' ||
+      data.kind === 'ride_challenge_finished') &&
     typeof data.rideId === 'string' &&
     typeof data.rideChallengeId === 'string'
   );

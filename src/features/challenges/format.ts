@@ -1,19 +1,79 @@
+/** 1h reaction window after submissions close (timer or early close). */
+export const CHALLENGE_INTERACTION_GRACE_MS = 60 * 60 * 1000;
+
 /** Countdown label matching the challenge UI (e.g. "3d left", "12h left"). */
 export function formatChallengeRemaining(endsAt: string, now = Date.now()): string {
-  const remainingMs = new Date(endsAt).getTime() - now;
-  if (remainingMs <= 0) return 'Ended';
-  if (remainingMs < 60 * 60 * 1000) return '<1h left';
-  const hours = Math.ceil(remainingMs / (60 * 60 * 1000));
-  if (hours < 24) return `${hours}h left`;
-  const days = Math.ceil(hours / 24);
-  return `${days}d left`;
+  const endsMs = Date.parse(endsAt);
+  if (!Number.isFinite(endsMs)) return 'Ended';
+
+  const submissionLeft = endsMs - now;
+  if (submissionLeft > 0) {
+    if (submissionLeft < 60 * 60 * 1000) return '<1h left';
+    const hours = Math.ceil(submissionLeft / (60 * 60 * 1000));
+    if (hours < 24) return `${hours}h left`;
+    const days = Math.ceil(hours / 24);
+    return `${days}d left`;
+  }
+
+  const reactionLeft = endsMs + CHALLENGE_INTERACTION_GRACE_MS - now;
+  if (reactionLeft > 0) {
+    if (reactionLeft < 60 * 60 * 1000) return 'React · <1h';
+    return 'React · 1h left';
+  }
+
+  return 'Ended';
 }
 
-/** True when a challenge window has ended (timer or early close). */
+/** True when challenge submissions have closed (timer or early close). */
 export function isChallengeEnded(endsAt: string | null | undefined, now = Date.now()): boolean {
   if (!endsAt) return false;
   const ms = Date.parse(endsAt);
   return Number.isFinite(ms) && ms <= now;
+}
+
+/** Submissions accepted while ends_at is still in the future. */
+export function areChallengeSubmissionsOpen(
+  endsAt: string | null | undefined,
+  now = Date.now(),
+): boolean {
+  return Boolean(endsAt) && !isChallengeEnded(endsAt, now);
+}
+
+/** Banner / detail stay visible through the 1h post-close reaction window. */
+export function isChallengeVisible(
+  endsAt: string | null | undefined,
+  now = Date.now(),
+): boolean {
+  if (!endsAt) return false;
+  const ms = Date.parse(endsAt);
+  if (!Number.isFinite(ms)) return false;
+  return ms + CHALLENGE_INTERACTION_GRACE_MS > now;
+}
+
+/**
+ * Likes/comments stay open while submissions are open, and for 1 hour after
+ * ends_at (early close or timer). Winner is elected when this window ends.
+ */
+export function areChallengeInteractionsOpen(
+  challenge:
+    | {
+        ends_at?: string | null;
+        winner_user_id?: string | null;
+        winner_declared_at?: string | null;
+      }
+    | null
+    | undefined,
+  now = Date.now(),
+): boolean {
+  if (!challenge?.ends_at) return true;
+  return isChallengeVisible(challenge.ends_at, now);
+}
+
+export function areChallengeInteractionsLocked(
+  challenge: Parameters<typeof areChallengeInteractionsOpen>[0],
+  now = Date.now(),
+): boolean {
+  return !areChallengeInteractionsOpen(challenge, now);
 }
 
 /** Compact hashtag from a challenge title ("Sunset Vibes" → "#SunsetVibes"). */
@@ -98,7 +158,11 @@ export function estimateNextAutoChallengeDate(input: {
 
   let anchor = today;
   if (input.activeEndsAt) {
-    const ends = startOfLocalDay(new Date(input.activeEndsAt));
+    // Block the next open until the reaction grace window ends.
+    const interactionEnd = new Date(
+      Date.parse(input.activeEndsAt) + CHALLENGE_INTERACTION_GRACE_MS,
+    );
+    const ends = startOfLocalDay(interactionEnd);
     if (ends.getTime() >= today.getTime()) {
       anchor = addLocalDays(ends, 1);
     }

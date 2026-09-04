@@ -51,7 +51,15 @@ export function GlassSurface({
   }
 
   return (
-    <View style={[dark ? styles.fallbackDark : styles.fallbackLight, style]}>{children}</View>
+    <View
+      style={[
+        dark ? styles.fallbackDark : styles.fallbackLight,
+        tintColor ? { backgroundColor: tintColor, borderColor: 'transparent' } : null,
+        style,
+      ]}
+    >
+      {children}
+    </View>
   );
 }
 
@@ -127,10 +135,13 @@ export function AppBottomSheet({
   visible,
   onClose,
   children,
+  fitContent = false,
 }: {
   visible: boolean;
   onClose: () => void;
   children: ReactNode;
+  /** Size the sheet to its children instead of forcing a tall, scrollable shell. */
+  fitContent?: boolean;
 }) {
   // Expo UI's sheet sizes RN content intrinsically on iOS unless height is
   // explicit — without this, full-height ScrollViews/FlatLists expand with
@@ -144,10 +155,18 @@ export function AppBottomSheet({
       isPresented={visible}
       onDismiss={onClose}
       showDragIndicator
-      snapPoints={['half', 'full']}
+      snapPoints={fitContent ? undefined : ['half', 'full']}
     >
       <RNHostView>
-        <View style={[styles.sheetFill, { height: windowHeight }]}>{children}</View>
+        <View
+          style={
+            fitContent
+              ? styles.sheetFit
+              : [styles.sheetFill, { height: windowHeight }]
+          }
+        >
+          {children}
+        </View>
       </RNHostView>
     </BottomSheet>
   );
@@ -181,6 +200,9 @@ const styles = StyleSheet.create({
     minWidth: 51,
   },
   sheetFill: {
+    width: '100%',
+  },
+  sheetFit: {
     width: '100%',
   },
 });

@@ -24,8 +24,12 @@ export type RideChallenge = {
   ends_at: string;
   source: 'auto' | 'manual';
   opened_by_user_id: string | null;
-  /** Set when the challenge closes early (all members posted). */
+  /** Elected after the 1h post-close reaction window (metrics). */
   winner_user_id: string | null;
+  /** Winning post at election time (null if deleted). */
+  winner_post_id: string | null;
+  /** When the winner was frozen (locks likes/comments). */
+  winner_declared_at: string | null;
   created_at: string;
   challenge: Pick<ChallengeCatalogItem, 'id' | 'title' | 'description'> | null;
   completers: RideChallengeCompleter[];

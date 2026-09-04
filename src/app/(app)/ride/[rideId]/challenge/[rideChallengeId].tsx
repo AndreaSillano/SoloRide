@@ -16,7 +16,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useCurrentUser } from '@/auth/auth-context';
 import { ChallengeHatIcon } from '@/components/challenge-hat-icon';
 import { ErrorScreen } from '@/components/error-screen';
 import {
@@ -25,7 +24,9 @@ import {
   RideFeedSkeleton,
 } from '@/components/ui';
 import {
+  areChallengeSubmissionsOpen,
   formatChallengeRemaining,
+  isChallengeVisible,
   useChallengePosts,
   useRideChallenge,
 } from '@/features/challenges';
@@ -37,7 +38,6 @@ import {
   useSignedPostImage,
   type PostRecord,
 } from '@/features/posts';
-import { usePostingStatus } from '@/features/rides';
 import { haptics } from '@/lib/haptics';
 import { colors, radius, shadows, spacing } from '@/theme';
 
@@ -144,10 +144,8 @@ export default function RideChallengeScreen() {
   }>();
   const navigation = useNavigation();
   const headerHeight = useHeaderHeight();
-  const { user } = useCurrentUser();
   const challenge = useRideChallenge(rideChallengeId);
   const posts = useChallengePosts(rideChallengeId);
-  const posting = usePostingStatus(rideId, user?.id);
   const [tab, setTab] = useState<ChallengeTab>('entries');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -157,13 +155,13 @@ export default function RideChallengeScreen() {
     navigation.setOptions({ title: 'Challenge' });
   }, [navigation]);
 
-  const isActive =
-    challenge.data != null && new Date(challenge.data.ends_at).getTime() > Date.now();
-  const mediaLocked =
-    !posting.isPending &&
-    !posting.isArchived &&
-    posting.isRequiredToday &&
-    !posting.hasPosted;
+  const isVisible =
+    challenge.data != null && isChallengeVisible(challenge.data.ends_at);
+  const submissionsOpen =
+    challenge.data != null && areChallengeSubmissionsOpen(challenge.data.ends_at);
+  const mediaLocked = Boolean(
+    challenge.data && !challenge.data.current_user_completed,
+  );
 
   const sortedPosts = useMemo(() => {
     const list = posts.data ? [...posts.data] : [];
@@ -251,7 +249,11 @@ export default function RideChallengeScreen() {
             </View>
 
             <Text style={styles.eyebrow}>
-              {isActive ? 'PHOTO CHALLENGE' : 'PAST CHALLENGE'}
+              {isVisible
+                ? submissionsOpen
+                  ? 'PHOTO CHALLENGE'
+                  : 'REACT NOW'
+                : 'PAST CHALLENGE'}
             </Text>
             <Text style={styles.title}>{title.toUpperCase()}</Text>
             {description ? (
@@ -260,7 +262,7 @@ export default function RideChallengeScreen() {
           </LinearGradient>
         </View>
 
-        {isActive && !data.current_user_completed ? (
+        {submissionsOpen && !data.current_user_completed ? (
           <Pressable
             accessibilityRole="button"
             onPress={openCamera}

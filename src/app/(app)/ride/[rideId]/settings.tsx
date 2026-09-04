@@ -36,6 +36,7 @@ import { SegmentedControl } from '@expo/ui/community/segmented-control';
 import {
   estimateNextAutoChallengeDate,
   formatChallengeCalendarDate,
+  isChallengeVisible,
   useChallengeCatalog,
   useOpenRideChallenge,
   useRideChallengeHistory,
@@ -562,7 +563,7 @@ export default function RideSettingsScreen() {
         const date = new Date(startsAt);
         return date.getMonth() === month && date.getFullYear() === year;
       });
-    const active = history.find((item) => new Date(item.ends_at).getTime() > now.getTime());
+    const active = history.find((item) => isChallengeVisible(item.ends_at, now.getTime()));
     const next = estimateNextAutoChallengeDate({
       challengesEnabled: ride.data.challenges_enabled,
       isArchived: ride.data.is_archived,

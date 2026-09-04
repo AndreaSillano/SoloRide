@@ -23,4 +23,6 @@ export const queryKeys = {
   rideChallengeHistory: (rideId: string) => ['ride-challenge-history', rideId] as const,
   rideChallenge: (rideChallengeId: string) => ['ride-challenge', rideChallengeId] as const,
   challengePosts: (rideChallengeId: string) => ['challenge-posts', rideChallengeId] as const,
+  unlockedRideChallenges: (rideId: string) =>
+    ['unlocked-ride-challenges', rideId] as const,
 };

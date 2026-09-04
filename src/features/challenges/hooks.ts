@@ -10,8 +10,10 @@ import {
   fetchChallengeCatalog,
   fetchRideChallenge,
   fetchRideChallengeHistory,
+  fetchUnlockedRideChallengeIds,
   openRideChallenge,
 } from './api';
+import { areChallengeSubmissionsOpen } from './format';
 import type { OpenRideChallengeInput, RideChallenge } from './types';
 
 export function useActiveRideChallenge(rideId?: string | null) {
@@ -44,7 +46,7 @@ export function useActiveRideChallenges(rideIds: string[]) {
   const dataKey = queries
     .map((query) =>
       query.data
-        ? `${query.data.id}:${query.data.current_user_completed ? '1' : '0'}`
+        ? `${query.data.id}:${query.data.current_user_completed ? '1' : '0'}:${query.data.ends_at}`
         : query.isPending
           ? 'pending'
           : 'none',
@@ -55,7 +57,12 @@ export function useActiveRideChallenges(rideIds: string[]) {
     const map = new Map<string, RideChallenge>();
     uniqueIds.forEach((rideId, index) => {
       const challenge = queries[index]?.data;
-      if (challenge && !challenge.current_user_completed) {
+      // Publish only while submissions are open (not during the reaction grace).
+      if (
+        challenge &&
+        !challenge.current_user_completed &&
+        areChallengeSubmissionsOpen(challenge.ends_at)
+      ) {
         map.set(rideId, challenge);
       }
     });
@@ -79,6 +86,17 @@ export function useRideChallengeHistory(rideId?: string | null) {
     queryKey: queryKeys.rideChallengeHistory(rideId ?? 'missing'),
     queryFn: () => fetchRideChallengeHistory(rideId ?? ''),
     enabled: Boolean(rideId && user?.id),
+  });
+}
+
+/** Permanent unlock set for challenge media blur (survives post delete). */
+export function useUnlockedRideChallengeIds(rideId?: string | null) {
+  const { user } = useCurrentUser();
+  return useQuery({
+    queryKey: queryKeys.unlockedRideChallenges(rideId ?? 'missing'),
+    queryFn: () => fetchUnlockedRideChallengeIds(rideId ?? ''),
+    enabled: Boolean(rideId && user?.id),
+    select: (ids) => new Set(ids),
   });
 }
 

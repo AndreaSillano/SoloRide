@@ -86,6 +86,8 @@ export const postSchema = z.object({
         id: uuidSchema,
         ends_at: z.string(),
         winner_user_id: uuidSchema.nullish().transform((value) => value ?? null),
+        winner_post_id: uuidSchema.nullish().transform((value) => value ?? null),
+        winner_declared_at: z.string().nullish().transform((value) => value ?? null),
         challenge: z.preprocess((value) => {
           if (Array.isArray(value)) return value[0] ?? null;
           return value;
