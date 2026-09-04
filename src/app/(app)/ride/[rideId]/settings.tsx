@@ -544,28 +544,9 @@ export default function RideSettingsScreen() {
     <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
   );
 
-  if (ride.isPending || schedule.isPending) {
-    return (
-      <SettingsShell header={null} refreshControl={refreshControl}>
-        <CenteredBusy message="Loading…" />
-      </SettingsShell>
-    );
-  }
-
-  if (ride.isError || schedule.isError || !ride.data) {
-    return (
-      <SettingsShell header={null} refreshControl={refreshControl}>
-        <ErrorScreen
-          message="The control panel dozed off. Come back in a sec."
-          title="Settings are napping"
-        />
-      </SettingsShell>
-    );
-  }
-
-  const owner = isCreator;
+  // Must stay above loading/error early returns — deleting the Ride clears
+  // ride.data and would otherwise skip this hook on the next render.
   const scheduledWeekdays = schedule.data?.map((day) => day.weekday) ?? [];
-
   const nextScheduledChallengeLabel = useMemo(() => {
     if (!ride.data) return null;
     if (!ride.data.challenges_enabled) return 'Challenges are off';
@@ -595,6 +576,27 @@ export default function RideSettingsScreen() {
     if (!next) return null;
     return `Next scheduled challenge ${formatChallengeCalendarDate(next)}`;
   }, [challengeHistory.data, ride.data, scheduledWeekdays.length]);
+
+  if (ride.isPending || schedule.isPending) {
+    return (
+      <SettingsShell header={null} refreshControl={refreshControl}>
+        <CenteredBusy message="Loading…" />
+      </SettingsShell>
+    );
+  }
+
+  if (ride.isError || schedule.isError || !ride.data) {
+    return (
+      <SettingsShell header={null} refreshControl={refreshControl}>
+        <ErrorScreen
+          message="The control panel dozed off. Come back in a sec."
+          title="Settings are napping"
+        />
+      </SettingsShell>
+    );
+  }
+
+  const owner = isCreator;
   const memberCount = members.data?.length ?? 0;
   const isLastMember = memberCount === 1;
   const pendingRequests = joinRequests.data ?? [];

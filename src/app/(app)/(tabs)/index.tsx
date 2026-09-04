@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCurrentUser } from '@/auth/auth-context';
+import { ArchivedRideBanner } from '@/components/archived-ride-banner';
 import { ChallengeBanner } from '@/components/challenge-banner';
 import { ErrorScreen } from '@/components/error-screen';
 import { GlassIconButton, GlassSurface } from '@/components/glass';
@@ -99,6 +100,17 @@ export default function HomeScreen() {
     closeMenu();
     router.push({ pathname: '/ride/[rideId]/settings', params: { rideId: selectedRideId } });
   };
+
+  const openInbox = () => {
+    closeMenu();
+    haptics.light();
+    router.push('/inbox');
+  };
+  const openShop = () => {
+    closeMenu();
+    haptics.light();
+    router.push('/shop');
+  };
   const openCreateRide = () => {
     closeMenu();
     router.push('/create-ride');
@@ -177,6 +189,29 @@ export default function HomeScreen() {
             ) : null}
           </View>
 
+          <View>
+            <GlassIconButton
+              accessibilityLabel="Inbox, vendor offers"
+              icon="file-tray-outline"
+              iconSize={18}
+              onPress={openInbox}
+              size={36}
+            />
+            <View
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              style={styles.settingsBadge}
+            />
+          </View>
+
+          <GlassIconButton
+            accessibilityLabel="Shop gifts"
+            icon="gift-outline"
+            iconSize={18}
+            onPress={openShop}
+            size={36}
+          />
+
           <View style={styles.plusWrap}>
             <Pressable
               accessibilityLabel="Create or join a Ride"
@@ -223,7 +258,9 @@ export default function HomeScreen() {
             selectedRideId={selectedRideId}
             userId={user?.id}
           />
-          {activeChallenge.data ? (
+          {selectedRide?.is_archived ? (
+            <ArchivedRideBanner />
+          ) : activeChallenge.data ? (
             <ChallengeBanner
               challenge={activeChallenge.data}
               onPress={() => {

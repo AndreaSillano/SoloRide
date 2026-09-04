@@ -100,7 +100,7 @@ async function attachCompleters(
 export async function fetchChallengeCatalog(): Promise<ChallengeCatalogItem[]> {
   const { data, error } = await supabase
     .from('challenges')
-    .select('id,title,description,is_active,created_at,updated_at')
+    .select('id,title,description,duration,is_active,created_at,updated_at')
     .eq('is_active', true)
     .order('title', { ascending: true });
 

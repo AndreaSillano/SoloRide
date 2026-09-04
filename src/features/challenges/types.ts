@@ -2,6 +2,8 @@ export type ChallengeCatalogItem = {
   id: string;
   title: string;
   description: string;
+  /** Postgres interval string, e.g. "24:00:00" or "1 day". */
+  duration: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;

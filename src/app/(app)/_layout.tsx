@@ -18,6 +18,11 @@ export default function AppLayout() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="publish" options={{ title: 'New photo' }} />
       <Stack.Screen name="your-rides" options={{ title: '' }} />
+      <Stack.Screen name="inbox" options={{ title: 'Inbox' }} />
+      <Stack.Screen name="shop/index" options={{ title: 'Shop' }} />
+      <Stack.Screen name="shop/[productId]" options={{ title: '' }} />
+      <Stack.Screen name="shop/messages/index" options={{ title: 'Messages' }} />
+      <Stack.Screen name="shop/messages/[groupId]" options={{ title: '' }} />
       <Stack.Screen name="privacy-policy" options={{ title: 'Privacy' }} />
       <Stack.Screen
         name="create-ride"

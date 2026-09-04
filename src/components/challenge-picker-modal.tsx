@@ -95,6 +95,7 @@ export function ChallengePickerModal({
                 {query.trim() ? 'No challenges match that search.' : 'No challenges available.'}
               </Text>
             }
+            nestedScrollEnabled
             renderItem={({ item }) => (
               <Pressable
                 accessibilityLabel={`${item.title}. ${item.description}`}

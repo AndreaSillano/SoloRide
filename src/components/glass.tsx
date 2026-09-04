@@ -10,6 +10,7 @@ import {
   Platform,
   Pressable,
   StyleSheet,
+  useWindowDimensions,
   View,
   type StyleProp,
   type ViewStyle,
@@ -111,7 +112,12 @@ export function NativeSwitch({
   disabled?: boolean;
 }) {
   return (
-    <Host colorScheme="light" matchContents seedColor={colors.primary}>
+    <Host
+      colorScheme="light"
+      matchContents
+      seedColor={colors.primary}
+      style={styles.switchHost}
+    >
       <Switch disabled={disabled} onValueChange={onValueChange} value={value} />
     </Host>
   );
@@ -126,6 +132,11 @@ export function AppBottomSheet({
   onClose: () => void;
   children: ReactNode;
 }) {
+  // Expo UI's sheet sizes RN content intrinsically on iOS unless height is
+  // explicit — without this, full-height ScrollViews/FlatLists expand with
+  // their children and never scroll.
+  const { height: windowHeight } = useWindowDimensions();
+
   return (
     <BottomSheet
       containerColor={colors.background}
@@ -135,8 +146,8 @@ export function AppBottomSheet({
       showDragIndicator
       snapPoints={['half', 'full']}
     >
-      <RNHostView style={styles.sheetHost}>
-        <View style={styles.sheetFill}>{children}</View>
+      <RNHostView>
+        <View style={[styles.sheetFill, { height: windowHeight }]}>{children}</View>
       </RNHostView>
     </BottomSheet>
   );
@@ -164,12 +175,12 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.72 },
   disabled: { opacity: 0.45 },
-  sheetHost: {
-    flex: 1,
-    width: '100%',
+  // Keep Expo UI switches from collapsing to 0×0 inside scroll layouts.
+  switchHost: {
+    minHeight: 31,
+    minWidth: 51,
   },
   sheetFill: {
-    flex: 1,
     width: '100%',
   },
 });

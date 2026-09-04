@@ -18,6 +18,8 @@ import { haptics } from '@/lib/haptics';
 import { toast } from '@/lib/toast';
 import { colors, spacing } from '@/theme';
 
+
+import { ArchivedRideBanner } from './archived-ride-banner';
 import { CommentsModal } from './comments-modal';
 import { ErrorScreen } from './error-screen';
 import { ReactionsModal } from './reactions-modal';
@@ -224,12 +226,8 @@ export function RideOverview({
 
   return (
     <>
-      {data.is_archived ? (
-        <View style={styles.archivedBanner}>
-          <Ionicons color={colors.muted} name="archive-outline" size={16} />
-          <Text style={styles.archivedBannerText}>This Ride is archived</Text>
-        </View>
-      ) : null}
+      {/* Home (compact) pins this under the Ride selector, like ChallengeBanner. */}
+      {!compact && data.is_archived ? <ArchivedRideBanner /> : null}
       {/* Home (compact) pins the description under the fixed ride header instead. */}
       {!compact && data.description ? <Body>{data.description}</Body> : null}
 
@@ -418,22 +416,6 @@ export function RideOverview({
 }
 
 const styles = StyleSheet.create({
-  archivedBanner: {
-    alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: 12,
-    flexDirection: 'row',
-    gap: spacing.xs,
-    justifyContent: 'center',
-    marginBottom: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  archivedBannerText: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: '700',
-  },
   nextLabel: { color: colors.primary, fontSize: 18, fontWeight: '700' },
   actions: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
   code: { fontWeight: '800', letterSpacing: 1 },
