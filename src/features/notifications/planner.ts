@@ -1,5 +1,6 @@
 import type { ScheduleKind } from '../../utils/schedule';
 import { matchesSchedule, usesFlexibleWeek } from '../../utils/schedule';
+import { lateReminderCopy, mainReminderCopy } from './copy';
 
 export const DEFAULT_HORIZON_WEEKS = 8;
 export const MAX_SOLO_RIDE_NOTIFICATIONS = 56;
@@ -54,44 +55,6 @@ export type ReconciliationPlan = {
   schedule: SoloRideNotificationPlan[];
   keepIdentifiers: string[];
 };
-
-function pickCopy(variants: readonly { title: string; body: string }[]) {
-  return variants[Math.floor(Math.random() * variants.length)]!;
-}
-
-function mainReminderCopy(rideName: string) {
-  return pickCopy([
-    {
-      title: `${rideName} is live`,
-      body: 'One photo. One moment. Share today’s Ride with your people.',
-    },
-    {
-      title: `Time for ${rideName}`,
-      body: 'Drop today’s photo — one real moment is enough.',
-    },
-    {
-      title: `${rideName} is calling`,
-      body: 'Your Ride is waiting. Capture something and post it.',
-    },
-  ]);
-}
-
-function lateReminderCopy(rideName: string) {
-  return pickCopy([
-    {
-      title: `Still time for ${rideName}`,
-      body: 'The day isn’t over — capture something real and post it.',
-    },
-    {
-      title: `Last call for ${rideName}`,
-      body: 'You’ve still got time. One photo keeps the streak alive.',
-    },
-    {
-      title: `${rideName} isn’t done`,
-      body: 'Don’t leave today empty — post before the day slips away.',
-    },
-  ]);
-}
 
 export type PlanNotificationsInput = {
   userId: string;
