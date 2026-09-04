@@ -48,8 +48,12 @@ Dashboard charts (once data lands):
 | `post_with_audio` | Permanent post includes audio | `ride_count`, `post_count` |
 | `post_with_audio_24` | 24h post includes audio | `ride_count`, `post_count` |
 | `comment_created` | A comment is created | `post_id`, `comment_id` |
+| `challenge_unlocked` | User posts to a ride challenge (permanent media unlock) | `ride_id`, `ride_challenge_id`, `post_id` |
+| `challenge_opened` | Challenge opened from the client (manual open) | `ride_id`, `ride_challenge_id`, `challenge_id`, `source` |
 
-A single publish can fire more than one of these (e.g. 24h video → `post_24h_created` + `video_post`).
+A single publish can fire more than one of these (e.g. 24h video → `post_24h_created` + `video_post`; challenge post → post event(s) + `challenge_unlocked`).
+
+Auto-opened challenges run server-side and are **not** sent as `challenge_opened` from the app.
 
 These are **not** duplicated as Amplitude metrics for group size, survival, or msgs/photos per user — those live in Supabase SQL.
 
@@ -108,6 +112,7 @@ Outputs: `posts_in_window`, `engagement_active_users`, `groups_with_posts`, `avg
 | DAU / WAU / MAU, sessions, stickiness, retention | Amplitude |
 | Ride created / join requested / joined | Amplitude events |
 | Permanent vs 24h post, video, audio (±24h), comment | Amplitude events |
+| Challenge unlocked / opened (manual) | Amplitude events |
 | Avg / median group size | Supabase SQL |
 | Group duration & survival (7/30/90d) | Supabase SQL |
 | Comments & posts per active user / per group | Supabase SQL |

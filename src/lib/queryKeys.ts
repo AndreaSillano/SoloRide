@@ -25,4 +25,6 @@ export const queryKeys = {
   challengePosts: (rideChallengeId: string) => ['challenge-posts', rideChallengeId] as const,
   unlockedRideChallenges: (rideId: string) =>
     ['unlocked-ride-challenges', rideId] as const,
+  cadenceUnlockedThrough: (rideId: string) =>
+    ['cadence-unlocked-through', rideId] as const,
 };

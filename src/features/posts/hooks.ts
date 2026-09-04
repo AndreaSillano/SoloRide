@@ -247,6 +247,11 @@ export function useCreatePost() {
         void queryClient.invalidateQueries({
           queryKey: ['week-posted-status', post.ride_id],
         });
+        if (!post.is_temporary && !post.ride_challenge_id) {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.cadenceUnlockedThrough(post.ride_id),
+          });
+        }
         if (post.ride_challenge_id) {
           void queryClient.invalidateQueries({
             queryKey: queryKeys.activeRideChallenge(post.ride_id),

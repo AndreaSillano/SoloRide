@@ -17,7 +17,7 @@ import {
   useRideFeed,
   useUpsertReaction,
 } from '@/features/posts';
-import { usePostingStatus, useRide, useRideMembers } from '@/features/rides';
+import { usePostingStatus, useRide, useRideMembers, useCadenceUnlockedThrough } from '@/features/rides';
 import { haptics } from '@/lib/haptics';
 import { toast } from '@/lib/toast';
 import { colors, spacing } from '@/theme';
@@ -65,6 +65,7 @@ export function RideOverview({
   const feed = useRideFeed(rideId);
   const posting = usePostingStatus(rideId, user?.id);
   const unlockedChallenges = useUnlockedRideChallengeIds(rideId);
+  const cadenceUnlocked = useCadenceUnlockedThrough(rideId);
   const deletePost = useDeletePost();
   const upsertReaction = useUpsertReaction();
   const removeReaction = useRemoveReaction();
@@ -212,11 +213,12 @@ export function RideOverview({
 
   const data = ride.data;
 
-  const cadenceMediaLocked =
+  const unlockedThrough = cadenceUnlocked.data ?? null;
+  const cadenceLockActive =
     !posting.isPending &&
+    !cadenceUnlocked.isPending &&
     !posting.isArchived &&
-    posting.isRequiredToday &&
-    !posting.hasPosted;
+    posting.isRequiredToday;
 
   const unlockedChallengeIds = unlockedChallenges.data ?? new Set<string>();
   const challengesUnlockPending = unlockedChallenges.isPending;
@@ -347,7 +349,9 @@ export function RideOverview({
             const mediaLocked = isChallengePost
               ? challengesUnlockPending ||
                 !unlockedChallengeIds.has(post.ride_challenge_id!)
-              : cadenceMediaLocked;
+              : cadenceLockActive &&
+                (unlockedThrough == null ||
+                  post.scheduled_date > unlockedThrough);
             const challengeInteractionsLocked =
               isChallengePost &&
               areChallengeInteractionsLocked(post.ride_challenge);

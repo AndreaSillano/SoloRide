@@ -474,3 +474,30 @@ export async function fetchWeekPostStatus(
   const post = data as unknown as { id: string } | null;
   return { hasPosted: post !== null, postId: post?.id ?? null };
 }
+
+/**
+ * Max cadence scheduled_date the current user has durably unlocked for a ride.
+ * Survives post delete; null if they have never unlocked any day.
+ */
+export async function fetchCadenceUnlockedThrough(
+  rideId: string,
+): Promise<string | null> {
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError) throw mapRideError(authError);
+  if (!authData.user) {
+    throw new RideProductError('forbidden', 'Sign in to continue.');
+  }
+
+  const { data, error } = await supabase
+    .from('ride_cadence_unlocks')
+    .select('scheduled_date')
+    .eq('ride_id', rideId)
+    .eq('user_id', authData.user.id)
+    .order('scheduled_date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw mapRideError(error);
+  const row = data as unknown as { scheduled_date: string } | null;
+  return row?.scheduled_date ?? null;
+}

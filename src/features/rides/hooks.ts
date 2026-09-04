@@ -23,6 +23,7 @@ import {
   fetchRideMemberSummaries,
   fetchRideMembers,
   fetchRideSchedule,
+  fetchCadenceUnlockedThrough,
   fetchWeekPostStatus,
   fetchUserRides,
   joinRideByCode,
@@ -146,6 +147,16 @@ export function usePostedTodayStatus(
     queryFn: () =>
       fetchPostedTodayStatus(rideId ?? '', userId ?? '', scheduledDate ?? ''),
     enabled: Boolean(rideId && userId && scheduledDate),
+  });
+}
+
+/** Durable watermark: max cadence day unlocked (survives post delete). */
+export function useCadenceUnlockedThrough(rideId?: string | null) {
+  const { user } = useCurrentUser();
+  return useQuery({
+    queryKey: queryKeys.cadenceUnlockedThrough(rideId ?? 'missing'),
+    queryFn: () => fetchCadenceUnlockedThrough(rideId ?? ''),
+    enabled: Boolean(rideId && user?.id),
   });
 }
 
