@@ -38,7 +38,7 @@ import { colors, radius, shadows, spacing } from '@/theme';
 type MenuState = 'create' | 'rides' | null;
 
 export default function HomeScreen() {
-  const { user } = useCurrentUser();
+  const { user, profile } = useCurrentUser();
   const { selectRideId: pendingSelectRideId, notificationOpenId } = useLocalSearchParams<{
     selectRideId?: string;
     notificationOpenId?: string;
@@ -55,6 +55,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const feedScrollRef = useRef<ScrollView>(null);
   const feedScrollOffsetRef = useRef(0);
+  const isSuperUser = Boolean(profile?.is_super_user);
 
   // Lets other screens (join/create Ride) and notification taps hand off which
   // Ride should become selected once we land back on this tab. notificationOpenId
@@ -189,28 +190,32 @@ export default function HomeScreen() {
             ) : null}
           </View>
 
-          <View>
-            <GlassIconButton
-              accessibilityLabel="Inbox, vendor offers"
-              icon="file-tray-outline"
-              iconSize={18}
-              onPress={openInbox}
-              size={36}
-            />
-            <View
-              accessibilityElementsHidden
-              importantForAccessibility="no-hide-descendants"
-              style={styles.settingsBadge}
-            />
-          </View>
+          {isSuperUser ? (
+            <>
+              <View>
+                <GlassIconButton
+                  accessibilityLabel="Inbox, vendor offers"
+                  icon="file-tray-outline"
+                  iconSize={18}
+                  onPress={openInbox}
+                  size={36}
+                />
+                <View
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                  style={styles.settingsBadge}
+                />
+              </View>
 
-          <GlassIconButton
-            accessibilityLabel="Shop gifts"
-            icon="gift-outline"
-            iconSize={18}
-            onPress={openShop}
-            size={36}
-          />
+              <GlassIconButton
+                accessibilityLabel="Shop gifts"
+                icon="gift-outline"
+                iconSize={18}
+                onPress={openShop}
+                size={36}
+              />
+            </>
+          ) : null}
 
           <View style={styles.plusWrap}>
             <Pressable

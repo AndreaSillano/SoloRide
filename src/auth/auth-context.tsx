@@ -19,6 +19,7 @@ export type Profile = {
   id: string;
   username: string;
   avatar_url: string | null;
+  is_super_user: boolean;
 };
 
 type AuthContextValue = {
@@ -44,7 +45,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const loadProfile = useCallback(async (userId: string) => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, username, avatar_url')
+      .select('id, username, avatar_url, is_super_user')
       .eq('id', userId)
       .maybeSingle<Profile>();
 
@@ -54,10 +55,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
       return;
     }
 
-    setProfile(data);
-    setProfileError(data ? null : 'Your profile is still being prepared.');
-    if (data) {
-      identifyUser(data.id, { username: data.username });
+    const next = data
+      ? { ...data, is_super_user: Boolean(data.is_super_user) }
+      : null;
+    setProfile(next);
+    setProfileError(next ? null : 'Your profile is still being prepared.');
+    if (next) {
+      identifyUser(next.id, { username: next.username });
     }
   }, []);
 

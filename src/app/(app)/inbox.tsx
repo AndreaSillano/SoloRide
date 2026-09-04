@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ProposeToRideSheet, type ProposeOffer } from '@/components/propose-to-ride-sheet';
+import { SuperUserGate } from '@/components/super-user-gate';
 import { Body, ScrollScreen, StatePanel } from '@/components/ui';
 import { haptics } from '@/lib/haptics';
 import { colors, radius, shadows, spacing } from '@/theme';
@@ -74,7 +75,8 @@ export default function InboxScreen() {
   };
 
   return (
-    <>
+    <SuperUserGate>
+      <>
       <ScrollScreen contentStyle={styles.screen}>
         <View style={styles.filters}>
           {(
@@ -127,7 +129,8 @@ export default function InboxScreen() {
         onClose={() => setProposeOffer(null)}
         visible={proposeOffer != null}
       />
-    </>
+      </>
+    </SuperUserGate>
   );
 }
 
