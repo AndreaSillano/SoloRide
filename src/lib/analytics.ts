@@ -138,3 +138,31 @@ export function trackCommentCreated(postId: string, commentId: string): void {
     comment_id: commentId,
   });
 }
+
+/** User posted to a ride challenge — permanently unlocks challenge media. */
+export function trackChallengeUnlocked(input: {
+  rideId: string;
+  rideChallengeId: string;
+  postId?: string;
+}): void {
+  trackEvent('challenge_unlocked', {
+    ride_id: input.rideId,
+    ride_challenge_id: input.rideChallengeId,
+    ...(input.postId ? { post_id: input.postId } : {}),
+  });
+}
+
+/** Manual challenge open from the client (auto opens happen server-side). */
+export function trackChallengeOpened(input: {
+  rideId: string;
+  rideChallengeId: string;
+  challengeId: string;
+  source: 'auto' | 'manual';
+}): void {
+  trackEvent('challenge_opened', {
+    ride_id: input.rideId,
+    ride_challenge_id: input.rideChallengeId,
+    challenge_id: input.challengeId,
+    source: input.source,
+  });
+}

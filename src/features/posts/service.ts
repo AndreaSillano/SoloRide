@@ -1,6 +1,10 @@
 import * as Crypto from 'expo-crypto';
 
-import { trackCommentCreated, trackPostCreated } from '@/lib/analytics';
+import {
+  trackChallengeUnlocked,
+  trackCommentCreated,
+  trackPostCreated,
+} from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 
 import {
@@ -553,6 +557,14 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord[]> 
       hasVideo: Boolean(videoBytes),
       isTemporary,
     });
+    for (const post of posts) {
+      if (!post.ride_challenge_id) continue;
+      trackChallengeUnlocked({
+        rideId: post.ride_id,
+        rideChallengeId: post.ride_challenge_id,
+        postId: post.id,
+      });
+    }
     return posts;
   } catch (error) {
     if (uploadedPaths.length) {

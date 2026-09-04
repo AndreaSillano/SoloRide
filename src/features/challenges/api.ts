@@ -1,3 +1,4 @@
+import { trackChallengeOpened } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 
 import { CHALLENGE_INTERACTION_GRACE_MS, isChallengeVisible } from './format';
@@ -215,8 +216,9 @@ export async function openRideChallenge(
 
   // RPC returns the table row without embed — re-fetch for UI.
   const full = await fetchRideChallenge(opened.id);
-  if (!full) {
-    return {
+  const result =
+    full ??
+    ({
       ...opened,
       challenge: null,
       completers: [],
@@ -225,7 +227,14 @@ export async function openRideChallenge(
       winner_post_id: opened.winner_post_id ?? null,
       winner_declared_at: opened.winner_declared_at ?? null,
       opened_by_user_id: opened.opened_by_user_id ?? userId,
-    };
-  }
-  return full;
+    } satisfies RideChallenge);
+
+  trackChallengeOpened({
+    rideId: result.ride_id,
+    rideChallengeId: result.id,
+    challengeId: result.challenge_id,
+    source: result.source,
+  });
+
+  return result;
 }
