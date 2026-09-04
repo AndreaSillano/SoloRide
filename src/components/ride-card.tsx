@@ -32,6 +32,14 @@ function statusForRide(
   return { name: 'camera', color: colors.accent, label: 'Photo due today' };
 }
 
+/** Shared posting/status copy for ride chips and the Home selector. */
+export function rideStatusLabel(
+  ride: UserRide,
+  posting: ReturnType<typeof usePostingStatus>,
+): string {
+  return statusForRide(ride, posting).label;
+}
+
 export function RideCard({
   ride,
   userId,

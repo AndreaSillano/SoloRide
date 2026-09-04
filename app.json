@@ -8,12 +8,12 @@
     "icon": "./assets/Rhodeo-icon.png",
     "userInterfaceStyle": "light",
     "backgroundColor": "#fff9f3",
-    "primaryColor": "#f77343",
+    "primaryColor": "#FF5C1A",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ef8a4c"
+      "backgroundColor": "#FF5C1A"
     },
 
     "ios": {
@@ -33,10 +33,10 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ef8a4c"
+        "backgroundColor": "#FF5C1A"
       },
       "edgeToEdgeEnabled": true,
-      "versionCode": 6,
+      "versionCode": 7,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.ACCESS_COARSE_LOCATION",
@@ -58,7 +58,7 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 100,
           "resizeMode": "contain",
-          "backgroundColor": "#ef8a4c"
+          "backgroundColor": "#FF5C1A"
         }
       ],
       "expo-router",

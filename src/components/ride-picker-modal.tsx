@@ -62,7 +62,7 @@ function RideOption({
     ? ride.isRequiredToday
       ? 'Photo due today'
       : 'Optional today'
-    : '24h photos only';
+    : 'Already posted today';
 
   return (
     <Pressable

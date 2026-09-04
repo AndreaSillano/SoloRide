@@ -38,7 +38,7 @@ import {
   subscribeCaptureRetake,
   useCanPostVideoToday,
 } from '@/features/posts';
-import { useCameraRides } from '@/features/rides';
+import { useCameraRides, usePersistedSelectedRideId } from '@/features/rides';
 import { haptics } from '@/lib/haptics';
 import { colors, radius, spacing } from '@/theme';
 
@@ -61,7 +61,7 @@ const MIN_VIDEO_RECORD_MS = 500;
 
 export default function CameraScreen() {
   const {
-    rideId: preferredRideId,
+    rideId: preferredRideIdParam,
     retake,
   } = useLocalSearchParams<{
     rideId?: string;
@@ -70,6 +70,9 @@ export default function CameraScreen() {
   const { user } = useCurrentUser();
   const insets = useSafeAreaInsets();
   const cameraRides = useCameraRides(user?.id);
+  const { selectedRideId: homeRideId, refresh: refreshHomeRide } =
+    usePersistedSelectedRideId(user?.id);
+  const preferredRideId = preferredRideIdParam ?? homeRideId ?? undefined;
   const videoQuota = useCanPostVideoToday();
   const [permission, requestPermission, getPermission] = useCameraPermissions();
   const [micPermission, requestMicPermission] = useMicrophonePermissions();
@@ -98,6 +101,7 @@ export default function CameraScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      refreshHomeRide();
       setFocused(true);
       // Do not clear cameraReady here — toggling `active` does not remount
       // CameraView, so onCameraReady often never fires again and the boot
@@ -112,7 +116,7 @@ export default function CameraScreen() {
         setFocused(false);
         setTorchOn(false);
       };
-    }, [getPermission]),
+    }, [getPermission, refreshHomeRide]),
   );
 
   // If onCameraReady never arrives (common when only `active` flips), unlock

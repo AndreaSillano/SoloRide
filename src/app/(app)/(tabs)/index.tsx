@@ -14,17 +14,18 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCurrentUser } from '@/auth/auth-context';
+import { ChallengeBanner } from '@/components/challenge-banner';
 import { GlassIconButton, GlassSurface } from '@/components/glass';
-import { RideCard } from '@/components/ride-card';
 import { RideOverview } from '@/components/ride-overview';
+import { RideSelector } from '@/components/ride-selector';
 import { FixedHeaderScreen, Body, Button, Heading, RideFeedSkeleton } from '@/components/ui';
+import { useActiveRideChallenge } from '@/features/challenges';
 import { useCommentDeepLink, clearCommentDeepLink } from '@/features/notifications/deep-link';
 import { requestNotificationRefresh } from '@/features/notifications';
 import { POST_CAPTURE_TAB_BAR_CLEARANCE, useRideFeed } from '@/features/posts';
 import {
   groupUserRides,
   useRideJoinRequests,
-  useRidesStripExpanded,
   useSelectedRide,
   useUserRides,
 } from '@/features/rides';
@@ -32,7 +33,7 @@ import { queryKeys } from '@/lib/queryKeys';
 import { haptics } from '@/lib/haptics';
 import { colors, radius, shadows, spacing } from '@/theme';
 
-type MenuState = 'create' | null;
+type MenuState = 'create' | 'rides' | null;
 
 export default function HomeScreen() {
   const { user } = useCurrentUser();
@@ -44,11 +45,11 @@ export default function HomeScreen() {
   const rides = useUserRides(user?.id);
   const { selectedRideId, selectRide, isReady } = useSelectedRide(rides.data, user?.id);
   const feed = useRideFeed(selectedRideId);
+  const activeChallenge = useActiveRideChallenge(selectedRideId);
   const commentDeepLink = useCommentDeepLink();
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [menu, setMenu] = useState<MenuState>(null);
-  const [ridesExpanded, setRidesExpanded] = useRidesStripExpanded(user?.id);
   const [refreshing, setRefreshing] = useState(false);
   const feedScrollRef = useRef<ScrollView>(null);
   const feedScrollOffsetRef = useRef(0);
@@ -90,6 +91,8 @@ export default function HomeScreen() {
     selectRide(rideId);
     closeMenu();
   };
+
+  const selectableRides = [...groups.active, ...groups.upcoming];
   const openSettings = () => {
     if (!selectedRideId) return;
     closeMenu();
@@ -134,6 +137,9 @@ export default function HomeScreen() {
           queryClient.invalidateQueries({ queryKey: ['ride-schedule', selectedRideId] }),
           queryClient.invalidateQueries({ queryKey: ['posted-status', selectedRideId] }),
           queryClient.invalidateQueries({ queryKey: ['week-posted-status', selectedRideId] }),
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.activeRideChallenge(selectedRideId),
+          }),
         );
       }
       await Promise.all(tasks);
@@ -206,62 +212,34 @@ export default function HomeScreen() {
       </View>
 
       {hasRides ? (
-        <>
-          <View style={styles.ridesHeader}>
-            <Pressable
-              accessibilityLabel={
-                ridesExpanded
-                  ? selectedRide
-                    ? `Hide rides, viewing ${selectedRide.name}`
-                    : 'Hide rides'
-                  : selectedRide
-                    ? `Show rides, viewing ${selectedRide.name}`
-                    : 'Show rides'
-              }
-              accessibilityRole="button"
-              onPress={() => setRidesExpanded((current) => !current)}
-              style={({ pressed }) => [styles.ridesToggle, pressed && styles.pressed]}
-            >
-              <Text numberOfLines={1} style={styles.ridesCurrent}>
-                {selectedRide?.name ?? 'Your rides'}
-              </Text>
-              <Ionicons
-                color={colors.muted}
-                name={ridesExpanded ? 'chevron-up' : 'chevron-down'}
-                size={16}
-              />
-            </Pressable>
-          </View>
-
-          {ridesExpanded ? (
-            <ScrollView
-              contentContainerStyle={styles.ridesStripContent}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-            >
-              {groups.active.map((ride) => (
-                <RideCard
-                  key={ride.id}
-                  onPress={() => handleSelectRide(ride.id)}
-                  ride={ride}
-                  selected={ride.id === selectedRideId}
-                  userId={user?.id}
-                  variant="tile"
-                />
-              ))}
-              {groups.upcoming.map((ride) => (
-                <RideCard
-                  key={ride.id}
-                  onPress={() => handleSelectRide(ride.id)}
-                  ride={ride}
-                  selected={ride.id === selectedRideId}
-                  userId={user?.id}
-                  variant="tile"
-                />
-              ))}
-            </ScrollView>
+        <View style={styles.ridesSelector}>
+          <RideSelector
+            onOpenChange={(open) => setMenu(open ? 'rides' : null)}
+            onSelect={handleSelectRide}
+            open={menu === 'rides'}
+            rides={selectableRides}
+            selectedRide={selectedRide}
+            selectedRideId={selectedRideId}
+            userId={user?.id}
+          />
+          {activeChallenge.data ? (
+            <ChallengeBanner
+              challenge={activeChallenge.data}
+              onPress={() => {
+                const challenge = activeChallenge.data;
+                if (!selectedRideId || !challenge) return;
+                haptics.light();
+                router.push({
+                  pathname: '/ride/[rideId]/challenge/[rideChallengeId]',
+                  params: {
+                    rideId: selectedRideId,
+                    rideChallengeId: challenge.id,
+                  },
+                });
+              }}
+            />
           ) : null}
-        </>
+        </View>
       ) : null}
     </View>
   );
@@ -422,31 +400,11 @@ const styles = StyleSheet.create({
   },
   createRowText: { color: colors.text, fontSize: 15, fontWeight: '600' },
   createDivider: { backgroundColor: colors.border, height: StyleSheet.hairlineWidth },
-  ridesHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
+  ridesSelector: {
+    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xxs,
-  },
-  ridesToggle: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.xs,
-    maxWidth: '100%',
-    minWidth: 0,
-  },
-  ridesCurrent: {
-    color: colors.text,
-    flexShrink: 1,
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: -0.2,
-  },
-  ridesStripContent: {
-    gap: spacing.sm,
-    paddingBottom: spacing.xs,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xs,
+    zIndex: 3,
   },
   pressed: { opacity: 0.7 },
 });

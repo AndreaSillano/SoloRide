@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -19,6 +19,8 @@ import {
 import { SafeAreaView, useSafeAreaInsets, type Edge } from 'react-native-safe-area-context';
 
 import { useCurrentUser } from '@/auth/auth-context';
+import { ChallengeListRow } from '@/components/challenge-list-row';
+import { ChallengePickerModal } from '@/components/challenge-picker-modal';
 import { RideForm } from '@/components/ride-form';
 import { GlassSurface } from '@/components/glass';
 import { RideHistoryCalendar } from '@/components/ride-history-calendar';
@@ -31,6 +33,15 @@ import {
   StatePanel,
 } from '@/components/ui';
 import { SegmentedControl } from '@expo/ui/community/segmented-control';
+import {
+  estimateNextAutoChallengeDate,
+  formatChallengeCalendarDate,
+  useChallengeCatalog,
+  useOpenRideChallenge,
+  useRideChallengeHistory,
+  type ChallengeCatalogItem,
+  type RideChallenge,
+} from '@/features/challenges';
 import {
   requestNotificationRefresh,
   useSoloRideNotifications,
@@ -76,18 +87,27 @@ const EMPTY_FORM: RideFormValues = {
   monthDay: 1,
   weekdayOrdinal: 1,
   strictSchedule: true,
+  challengesEnabled: true,
 };
 
-type SettingsTab = 'details' | 'people' | 'history';
+type SettingsTab = 'details' | 'people' | 'history' | 'challenges';
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'details', label: 'Details' },
   { id: 'people', label: 'People' },
   { id: 'history', label: 'History' },
+  { id: 'challenges', label: 'Challenges' },
 ];
 
 function parseSettingsTab(value: string | undefined): SettingsTab | null {
-  if (value === 'people' || value === 'details' || value === 'history') return value;
+  if (
+    value === 'people' ||
+    value === 'details' ||
+    value === 'history' ||
+    value === 'challenges'
+  ) {
+    return value;
+  }
   if (value === 'manage') return 'history';
   return null;
 }
@@ -105,6 +125,7 @@ function formFromRide(ride: Ride, schedule: RideScheduleDay[]): RideFormValues {
     monthDay: ride.month_day ?? 1,
     weekdayOrdinal: ride.weekday_ordinal ?? 1,
     strictSchedule: ride.strict_schedule,
+    challengesEnabled: ride.challenges_enabled ?? true,
   };
 }
 
@@ -208,6 +229,9 @@ export default function RideSettingsScreen() {
   const rejectRequest = useRejectRideJoinRequest(user?.id);
   const removeMember = useRemoveRideMember(user?.id);
   const notifications = useSoloRideNotifications(user?.id ?? null);
+  const challengeHistory = useRideChallengeHistory(rideId);
+  const challengeCatalog = useChallengeCatalog(Boolean(isCreator));
+  const openChallenge = useOpenRideChallenge();
   const initialTab: SettingsTab = parseSettingsTab(tabParam) ?? 'details';
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [editing, setEditing] = useState(false);
@@ -218,6 +242,7 @@ export default function RideSettingsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [actingRequestId, setActingRequestId] = useState<string | null>(null);
   const [removingUserId, setRemovingUserId] = useState<string | null>(null);
+  const [challengePickerOpen, setChallengePickerOpen] = useState(false);
   const notifiedRideId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -251,7 +276,8 @@ export default function RideSettingsScreen() {
         ride.refetch(),
         schedule.refetch(),
         members.refetch(),
-        ...(isCreator ? [joinRequests.refetch()] : []),
+        challengeHistory.refetch(),
+        ...(isCreator ? [joinRequests.refetch(), challengeCatalog.refetch()] : []),
         queryClient.invalidateQueries({ queryKey: ['rides-due-today'] }),
         ...(user?.id
           ? [queryClient.invalidateQueries({ queryKey: queryKeys.rides(user.id) })]
@@ -539,6 +565,36 @@ export default function RideSettingsScreen() {
 
   const owner = isCreator;
   const scheduledWeekdays = schedule.data?.map((day) => day.weekday) ?? [];
+
+  const nextScheduledChallengeLabel = useMemo(() => {
+    if (!ride.data) return null;
+    if (!ride.data.challenges_enabled) return 'Challenges are off';
+    if (ride.data.is_archived) return null;
+
+    const now = new Date();
+    const month = now.getMonth();
+    const year = now.getFullYear();
+    const history = challengeHistory.data ?? [];
+    const startsThisMonth = history
+      .map((item) => item.starts_at)
+      .filter((startsAt) => {
+        const date = new Date(startsAt);
+        return date.getMonth() === month && date.getFullYear() === year;
+      });
+    const active = history.find((item) => new Date(item.ends_at).getTime() > now.getTime());
+    const next = estimateNextAutoChallengeDate({
+      challengesEnabled: ride.data.challenges_enabled,
+      isArchived: ride.data.is_archived,
+      rideEndDate: ride.data.end_date,
+      scheduleKind: ride.data.schedule_kind ?? 'weekly',
+      weekdayCount: scheduledWeekdays.length,
+      startsThisMonth,
+      activeEndsAt: active?.ends_at ?? null,
+      now,
+    });
+    if (!next) return null;
+    return `Next scheduled challenge ${formatChallengeCalendarDate(next)}`;
+  }, [challengeHistory.data, ride.data, scheduledWeekdays.length]);
   const memberCount = members.data?.length ?? 0;
   const isLastMember = memberCount === 1;
   const pendingRequests = joinRequests.data ?? [];
@@ -585,10 +641,11 @@ export default function RideSettingsScreen() {
   );
 
   return (
-    <SettingsShell header={tabBar} refreshControl={refreshControl}>
-      <ErrorBanner message={error} />
+    <>
+      <SettingsShell header={tabBar} refreshControl={refreshControl}>
+        <ErrorBanner message={error} />
 
-      {tab === 'details' ? (
+        {tab === 'details' ? (
         <View style={styles.tabBody}>
           <SectionLabel>Invite code</SectionLabel>
           <GlassSurface style={styles.inviteBlock}>
@@ -596,19 +653,16 @@ export default function RideSettingsScreen() {
             <Body muted>
               Share this code so someone can request to join. You approve them in People.
             </Body>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() =>
-                void Share.share({
-                  message: `Join my Rhodeo “${ride.data.name}” with code ${ride.data.code}`,
-                })
-              }
-              style={({ pressed }) => [styles.shareButton, pressed && styles.shareButtonPressed]}
-            >
-              <Ionicons color={colors.white} name="share-outline" size={20} />
-              <Text style={styles.shareButtonText}>Share invite code</Text>
-            </Pressable>
           </GlassSurface>
+          <Button
+            onPress={() =>
+              void Share.share({
+                message: `Join my Rhodeo “${ride.data.name}” with code ${ride.data.code}`,
+              })
+            }
+          >
+            Share invite code
+          </Button>
 
           <View style={styles.dottedDivider} />
 
@@ -692,13 +746,17 @@ export default function RideSettingsScreen() {
                 ) : null}
                 <MetaRow
                   label="Days"
-                  last
                   value={formatScheduleDays({
                     scheduleKind: ride.data.schedule_kind ?? 'weekly',
                     weekdays: scheduledWeekdays,
                     monthDay: ride.data.month_day,
                     weekdayOrdinal: ride.data.weekday_ordinal,
                   })}
+                />
+                <MetaRow
+                  label="Challenges"
+                  last
+                  value={ride.data.challenges_enabled ? 'On' : 'Off'}
                 />
               </GlassSurface>
               {!owner ? (
@@ -892,7 +950,97 @@ export default function RideSettingsScreen() {
           <RideHistoryCalendar rideId={ride.data.id} />
         </View>
       ) : null}
-    </SettingsShell>
+
+      {tab === 'challenges' ? (
+        <View style={styles.tabBody}>
+          <SectionLabel>Challenges</SectionLabel>
+          {owner ? (
+            <GlassSurface style={styles.challengeOwnerBlock}>
+              <Body muted>
+                {ride.data.challenges_enabled
+                  ? 'Debug: open a challenge manually for this Ride. Members get a push when it starts.'
+                  : 'Challenges are turned off for this Ride. Enable them in Details to open one.'}
+              </Body>
+              <Button
+                disabled={
+                  openChallenge.isPending ||
+                  Boolean(ride.data.is_archived) ||
+                  !ride.data.challenges_enabled
+                }
+                onPress={() => {
+                  haptics.selection();
+                  setChallengePickerOpen(true);
+                }}
+              >
+                Open challenge
+              </Button>
+            </GlassSurface>
+          ) : null}
+
+          {challengeHistory.isPending ? (
+            <Body muted>Loading challenges…</Body>
+          ) : challengeHistory.isError ? (
+            <StatePanel
+              actionLabel="Retry"
+              message="Challenge history could not load."
+              onAction={() => void challengeHistory.refetch()}
+            />
+          ) : (challengeHistory.data ?? []).length === 0 ? (
+            <Body muted>No challenges have been opened on this Ride yet.</Body>
+          ) : (
+            <GlassSurface style={styles.challengeList}>
+              {(challengeHistory.data ?? []).map((item: RideChallenge, index, list) => (
+                <ChallengeListRow
+                  key={item.id}
+                  challenge={item}
+                  last={index === list.length - 1}
+                  onPress={() => {
+                    haptics.light();
+                    router.push({
+                      pathname: '/ride/[rideId]/challenge/[rideChallengeId]',
+                      params: {
+                        rideId: ride.data.id,
+                        rideChallengeId: item.id,
+                      },
+                    });
+                  }}
+                />
+              ))}
+            </GlassSurface>
+          )}
+
+          {nextScheduledChallengeLabel ? (
+            <Body muted>{nextScheduledChallengeLabel}</Body>
+          ) : null}
+        </View>
+      ) : null}
+      </SettingsShell>
+
+      <ChallengePickerModal
+        challenges={challengeCatalog.data ?? []}
+        loading={challengeCatalog.isPending}
+        onClose={() => setChallengePickerOpen(false)}
+        onSelect={(item: ChallengeCatalogItem) => {
+          void openChallenge
+            .mutateAsync({ rideId: ride.data.id, challengeId: item.id })
+            .then(() => {
+              haptics.success();
+              setChallengePickerOpen(false);
+              setError(null);
+            })
+            .catch((cause: unknown) => {
+              haptics.error();
+              setError(
+                cause instanceof Error
+                  ? cause.message
+                  : 'The challenge could not be opened.',
+              );
+            });
+        }}
+        selecting={openChallenge.isPending}
+        visible={challengePickerOpen}
+      />
+    </>
   );
 }
 
@@ -925,8 +1073,8 @@ const styles = StyleSheet.create({
     elevation: 4,
     height: 8,
     position: 'absolute',
-    // People is the middle segment of three.
-    right: '36%',
+    // People is the second segment of four.
+    left: '34%',
     shadowColor: colors.highlight,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
@@ -969,24 +1117,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 3,
   },
-  shareButton: {
-    alignItems: 'center',
-    backgroundColor: colors.accent,
-    borderRadius: radius.md,
-    flexDirection: 'row',
-    gap: spacing.xs,
-    justifyContent: 'center',
-    minHeight: 54,
-    paddingHorizontal: spacing.lg,
-  },
   shareButtonPressed: {
-    backgroundColor: colors.accentPressed,
-  },
-  shareButtonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 0.1,
+    opacity: 0.75,
   },
   editActions: {
     gap: spacing.sm,
@@ -1062,6 +1194,17 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   dangerActions: { gap: spacing.sm },
+  challengeOwnerBlock: {
+    borderRadius: radius.lg,
+    gap: spacing.sm,
+    overflow: 'hidden',
+    padding: spacing.md,
+  },
+  challengeList: {
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    paddingHorizontal: spacing.md,
+  },
   dottedDivider: {
     borderColor: colors.border,
     borderStyle: 'dotted',

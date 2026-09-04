@@ -29,12 +29,14 @@ truncate table
   public.post_reactions,
   public.comments,
   public.posts,
+  public.ride_challenges,
   public.ride_schedule_days,
   public.ride_members,
   public.rides,
   public.push_tokens,
   public.profiles
 restart identity cascade;
+-- challenges catalog is seed data; keep rows unless you intentionally wipe it.
 
 -- Auth last. rides.creator_id uses ON DELETE RESTRICT, so rides must
 -- already be gone (handled by truncate above).

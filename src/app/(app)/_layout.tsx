@@ -33,6 +33,10 @@ export default function AppLayout() {
         name="ride/[rideId]/settings"
         options={{ animationTypeForReplace: 'pop', title: 'Ride settings' }}
       />
+      <Stack.Screen
+        name="ride/[rideId]/challenge/[rideChallengeId]"
+        options={{ title: 'Challenge' }}
+      />
     </Stack>
   );
 }

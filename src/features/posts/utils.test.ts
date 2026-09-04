@@ -397,6 +397,41 @@ describe('post data utilities', () => {
     expect(getOwnReactionScore(post, '00000000-0000-4000-8000-000000000000')).toBeNull();
   });
 
+  it('ranks challenge entries by reaction score sum then positive count', async () => {
+    const { compareChallengeEntries, getPositiveReactionCount, getReactionScoreSum } =
+      await import('./utils');
+    const manySmall = {
+      id: 'a',
+      created_at: '2026-09-01T12:00:00Z',
+      post_reactions: [
+        { user_id: '1', score: 1 },
+        { user_id: '2', score: 1 },
+        { user_id: '3', score: 1 },
+      ],
+    };
+    const fewStrong = {
+      id: 'b',
+      created_at: '2026-09-01T11:00:00Z',
+      post_reactions: [
+        { user_id: '1', score: 3 },
+        { user_id: '2', score: 2 },
+      ],
+    };
+    const disliked = {
+      id: 'c',
+      created_at: '2026-09-01T13:00:00Z',
+      post_reactions: [{ user_id: '1', score: -3 }],
+    };
+
+    expect(getPositiveReactionCount(manySmall)).toBe(3);
+    expect(getReactionScoreSum(fewStrong)).toBe(5);
+    expect([manySmall, fewStrong, disliked].sort(compareChallengeEntries).map((p) => p.id)).toEqual([
+      'b',
+      'a',
+      'c',
+    ]);
+  });
+
   it('parses embedded post reactions on feed rows', async () => {
     const { postSchema } = await import('./schemas');
     const parsed = postSchema.parse({

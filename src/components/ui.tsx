@@ -31,6 +31,7 @@ import {
 } from 'react-native';import { SafeAreaView, useSafeAreaInsets, type Edge } from 'react-native-safe-area-context';
 
 import { WEEKDAYS, WEEKDAY_SHORT_LABELS } from '@/features/rides';
+import { formatChallengeRemaining, isChallengeEnded } from '@/features/challenges';
 import {
   getCommentCount,
   formatProfileName,
@@ -42,6 +43,7 @@ import {
   type PostRecord,
 } from '@/features/posts';
 import { haptics } from '@/lib/haptics';
+import { ChallengeHatIcon } from '@/components/challenge-hat-icon';
 import { colors, radius, shadows, spacing } from '@/theme';
 
 import { GlassIconButton, GlassSurface } from './glass';
@@ -631,10 +633,13 @@ export function PostImage({
   post,
   aspectRatio = POST_IMAGE_ASPECT_RATIO,
   style,
+  locked = false,
 }: {
   post: PostRecord;
   aspectRatio?: number;
   style?: StyleProp<ImageStyle>;
+  /** Spoiler blur when the viewer still owes a required photo today. */
+  locked?: boolean;
 }) {
   const image = useSignedPostImage(post.image_path);
   const author = formatProfileName(post.profile);
@@ -655,6 +660,34 @@ export function PostImage({
   }
 
   const source = { uri: image.data.url, cacheKey: post.image_path };
+
+  if (locked) {
+    return (
+      <View style={[styles.photo, { aspectRatio }, styles.photoFrame, style]}>
+        {/* Extra scale + stacked blur so the subject is fully unreadable. */}
+        <ExpoImage
+          accessibilityElementsHidden
+          blurRadius={80}
+          cachePolicy="memory-disk"
+          contentFit="cover"
+          importantForAccessibility="no"
+          recyclingKey={`${post.image_path}-locked-base`}
+          source={source}
+          style={styles.photoLockedFill}
+        />
+        <ExpoImage
+          accessibilityLabel={`Blurred photo by ${author}`}
+          blurRadius={80}
+          cachePolicy="memory-disk"
+          contentFit="cover"
+          recyclingKey={`${post.image_path}-locked`}
+          source={source}
+          style={styles.photoLockedFill}
+        />
+        <View pointerEvents="none" style={styles.photoLockedDim} />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.photo, { aspectRatio }, styles.photoFrame, style]}>
@@ -739,6 +772,9 @@ export function FeedPost({
   isOwnPost = false,
   onDelete,
   deleting = false,
+  mediaLocked = false,
+  onPressLockedMedia,
+  onPressChallenge,
 }: {
   post: PostRecord;
   onPress: () => void;
@@ -755,7 +791,24 @@ export function FeedPost({
   isOwnPost?: boolean;
   onDelete?: () => void;
   deleting?: boolean;
+  /** Blur photos and block reactions/video until the viewer posts today's required photo. */
+  mediaLocked?: boolean;
+  /** Tap blurred photo → typically Camera tab. */
+  onPressLockedMedia?: () => void;
+  /** Opens the challenge detail screen from the challenge chrome. */
+  onPressChallenge?: () => void;
 }) {
+  const isChallenge = Boolean(post.ride_challenge_id);
+  const challengeTitle =
+    post.ride_challenge?.challenge?.title?.trim() || 'Challenge';
+  const challengeEndsAt = post.ride_challenge?.ends_at ?? null;
+  const challengeEnded =
+    Boolean(post.ride_challenge_id) && isChallengeEnded(challengeEndsAt);
+  /** Block new reactions (cadence lock or finished challenge). Photos stay visible when only challengeEnded. */
+  const reactionsLocked = mediaLocked || challengeEnded;
+  const challengeTimeLeft = challengeEndsAt
+    ? formatChallengeRemaining(challengeEndsAt)
+    : null;
   const author = formatProfileName(post.profile);
   const commentCount = getCommentCount(post);
   const reactionCount = getReactionCount(post);
@@ -768,12 +821,13 @@ export function FeedPost({
   const holdStartScoreRef = useRef(0);
   const holdScoreRef = useRef(0);
   const ownScoreRef = useRef(ownReactionScore);
-  const openPickerRef = useRef(onDoubleTapImage);
-  const selectRef = useRef(onSelectReaction);
+  const openPickerRef = useRef(reactionsLocked ? undefined : onDoubleTapImage);
+  const selectRef = useRef(reactionsLocked ? undefined : onSelectReaction);
   const closePickerRef = useRef(onCloseReactionPicker);
   const pickerVisibleRef = useRef(reactionPickerVisible);
   const [holdPreviewScore, setHoldPreviewScore] = useState<number | null>(null);
   const [burstScore, setBurstScore] = useState<number | null>(null);
+  const [bottomActionsHeight, setBottomActionsHeight] = useState(0);
   /** Second tap must land within this window to count as a double-tap. */
   const DOUBLE_TAP_MS = 350;
   /** Slightly longer than the double-tap window so a late second tap still wins. */
@@ -782,8 +836,8 @@ export function FeedPost({
   const MOVE_CANCEL_PX = 12;
 
   ownScoreRef.current = ownReactionScore;
-  openPickerRef.current = onDoubleTapImage;
-  selectRef.current = onSelectReaction;
+  openPickerRef.current = reactionsLocked ? undefined : onDoubleTapImage;
+  selectRef.current = reactionsLocked ? undefined : onSelectReaction;
   closePickerRef.current = onCloseReactionPicker;
   pickerVisibleRef.current = reactionPickerVisible;
 
@@ -915,7 +969,7 @@ export function FeedPost({
   );
 
   const reactionPicker =
-    onSelectReaction && onCloseReactionPicker ? (
+    !reactionsLocked && onSelectReaction && onCloseReactionPicker ? (
       <ScalePicker
         interactive={holdPreviewScore == null}
         onClose={onCloseReactionPicker}
@@ -927,148 +981,250 @@ export function FeedPost({
 
   // Render outside overflow:hidden photo wraps so the ±3 pop isn't clipped.
   const reactionBurst =
-    burstScore != null && burstScore !== 0 ? (
+    !reactionsLocked && burstScore != null && burstScore !== 0 ? (
       <ReactionBurst score={burstScore} onFinished={() => setBurstScore(null)} />
     ) : null;
 
-  const commentLabel =
+  const messageLabel =
     commentCount === 0
-      ? 'Add a comment'
+      ? 'Open comments'
       : commentCount === 1
         ? 'View 1 comment'
-        : `View all ${commentCount} comments`;
+        : `View ${commentCount} comments`;
 
   const reactionStickerEmoji =
     reactionCount > 0 ? reactionEmojiForScore(reactionSum <= -1 ? -1 : 1) : null;
 
-  return (
-    <View style={styles.feedItem}>
-      <View style={styles.feedPhotoBlock}>
-        <View style={styles.feedImageWrap} {...photoPanResponder.panHandlers}>
-          <View
-            accessibilityHint="Double-tap or long-press to react"
-            accessibilityRole="imagebutton"
-          >
-            <PostImage
-              aspectRatio={POST_IMAGE_ASPECT_RATIO}
-              post={post}
-              style={styles.feedImage}
-            />
-          </View>
-          {post.video_path ? (
-            <FeedVideoPlay durationMs={post.video_duration_ms} videoPath={post.video_path} />
-          ) : null}
+  // Estimate until onLayout measures — keeps audio clear of like/message on first paint.
+  const FEED_SIDE_BUBBLE = 44;
+  const FEED_SIDE_COUNT = 14;
+  const showReactionAction = Boolean(onPressReactions);
+  const estimatedActionsHeight =
+    (showReactionAction ? FEED_SIDE_BUBBLE + (reactionCount > 0 ? FEED_SIDE_COUNT : 0) : 0) +
+    (FEED_SIDE_BUBBLE + (commentCount > 0 ? FEED_SIDE_COUNT : 0)) +
+    (showReactionAction ? spacing.sm : 0);
+  const actionsHeight = bottomActionsHeight > 0 ? bottomActionsHeight : estimatedActionsHeight;
+  const audioBottom =
+    spacing.sm + actionsHeight + (actionsHeight > 0 ? spacing.sm : 0);
 
-          <View pointerEvents="box-none" style={styles.feedOverlayTop}>
-            <View pointerEvents="box-none" style={styles.feedOverlayTopRow}>
-              <Avatar profile={post.profile} size={34} />
-              <View style={styles.feedHeaderText}>
-                <Text style={styles.feedOverlayAuthor}>{author}</Text>
-                <Text style={styles.feedOverlayMeta}>
-                  {formatFeedTimestamp(post.created_at)}
-                  {post.is_temporary && remaining ? ` · ${remaining}` : ''}
-                </Text>
-              </View>
+  const imageInner = (
+    <>
+      <View
+        accessibilityHint={
+          mediaLocked
+            ? 'Opens the camera to post today\'s photo'
+            : reactionsLocked
+              ? undefined
+              : 'Double-tap or long-press to react'
+        }
+        accessibilityLabel={mediaLocked ? 'Blurred photo. Post to unlock' : undefined}
+        accessibilityRole="imagebutton"
+      >
+        <PostImage
+          aspectRatio={POST_IMAGE_ASPECT_RATIO}
+          locked={mediaLocked}
+          post={post}
+          style={styles.feedImage}
+        />
+      </View>
+      {mediaLocked ? (
+        <View pointerEvents="none" style={styles.feedLockedHint}>
+          <View style={styles.feedLockedHintClip}>
+            <GlassSurface dark style={styles.feedLockedHintPill}>
+              <Ionicons color={colors.white} name="camera-outline" size={20} />
+            </GlassSurface>
+          </View>
+        </View>
+      ) : null}
+      {!mediaLocked && post.video_path ? (
+        <FeedVideoPlay durationMs={post.video_duration_ms} videoPath={post.video_path} />
+      ) : null}
+
+      <View pointerEvents="box-none" style={styles.feedOverlayTop}>
+        <View pointerEvents="box-none" style={styles.feedOverlayTopRow}>
+          <Avatar profile={post.profile} size={34} />
+          <View style={styles.feedHeaderText}>
+            <Text style={styles.feedOverlayAuthor}>{author}</Text>
+            <Text style={styles.feedOverlayMeta}>
+              {formatFeedTimestamp(post.created_at)}
+              {post.is_temporary && remaining ? ` · ${remaining}` : ''}
+            </Text>
+          </View>
+          <GlassIconButton
+            accessibilityLabel="Post options"
+            color={colors.white}
+            dark
+            icon="ellipsis-horizontal"
+            iconSize={16}
+            onPress={openPostOverflowMenu}
+            size={32}
+          />
+          {isOwnPost && onDelete ? (
+            deleting ? (
+              <ActivityIndicator color={colors.white} size="small" />
+            ) : (
               <GlassIconButton
-                accessibilityLabel="Post options"
+                accessibilityLabel="Delete photo"
                 color={colors.white}
                 dark
-                icon="ellipsis-horizontal"
+                icon="trash-outline"
                 iconSize={16}
-                onPress={openPostOverflowMenu}
+                onPress={onDelete}
                 size={32}
               />
-              {isOwnPost && onDelete ? (
-                deleting ? (
-                  <ActivityIndicator color={colors.white} size="small" />
-                ) : (
-                  <GlassIconButton
-                    accessibilityLabel="Delete photo"
-                    color={colors.white}
-                    dark
-                    icon="trash-outline"
-                    iconSize={16}
-                    onPress={onDelete}
-                    size={32}
-                  />
-                )
-              ) : null}
-            </View>
-          </View>
-
-          {!post.video_path && post.audio_path ? (
-            <View pointerEvents="box-none" style={styles.feedAudioSide}>
-              <FeedAudioNote audioPath={post.audio_path} />
-            </View>
+            )
           ) : null}
-
-          <View pointerEvents="box-none" style={styles.feedOverlayBottom}>
-            <View pointerEvents="box-none" style={styles.feedOverlayCopy}>
-              {post.description ? (
-                <Text numberOfLines={3} style={styles.feedOverlayCaption}>
-                  {post.description}
-                </Text>
-              ) : null}
-              {post.location_name ? (
-                <GlassSurface dark style={styles.feedLocationPill}>
-                  <Ionicons color={colors.primary} name="location-sharp" size={15} />
-                  <Text numberOfLines={1} style={styles.feedLocationPillText}>
-                    {post.location_name}
-                  </Text>
-                </GlassSurface>
-              ) : null}
-            </View>
-            <View pointerEvents="box-none" style={styles.feedBottomActions}>
-              {onPressReactions ? (
-                <Pressable
-                  accessibilityLabel={
-                    reactionCount === 1
-                      ? 'View 1 reaction'
-                      : `View all ${reactionCount} reactions`
-                  }
-                  accessibilityRole="button"
-                  onPress={onPressReactions}
-                  style={({ pressed }) => [styles.feedSideAction, pressed && styles.pressed]}
-                >
-                  <GlassSurface dark isInteractive style={styles.feedSideBubble}>
-                    <Text style={styles.feedSideEmoji}>
-                      {reactionStickerEmoji ?? '👍'}
-                    </Text>
-                  </GlassSurface>
-                  {reactionCount > 0 ? (
-                    <Text style={styles.feedSideCount}>{reactionCount}</Text>
-                  ) : null}
-                </Pressable>
-              ) : null}
-              <Pressable
-                accessibilityLabel={commentLabel}
-                accessibilityRole="button"
-                onPress={onPress}
-                style={({ pressed }) => [styles.feedSideAction, pressed && styles.pressed]}
-              >
-                <GlassSurface dark isInteractive style={styles.feedSideBubble}>
-                  <Ionicons color={colors.white} name="chatbubble-outline" size={18} />
-                </GlassSurface>
-                {commentCount > 0 ? (
-                  <Text style={styles.feedSideCount}>{commentCount}</Text>
-                ) : null}
-              </Pressable>
-              <Pressable
-                accessibilityLabel={commentLabel}
-                accessibilityRole="button"
-                onPress={onPress}
-                style={({ pressed }) => pressed && styles.pressed}
-              >
-                <GlassSurface dark isInteractive style={styles.feedCommentsPill}>
-                  <Text style={styles.feedCommentsPillText}>{commentLabel}</Text>
-                  <Ionicons color={colors.white} name="chevron-forward" size={14} />
-                </GlassSurface>
-              </Pressable>
-            </View>
-          </View>
-
-          {reactionPicker}
         </View>
+      </View>
+
+      {!post.video_path && post.audio_path ? (
+        <View
+          pointerEvents="box-none"
+          style={[styles.feedAudioSide, { bottom: audioBottom }]}
+        >
+          <FeedAudioNote audioPath={post.audio_path} />
+        </View>
+      ) : null}
+
+      <View pointerEvents="box-none" style={styles.feedOverlayBottom}>
+        <View pointerEvents="box-none" style={styles.feedOverlayCopy}>
+          {post.description ? (
+            <Text numberOfLines={3} style={styles.feedOverlayCaption}>
+              {post.description}
+            </Text>
+          ) : null}
+          {post.location_name ? (
+            <GlassSurface dark style={styles.feedLocationPill}>
+              <Ionicons color={colors.primary} name="location-sharp" size={15} />
+              <Text numberOfLines={1} style={styles.feedLocationPillText}>
+                {post.location_name}
+              </Text>
+            </GlassSurface>
+          ) : null}
+        </View>
+        <View
+          onLayout={(event) => {
+            const next = Math.round(event.nativeEvent.layout.height);
+            setBottomActionsHeight((prev) => (prev === next ? prev : next));
+          }}
+          pointerEvents="box-none"
+          style={styles.feedBottomActions}
+        >
+          {onPressReactions ? (
+            <Pressable
+              accessibilityLabel={
+                reactionCount === 1
+                  ? 'View 1 reaction'
+                  : `View all ${reactionCount} reactions`
+              }
+              accessibilityRole="button"
+              onPress={onPressReactions}
+              style={({ pressed }) => [styles.feedSideAction, pressed && styles.pressed]}
+            >
+              <GlassSurface dark isInteractive style={styles.feedSideBubble}>
+                <Text style={styles.feedSideEmoji}>
+                  {reactionStickerEmoji ?? '👍'}
+                </Text>
+              </GlassSurface>
+              {reactionCount > 0 ? (
+                <Text style={styles.feedSideCount}>{reactionCount}</Text>
+              ) : null}
+            </Pressable>
+          ) : null}
+          <Pressable
+            accessibilityLabel={messageLabel}
+            accessibilityRole="button"
+            onPress={onPress}
+            style={({ pressed }) => [styles.feedSideAction, pressed && styles.pressed]}
+          >
+            <GlassSurface dark isInteractive style={styles.feedSideBubble}>
+              <Ionicons color={colors.white} name="chatbubble-outline" size={18} />
+            </GlassSurface>
+            {commentCount > 0 ? (
+              <Text style={styles.feedSideCount}>{commentCount}</Text>
+            ) : null}
+          </Pressable>
+        </View>
+      </View>
+
+      {reactionPicker}
+    </>
+  );
+
+  const challengeHeader = isChallenge ? (
+    <Pressable
+      accessibilityLabel={`Open challenge ${challengeTitle}`}
+      accessibilityRole="button"
+      disabled={!onPressChallenge}
+      onPress={onPressChallenge}
+      style={({ pressed }) => [
+        styles.challengePostHeaderPress,
+        pressed && onPressChallenge ? styles.pressed : null,
+      ]}
+    >
+      <LinearGradient
+        colors={[colors.primary, '#FF8A45', '#F6B35A']}
+        end={{ x: 1, y: 1 }}
+        start={{ x: 0, y: 0 }}
+        style={styles.challengePostHeader}
+      >
+        <View style={styles.challengePostTrophy}>
+          <ChallengeHatIcon color={colors.white} size={18} />
+        </View>
+        <View style={styles.challengePostHeaderCopy}>
+          <Text numberOfLines={1} style={styles.challengePostTitle}>
+            {challengeTitle}
+          </Text>
+          {challengeTimeLeft ? (
+            <Text style={styles.challengePostTimeText}>{challengeTimeLeft}</Text>
+          ) : null}
+        </View>
+        {onPressChallenge ? (
+          <Ionicons color="rgba(255,255,255,0.92)" name="chevron-forward" size={16} />
+        ) : null}
+      </LinearGradient>
+    </Pressable>
+  ) : null;
+
+  const photoBody = mediaLocked ? (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPressLockedMedia}
+      style={[
+        styles.feedImageWrap,
+        isChallenge ? styles.feedImageWrapChallengeInner : null,
+      ]}
+    >
+      {imageInner}
+    </Pressable>
+  ) : (
+    <View
+      style={[
+        styles.feedImageWrap,
+        isChallenge ? styles.feedImageWrapChallengeInner : null,
+      ]}
+      {...photoPanResponder.panHandlers}
+    >
+      {imageInner}
+    </View>
+  );
+
+  return (
+    <View style={styles.feedItem}>
+      <View
+        style={[
+          styles.feedPhotoBlock,
+          isChallenge ? styles.feedPhotoBlockChallenge : null,
+        ]}
+      >
+        {isChallenge ? (
+          <View style={styles.challengePostChrome}>
+            {challengeHeader}
+            {photoBody}
+          </View>
+        ) : (
+          photoBody
+        )}
         {reactionBurst}
       </View>
     </View>
@@ -1316,8 +1472,16 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     transform: [{ scale: 1.08 }],
   },
+  photoLockedFill: {
+    ...StyleSheet.absoluteFill,
+    transform: [{ scale: 1.35 }],
+  },
   photoSharp: {
     ...StyleSheet.absoluteFill,
+  },
+  photoLockedDim: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
   photoLoading: { alignItems: 'center', justifyContent: 'center' },
   avatarImage: { backgroundColor: colors.surfaceMuted },
@@ -1339,12 +1503,88 @@ const styles = StyleSheet.create({
     width: '100%',
     zIndex: 2,
   },
+  feedPhotoBlockChallenge: {
+    ...shadows.challenge,
+  },
+  challengePostChrome: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+    borderRadius: radius.xl,
+    borderWidth: 2,
+    overflow: 'hidden',
+  },
+  challengePostHeaderPress: {
+    overflow: 'hidden',
+  },
+  challengePostHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 12,
+  },
+  challengePostTrophy: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderColor: 'rgba(255,255,255,0.45)',
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  challengePostHeaderCopy: {
+    flex: 1,
+    gap: 1,
+    minWidth: 0,
+  },
+  challengePostTitle: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: -0.1,
+  },
+  challengePostTimeText: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   feedImageWrap: {
     borderRadius: radius.lg,
     overflow: 'hidden',
     position: 'relative',
     width: '100%',
     ...shadows.card,
+  },
+  feedImageWrapChallengeInner: {
+    borderRadius: 0,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  feedLockedHint: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 4,
+  },
+  feedLockedHintClip: {
+    borderRadius: radius.pill,
+    overflow: 'hidden',
+  },
+  feedLockedHintPill: {
+    alignItems: 'center',
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    gap: 6,
+    overflow: 'hidden',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+  },
+  feedLockedHintText: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   feedOverlayTop: {
     left: 0,
@@ -1361,8 +1601,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   feedAudioSide: {
-    // Sit between the author row and the bottom action stack on the right.
-    bottom: 200,
+    // `bottom` is set from the measured like/message stack height.
     position: 'absolute',
     right: spacing.sm,
     top: 52,
@@ -1385,7 +1624,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 3,
   },
   feedBottomActions: {
-    alignItems: 'flex-end',
+    alignItems: 'center',
     gap: spacing.sm,
   },
   feedSideAction: {
@@ -1457,20 +1696,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
-  feedCommentsPill: {
-    alignItems: 'center',
-    borderRadius: radius.pill,
-    flexDirection: 'row',
-    gap: 4,
-    overflow: 'hidden',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 8,
-  },
-  feedCommentsPillText: {
-    color: colors.white,
-    fontSize: 12,
-    fontWeight: '700',
-  },
+
   button: {
     alignItems: 'center',
     backgroundColor: colors.primary,

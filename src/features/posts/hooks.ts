@@ -247,6 +247,20 @@ export function useCreatePost() {
         void queryClient.invalidateQueries({
           queryKey: ['week-posted-status', post.ride_id],
         });
+        if (post.ride_challenge_id) {
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.activeRideChallenge(post.ride_id),
+          });
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.rideChallengeHistory(post.ride_id),
+          });
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.rideChallenge(post.ride_challenge_id),
+          });
+          void queryClient.invalidateQueries({
+            queryKey: queryKeys.challengePosts(post.ride_challenge_id),
+          });
+        }
       }
       void queryClient.invalidateQueries({ queryKey: ['rides-due-today'] });
       void queryClient.invalidateQueries({ queryKey: ['camera-rides'] });

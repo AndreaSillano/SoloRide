@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Share, StyleSheet, Text, View } from 'react-native';
 
 import { useCurrentUser } from '@/auth/auth-context';
+import { isChallengeEnded } from '@/features/challenges';
 import {
   formatProfileName,
   getOwnReactionScore,
@@ -205,6 +206,23 @@ export function RideOverview({
 
   const data = ride.data;
 
+  const mediaLocked =
+    !posting.isPending &&
+    !posting.isArchived &&
+    posting.isRequiredToday &&
+    !posting.hasPosted;
+
+  const activePost = activePostId
+    ? feed.data?.find((post) => post.id === activePostId)
+    : undefined;
+  const commentsReadOnly =
+    Boolean(activePost?.ride_challenge_id) &&
+    isChallengeEnded(activePost?.ride_challenge?.ends_at);
+
+  const openCamera = () => {
+    router.push({ pathname: '/camera', params: { rideId } });
+  };
+
   return (
     <>
       {data.is_archived ? (
@@ -237,9 +255,7 @@ export function RideOverview({
             </Text>
             <Button
               disabled={data.is_archived}
-              onPress={() =>
-                router.push({ pathname: '/camera', params: { rideId } })
-              }
+              onPress={openCamera}
             >
               {data.is_archived
                 ? 'Ride archived'
@@ -309,7 +325,12 @@ export function RideOverview({
         />
       ) : feed.data.length ? (
         <View style={styles.feed}>
-          {feed.data.map((post) => (
+          {feed.data.map((post) => {
+            const challengeEnded =
+              Boolean(post.ride_challenge_id) &&
+              isChallengeEnded(post.ride_challenge?.ends_at);
+            const reactionsLocked = mediaLocked || challengeEnded;
+            return (
             <View
               key={post.id}
               onLayout={() => tryScrollToPost(post.id)}
@@ -321,18 +342,43 @@ export function RideOverview({
               <FeedPost
                 deleting={deletingPostId === post.id}
                 isOwnPost={post.user_id === user?.id}
-                onCloseReactionPicker={() => setPickerPostId(null)}
+                mediaLocked={mediaLocked}
+                onCloseReactionPicker={
+                  reactionsLocked ? undefined : () => setPickerPostId(null)
+                }
                 onDelete={() => confirmDeletePost(post.id)}
-                onDoubleTapImage={() => handleDoubleTapImage(post.id)}
+                onDoubleTapImage={
+                  reactionsLocked ? undefined : () => handleDoubleTapImage(post.id)
+                }
                 onPress={() => setActivePostId(post.id)}
+                onPressChallenge={
+                  post.ride_challenge_id
+                    ? () => {
+                        haptics.light();
+                        router.push({
+                          pathname: '/ride/[rideId]/challenge/[rideChallengeId]',
+                          params: {
+                            rideId,
+                            rideChallengeId: post.ride_challenge_id!,
+                          },
+                        });
+                      }
+                    : undefined
+                }
+                onPressLockedMedia={mediaLocked ? openCamera : undefined}
                 onPressReactions={() => setReactionsPostId(post.id)}
-                onSelectReaction={(score) => handleSelectReaction(post.id, score)}
+                onSelectReaction={
+                  reactionsLocked
+                    ? undefined
+                    : (score) => handleSelectReaction(post.id, score)
+                }
                 ownReactionScore={getOwnReactionScore(post, user?.id)}
                 post={post}
-                reactionPickerVisible={pickerPostId === post.id}
+                reactionPickerVisible={!reactionsLocked && pickerPostId === post.id}
               />
             </View>
-          ))}
+            );
+          })}
           {feed.isFetchingNextPage ? (
             <View style={styles.loadMore}>
               <ActivityIndicator color={colors.primary} />
@@ -354,6 +400,7 @@ export function RideOverview({
       <CommentsModal
         onClose={() => setActivePostId(null)}
         postId={activePostId}
+        readOnly={commentsReadOnly}
         rideId={rideId}
         visible={Boolean(activePostId)}
       />

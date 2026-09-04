@@ -28,6 +28,7 @@ import { LocationPickerModal } from '@/components/location-picker-modal';
 import { PublishVideoPreview } from '@/components/publish-video-preview';
 import { RidePickerModal } from '@/components/ride-picker-modal';
 import { ErrorBanner } from '@/components/ui';
+import { useActiveRideChallenges } from '@/features/challenges';
 import { useSoloRideNotifications } from '@/features/notifications';
 import {
   deleteLocalMediaFile,
@@ -44,6 +45,7 @@ import {
 import {
   MAX_ACTIVE_TEMPORARY_POSTS,
   useCameraRides,
+  usePersistedSelectedRideId,
 } from '@/features/rides';
 import { haptics } from '@/lib/haptics';
 import { colors, radius, shadows, spacing } from '@/theme';
@@ -58,7 +60,7 @@ export default function PublishScreen() {
     imageUri,
     videoUri,
     videoDurationMs: videoDurationMsParam,
-    rideId: preferredRideId,
+    rideId: preferredRideIdParam,
   } = useLocalSearchParams<{
     imageUri?: string;
     videoUri?: string;
@@ -72,12 +74,15 @@ export default function PublishScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const cameraRides = useCameraRides(user?.id);
+  const { selectedRideId: homeRideId } = usePersistedSelectedRideId(user?.id);
+  const preferredRideId = preferredRideIdParam ?? homeRideId ?? undefined;
   const createPost = useCreatePost();
   const videoQuota = useCanPostVideoToday();
   const notifications = useSoloRideNotifications(user?.id ?? null);
 
   const [selectedRideIds, setSelectedRideIds] = useState<string[]>([]);
   const [wantTemporary, setWantTemporary] = useState(false);
+  const [submitAsChallenge, setSubmitAsChallenge] = useState(false);
   const [description, setDescription] = useState('');
   const [locationQuery, setLocationQuery] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<LocationSuggestion | null>(null);
@@ -100,39 +105,99 @@ export default function PublishScreen() {
     () => activeRides.filter((ride) => ride.temporaryRemaining > 0),
     [activeRides],
   );
-  const canChoosePermanent = permanentEligible.length > 0;
-  const isTemporary = !canChoosePermanent || wantTemporary;
-  /** Videos are single-Ride only (same as 24h posts) so the daily cap stays clear. */
-  const singleRideOnly = isTemporary || hasVideo;
-  const selectableRides = isTemporary ? temporaryEligible : permanentEligible;
+  // Challenges for every active ride — not only the current selection — so a
+  // challenge share stays available after today's cadence permanent post.
+  const activeRideIds = useMemo(() => activeRides.map((ride) => ride.id), [activeRides]);
+  const activeChallenges = useActiveRideChallenges(activeRideIds);
+  const challengeShareRides = useMemo(
+    () => activeRides.filter((ride) => activeChallenges.byRideId.has(ride.id)),
+    [activeChallenges.byRideId, activeRides],
+  );
+  const preferredChallengeOnly = useMemo(() => {
+    if (!preferredRideId) return false;
+    const preferred = activeRides.find((ride) => ride.id === preferredRideId);
+    if (!preferred) return false;
+    return activeChallenges.byRideId.has(preferred.id) && !preferred.canPublishPermanent;
+  }, [activeChallenges.byRideId, activeRides, preferredRideId]);
+
+  const hasPermanentOption = permanentEligible.length > 0 || challengeShareRides.length > 0;
+  // Challenge posts are always permanent (kept in the ride).
+  const isTemporary = submitAsChallenge
+    ? false
+    : !hasPermanentOption || wantTemporary;
+  /** Videos / challenge shares are single-Ride so caps and completions stay clear. */
+  const singleRideOnly = isTemporary || hasVideo || submitAsChallenge;
+
+  const permanentSelectable = useMemo(() => {
+    // Keep challenge-only rides pickable when submitting a challenge, or when the
+    // Home-selected ride already posted today but still has an open challenge.
+    if (!submitAsChallenge && !preferredChallengeOnly) return permanentEligible;
+    const byId = new Map<string, (typeof activeRides)[number]>();
+    for (const ride of permanentEligible) byId.set(ride.id, ride);
+    for (const ride of challengeShareRides) byId.set(ride.id, ride);
+    return [...byId.values()];
+  }, [
+    challengeShareRides,
+    permanentEligible,
+    preferredChallengeOnly,
+    submitAsChallenge,
+  ]);
+
+  const selectableRides = isTemporary ? temporaryEligible : permanentSelectable;
   const selectedRides = useMemo(
     () => selectableRides.filter((ride) => selectedRideIds.includes(ride.id)),
     [selectableRides, selectedRideIds],
   );
   const primaryRide = selectedRides[0] ?? null;
+  const challengeEligibleRides = useMemo(
+    () => selectedRides.filter((ride) => activeChallenges.byRideId.has(ride.id)),
+    [activeChallenges.byRideId, selectedRides],
+  );
+  // Toggle follows the currently selected Ride(s) only.
+  const showChallengeToggle = challengeEligibleRides.length > 0;
+  const challengeTitle =
+    challengeEligibleRides.length === 1
+      ? activeChallenges.byRideId.get(challengeEligibleRides[0]!.id)?.challenge?.title
+      : null;
+
+  useEffect(() => {
+    if (!showChallengeToggle) setSubmitAsChallenge(false);
+  }, [showChallengeToggle]);
+
+  // One-shot: land on challenge share when opening publish from a ride that
+  // already posted today but still has an incomplete challenge.
+  const didAutoChallengeRef = useRef(false);
+  useEffect(() => {
+    if (didAutoChallengeRef.current) return;
+    if (!preferredChallengeOnly) return;
+    didAutoChallengeRef.current = true;
+    setWantTemporary(false);
+    setSubmitAsChallenge(true);
+  }, [preferredChallengeOnly]);
+
   const canShareTemporary = Boolean(
     isTemporary && selectedRides.length === 1 && selectedRides[0]!.temporaryRemaining > 0,
   );
   const canPublish = isTemporary
     ? canShareTemporary
-    : hasVideo
-      ? selectedRides.length === 1 && selectedRides[0]!.canPublishPermanent
+    : hasVideo || submitAsChallenge
+      ? selectedRides.length === 1 &&
+        selectedRides.every(
+          (ride) =>
+            ride.canPublishPermanent || activeChallenges.byRideId.has(ride.id),
+        )
       : selectedRides.length > 0 &&
         selectedRides.every((ride) => ride.canPublishPermanent);
 
   const defaultPermanentRideIds = useCallback(() => {
-    const required = permanentEligible
-      .filter((ride) => ride.isRequiredToday)
-      .map((ride) => ride.id);
-    const preferred =
-      preferredRideId && permanentEligible.some((ride) => ride.id === preferredRideId)
-        ? [preferredRideId]
-        : [];
-    const ids = [...new Set([...required, ...preferred])];
-    if (ids.length) return ids;
-    if (permanentEligible.length === 1) return [permanentEligible[0]!.id];
+    // Only preselect the Ride the user is currently viewing on Home (or the
+    // explicit camera deep-link). Other due Rides stay available in the picker.
+    if (preferredRideId && permanentSelectable.some((ride) => ride.id === preferredRideId)) {
+      return [preferredRideId];
+    }
+    if (permanentSelectable.length === 1) return [permanentSelectable[0]!.id];
     return [];
-  }, [permanentEligible, preferredRideId]);
+  }, [permanentSelectable, preferredRideId]);
 
   const defaultTemporaryRideId = useCallback(() => {
     if (preferredRideId && temporaryEligible.some((ride) => ride.id === preferredRideId)) {
@@ -156,44 +221,60 @@ export default function PublishScreen() {
       return;
     }
 
-    if (!canChoosePermanent) {
-      setWantTemporary(true);
+    if (!hasPermanentOption && !submitAsChallenge) {
+      setWantTemporary((current) => (current ? current : true));
     }
 
     setSelectedRideIds((current) => {
+      const same = (next: string[]) =>
+        next.length === current.length && next.every((id, index) => id === current[index]);
+
       if (isTemporary) {
         const stillValid = current.filter((id) =>
           temporaryEligible.some((ride) => ride.id === id),
         );
-        if (stillValid.length) return [stillValid[0]!];
-        if (initializedRideSelection.current) return [];
+        if (stillValid.length) {
+          const next = [stillValid[0]!];
+          return same(next) ? current : next;
+        }
+        if (initializedRideSelection.current) {
+          return current.length === 0 ? current : [];
+        }
         initializedRideSelection.current = true;
         const fallback = defaultTemporaryRideId();
-        return fallback ? [fallback] : [];
+        const next = fallback ? [fallback] : [];
+        return same(next) ? current : next;
       }
 
       const stillValid = current.filter((id) =>
-        permanentEligible.some((ride) => ride.id === id),
+        permanentSelectable.some((ride) => ride.id === id),
       );
-      if (hasVideo) {
-        if (stillValid.length) return [stillValid[0]!];
-        if (initializedRideSelection.current) return [];
-        initializedRideSelection.current = true;
+      if (hasVideo || submitAsChallenge) {
+        if (stillValid.length) {
+          const next = [stillValid[0]!];
+          return same(next) ? current : next;
+        }
         const defaults = defaultPermanentRideIds();
-        return defaults.length ? [defaults[0]!] : [];
+        const next = defaults.length ? [defaults[0]!] : [];
+        if (!initializedRideSelection.current) initializedRideSelection.current = true;
+        return same(next) ? current : next;
       }
-      if (initializedRideSelection.current) return stillValid;
+      if (initializedRideSelection.current) {
+        return same(stillValid) ? current : stillValid;
+      }
       initializedRideSelection.current = true;
-      return defaultPermanentRideIds();
+      const defaults = defaultPermanentRideIds();
+      return same(defaults) ? current : defaults;
     });
   }, [
     activeRides.length,
-    canChoosePermanent,
     defaultPermanentRideIds,
     defaultTemporaryRideId,
+    hasPermanentOption,
     hasVideo,
     isTemporary,
-    permanentEligible,
+    permanentSelectable,
+    submitAsChallenge,
     temporaryEligible,
   ]);
 
@@ -231,16 +312,18 @@ export default function PublishScreen() {
     };
   }, [locationQuery, selectedLocation]);
 
-  const temporaryForced = !canChoosePermanent;
-  const composeTitle = temporaryForced
-    ? '24-hour share'
-    : isTemporary
-      ? hasVideo
-        ? '24h video'
-        : '24h photo'
-      : hasVideo
-        ? 'New video'
-        : 'New photo';
+  const temporaryForced = submitAsChallenge ? false : !hasPermanentOption;
+  const composeTitle = submitAsChallenge
+    ? 'Challenge'
+    : temporaryForced
+      ? '24-hour share'
+      : isTemporary
+        ? hasVideo
+          ? '24h video'
+          : '24h photo'
+        : hasVideo
+          ? 'New video'
+          : 'New photo';
 
   useEffect(() => {
     navigation.setOptions({ title: composeTitle });
@@ -324,6 +407,15 @@ export default function PublishScreen() {
     setError(null);
     try {
       const typedName = locationQuery.trim() || null;
+      const challengeByRideId: Record<string, string> = {};
+      if (submitAsChallenge) {
+        for (const ride of challengeEligibleRides) {
+          const challenge = activeChallenges.byRideId.get(ride.id);
+          if (challenge) challengeByRideId[ride.id] = challenge.id;
+        }
+      }
+      // Challenge completions are always permanent (kept in the ride).
+      const publishAsTemporary = submitAsChallenge ? false : isTemporary;
       await createPost.mutateAsync({
         rideIds: selectedRides.map((ride) => ride.id),
         imageUri,
@@ -332,12 +424,13 @@ export default function PublishScreen() {
         videoDurationMs,
         description,
         scheduledDate: primaryRide.postDate,
-        isTemporary,
+        isTemporary: publishAsTemporary,
         latitude: selectedLocation?.latitude ?? null,
         longitude: selectedLocation?.longitude ?? null,
         locationName: selectedLocation?.locationName ?? typedName,
+        challengeByRideId,
       });
-      if (!isTemporary) {
+      if (!publishAsTemporary) {
         await Promise.all(
           selectedRides
             .filter((ride) => ride.scheduledToday)
@@ -392,9 +485,9 @@ export default function PublishScreen() {
     setWantTemporary(false);
     setSelectedRideIds((current) => {
       const stillValid = current.filter((id) =>
-        permanentEligible.some((ride) => ride.id === id),
+        permanentSelectable.some((ride) => ride.id === id),
       );
-      if (hasVideo) {
+      if (hasVideo || submitAsChallenge) {
         if (stillValid.length) return [stillValid[0]!];
         const defaults = defaultPermanentRideIds();
         return defaults.length ? [defaults[0]!] : [];
@@ -481,6 +574,10 @@ export default function PublishScreen() {
               <Text style={styles.tempPreviewHint}>
                 This {hasVideo ? 'video' : 'photo'} will disappear from after 24 hours.
               </Text>
+            ) : submitAsChallenge ? (
+              <Text style={styles.tempPreviewHint}>
+                Challenge photos stay in the Ride feed.
+              </Text>
             ) : null}
 
             <View style={styles.previewFrame}>
@@ -521,7 +618,7 @@ export default function PublishScreen() {
           </View>
 
           <View style={styles.composeForm}>
-            {canChoosePermanent ? (
+            {hasPermanentOption && !submitAsChallenge ? (
               <View style={styles.modeBlock}>
                 <Text style={styles.sectionLabel}>Post type</Text>
                 <View style={styles.modeRow}>
@@ -578,7 +675,7 @@ export default function PublishScreen() {
                   <Text style={styles.captionMeta}>
                     {videoQuota.remaining}/{POST_VIDEO_MAX_PER_DAY} videos left today
                   </Text>
-                ) : !isTemporary && permanentEligible.length > 1 ? (
+                ) : !isTemporary && permanentSelectable.length > 1 ? (
                   <Text style={styles.captionMeta}>select one or more</Text>
                 ) : null}
               </View>
@@ -606,6 +703,44 @@ export default function PublishScreen() {
               </Pressable>
               {temporaryHint ? <Text style={styles.hint}>{temporaryHint}</Text> : null}
             </View>
+
+            {showChallengeToggle ? (
+              <Pressable
+                accessibilityRole="switch"
+                accessibilityState={{ checked: submitAsChallenge }}
+                onPress={() => {
+                  haptics.light();
+                  setSubmitAsChallenge((current) => !current);
+                }}
+                style={({ pressed }) => [
+                  styles.challengeToggle,
+                  submitAsChallenge && styles.challengeToggleOn,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View style={styles.challengeToggleCopy}>
+                  <Text style={styles.challengeToggleTitle}>Submit as challenge</Text>
+                  <Text style={styles.challengeToggleMeta}>
+                    {challengeTitle
+                      ? challengeTitle
+                      : `${challengeEligibleRides.length} selected Rides have an active challenge`}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.challengeSwitch,
+                    submitAsChallenge && styles.challengeSwitchOn,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.challengeSwitchKnob,
+                      submitAsChallenge && styles.challengeSwitchKnobOn,
+                    ]}
+                  />
+                </View>
+              </Pressable>
+            ) : null}
 
             <View style={styles.locationBlock}>
               <View style={styles.postToLabelRow}>
@@ -696,7 +831,7 @@ export default function PublishScreen() {
           isTemporary={singleRideOnly}
           onClose={() => setRidePickerOpen(false)}
           onSelect={handleRideSelect}
-          rides={isTemporary ? temporaryEligible : permanentEligible}
+          rides={isTemporary ? temporaryEligible : permanentSelectable}
           selectedIds={selectedRideIds}
           visible={ridePickerOpen}
         />
@@ -867,6 +1002,49 @@ const styles = StyleSheet.create({
   },
   locationBlock: { gap: spacing.xs },
   hint: { color: colors.muted, fontSize: 13, fontWeight: '500', marginTop: 2 },
+  challengeToggle: {
+    alignItems: 'center',
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+  },
+  challengeToggleOn: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.highlight,
+  },
+  challengeToggleCopy: { flex: 1, gap: 2, minWidth: 0 },
+  challengeToggleTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  challengeToggleMeta: {
+    color: colors.textSoft,
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
+  },
+  challengeSwitch: {
+    backgroundColor: colors.borderStrong,
+    borderRadius: radius.pill,
+    height: 28,
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+    width: 48,
+  },
+  challengeSwitchOn: { backgroundColor: colors.primary },
+  challengeSwitchKnob: {
+    backgroundColor: colors.white,
+    borderRadius: radius.pill,
+    height: 24,
+    width: 24,
+  },
+  challengeSwitchKnobOn: { alignSelf: 'flex-end' },
   composeFooterSticky: {
     backgroundColor: colors.background,
     bottom: 0,

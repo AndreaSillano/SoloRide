@@ -134,15 +134,18 @@ export function CommentsModal({
   rideId,
   visible,
   onClose,
+  readOnly = false,
 }: {
   postId: string | null;
   rideId: string;
   visible: boolean;
   onClose: () => void;
+  /** Finished challenge posts: view existing comments, no compose/delete. */
+  readOnly?: boolean;
 }) {
   const { user, profile } = useCurrentUser();
   const comments = useComments(postId);
-  const members = useRideMembers(visible ? rideId : null);
+  const members = useRideMembers(visible && !readOnly ? rideId : null);
   const createComment = useCreateComment();
   const deleteComment = useDeleteComment();
   const [content, setContent] = useState('');
@@ -296,7 +299,9 @@ export function CommentsModal({
             <Text style={styles.subtitle}>
               {comments.data?.length
                 ? `${comments.data.length} comment${comments.data.length === 1 ? '' : 's'}`
-                : 'Say something'}
+                : readOnly
+                  ? 'No comments'
+                  : 'Say something'}
             </Text>
           </View>
           <SheetCloseButton accessibilityLabel="Close comments" onPress={onClose} />
@@ -328,7 +333,7 @@ export function CommentsModal({
                   </View>
                   <CommentBody content={comment.content} knownUsernames={knownUsernames} />
                 </View>
-                {comment.user_id === user?.id ? (
+                {!readOnly && comment.user_id === user?.id ? (
                   <Pressable
                     accessibilityLabel="Delete comment"
                     accessibilityRole="button"
@@ -342,11 +347,16 @@ export function CommentsModal({
               </View>
             ))
           ) : (
-            <Body muted>No comments yet. Keep it kind and simple.</Body>
+            <Body muted>
+              {readOnly
+                ? 'No comments on this challenge post.'
+                : 'No comments yet. Keep it kind and simple.'}
+            </Body>
           )}
         </ScrollView>
 
         {/* In-flow footer so half detents keep the input flush to the sheet bottom. */}
+        {!readOnly ? (
         <View style={styles.composerSticky}>
           <MentionSuggestions members={suggestionMembers} onSelect={pickMention} />
           <View style={[styles.inputRow, { paddingBottom: composerPad }]}>
@@ -383,6 +393,7 @@ export function CommentsModal({
             </Pressable>
           </View>
         </View>
+        ) : null}
       </View>
     </AppBottomSheet>
   );

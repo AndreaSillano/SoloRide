@@ -41,6 +41,7 @@ const INITIAL_VALUES: RideFormValues = {
   monthDay: today.getDate(),
   weekdayOrdinal: 1,
   strictSchedule: true,
+  challengesEnabled: true,
 };
 
 function goHomeWithRide(rideId: string) {

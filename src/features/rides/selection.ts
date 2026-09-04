@@ -4,11 +4,40 @@ import { useCallback, useEffect, useState } from 'react';
 import { groupUserRides } from './grouping';
 import type { UserRide } from './types';
 
-const STORAGE_KEY_PREFIX = 'soloride:last-ride-id:';
+export const SELECTED_RIDE_STORAGE_PREFIX = 'soloride:last-ride-id:';
 
 function pickDefaultRide(rides: readonly UserRide[]): UserRide | null {
   const groups = groupUserRides(rides);
   return groups.active[0] ?? groups.upcoming[0] ?? groups.archived[0] ?? null;
+}
+
+export async function getPersistedSelectedRideId(
+  userId: string | null | undefined,
+): Promise<string | null> {
+  if (!userId) return null;
+  return AsyncStorage.getItem(SELECTED_RIDE_STORAGE_PREFIX + userId);
+}
+
+/**
+ * Last Home-selected Ride id from disk. Refreshes when `userId` changes;
+ * call `refresh` on screen focus so Camera/Publish stay in sync with Home.
+ */
+export function usePersistedSelectedRideId(userId: string | null | undefined) {
+  const [rideId, setRideId] = useState<string | null>(null);
+
+  const refresh = useCallback(() => {
+    if (!userId) {
+      setRideId(null);
+      return;
+    }
+    void getPersistedSelectedRideId(userId).then(setRideId);
+  }, [userId]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { selectedRideId: rideId, refresh };
 }
 
 /**
@@ -30,7 +59,7 @@ export function useSelectedRide(
     if (!userId) return;
 
     let cancelled = false;
-    void AsyncStorage.getItem(STORAGE_KEY_PREFIX + userId).then((stored) => {
+    void getPersistedSelectedRideId(userId).then((stored) => {
       if (cancelled) return;
       setSelectedRideId(stored);
       setIsHydrated(true);
@@ -47,14 +76,18 @@ export function useSelectedRide(
       ? rides.some((ride) => ride.id === selectedRideId)
       : false;
     if (!stillExists) {
-      setSelectedRideId(pickDefaultRide(rides)?.id ?? null);
+      const fallback = pickDefaultRide(rides);
+      setSelectedRideId(fallback?.id ?? null);
+      if (fallback && userId) {
+        void AsyncStorage.setItem(SELECTED_RIDE_STORAGE_PREFIX + userId, fallback.id);
+      }
     }
-  }, [isHydrated, rides, selectedRideId]);
+  }, [isHydrated, rides, selectedRideId, userId]);
 
   const selectRide = useCallback(
     (rideId: string) => {
       setSelectedRideId(rideId);
-      if (userId) void AsyncStorage.setItem(STORAGE_KEY_PREFIX + userId, rideId);
+      if (userId) void AsyncStorage.setItem(SELECTED_RIDE_STORAGE_PREFIX + userId, rideId);
     },
     [userId],
   );
@@ -64,43 +97,4 @@ export function useSelectedRide(
     selectRide,
     isReady: isHydrated,
   };
-}
-
-const RIDES_STRIP_KEY_PREFIX = 'soloride:rides-strip-expanded:';
-
-/**
- * Persists whether the Home “Your rides” strip is expanded, per account.
- */
-export function useRidesStripExpanded(userId: string | null | undefined) {
-  const [expanded, setExpandedState] = useState(true);
-
-  useEffect(() => {
-    setExpandedState(true);
-    if (!userId) return;
-
-    let cancelled = false;
-    void AsyncStorage.getItem(RIDES_STRIP_KEY_PREFIX + userId).then((stored) => {
-      if (cancelled || stored == null) return;
-      setExpandedState(stored === '1');
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
-
-  const setExpanded = useCallback(
-    (next: boolean | ((current: boolean) => boolean)) => {
-      setExpandedState((current) => {
-        const value = typeof next === 'function' ? next(current) : next;
-        if (userId) {
-          void AsyncStorage.setItem(RIDES_STRIP_KEY_PREFIX + userId, value ? '1' : '0');
-        }
-        return value;
-      });
-    },
-    [userId],
-  );
-
-  return [expanded, setExpanded] as const;
 }

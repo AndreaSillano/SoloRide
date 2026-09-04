@@ -85,12 +85,16 @@ export function FeedAudioNote({ audioPath }: FeedAudioNoteProps) {
 const styles = StyleSheet.create({
   hit: {
     flex: 1,
+    height: '100%',
+    width: '100%',
   },
   pill: {
     alignItems: 'center',
+    alignSelf: 'stretch',
     borderRadius: radius.pill,
     flex: 1,
     gap: spacing.xs,
+    height: '100%',
     justifyContent: 'space-between',
     overflow: 'hidden',
     paddingHorizontal: spacing.xs,

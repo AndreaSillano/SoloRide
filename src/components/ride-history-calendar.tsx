@@ -1,4 +1,5 @@
 import { format, parseISO } from 'date-fns';
+import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
   Alert,
@@ -30,6 +31,7 @@ import {
   useUpsertReaction,
   type PostRecord,
 } from '@/features/posts';
+import { usePostingStatus } from '@/features/rides';
 import { haptics } from '@/lib/haptics';
 import { colors, spacing } from '@/theme';
 
@@ -65,6 +67,17 @@ function DayFeedScreen({
   const upsertReaction = useUpsertReaction();
   const removeReaction = useRemoveReaction();
   const dayPosts = useRidePostsForDate(rideId, date);
+  const posting = usePostingStatus(rideId, user?.id);
+
+  const mediaLocked =
+    !posting.isPending &&
+    !posting.isArchived &&
+    posting.isRequiredToday &&
+    !posting.hasPosted;
+
+  const openCamera = () => {
+    router.push({ pathname: '/camera', params: { rideId } });
+  };
 
   const confirmDeletePost = (postId: string) => {
     Alert.alert('Delete photo?', 'This permanently removes the photo and its comments.', [
@@ -154,18 +167,30 @@ function DayFeedScreen({
               key={post.id}
               deleting={deletingPostId === post.id}
               isOwnPost={post.user_id === user?.id}
-              onCloseReactionPicker={() => setPickerPostId(null)}
+              mediaLocked={mediaLocked}
+              onCloseReactionPicker={
+                mediaLocked ? undefined : () => setPickerPostId(null)
+              }
               onDelete={() => confirmDeletePost(post.id)}
-              onDoubleTapImage={() => {
-                haptics.light();
-                setPickerPostId(post.id);
-              }}
+              onDoubleTapImage={
+                mediaLocked
+                  ? undefined
+                  : () => {
+                      haptics.light();
+                      setPickerPostId(post.id);
+                    }
+              }
               onPress={() => setActivePostId(post.id)}
+              onPressLockedMedia={mediaLocked ? openCamera : undefined}
               onPressReactions={() => setReactionsPostId(post.id)}
-              onSelectReaction={(score) => handleSelectReaction(post.id, score)}
+              onSelectReaction={
+                mediaLocked
+                  ? undefined
+                  : (score) => handleSelectReaction(post.id, score)
+              }
               ownReactionScore={getOwnReactionScore(post, user?.id)}
               post={post}
-              reactionPickerVisible={pickerPostId === post.id}
+              reactionPickerVisible={!mediaLocked && pickerPostId === post.id}
             />
           ))
         ) : (

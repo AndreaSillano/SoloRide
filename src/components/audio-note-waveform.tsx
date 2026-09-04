@@ -246,17 +246,6 @@ export function AudioNoteWaveform({
         vertical ? { width: maxHeight, flex: 1 } : { height: maxHeight },
       ]}
     >
-      <View style={styles.layer}>
-        <WaveRow
-          active={false}
-          animate={false}
-          bars={bars}
-          color={color}
-          maxExtent={maxHeight}
-          opacity={0.35}
-          vertical={vertical}
-        />
-      </View>
       <Animated.View
         style={[vertical ? styles.fillClipVertical : styles.fillClip, fillStyle]}
       >
@@ -290,9 +279,6 @@ const styles = StyleSheet.create({
     minWidth: 0,
     overflow: 'hidden',
     position: 'relative',
-  },
-  layer: {
-    ...StyleSheet.absoluteFillObject,
   },
   fillClip: {
     bottom: 0,

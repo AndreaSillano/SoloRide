@@ -58,6 +58,7 @@ export const RIDE_FORM_DEFAULTS: Readonly<RideFormValues> = {
   monthDay: 1,
   weekdayOrdinal: 1,
   strictSchedule: true,
+  challengesEnabled: true,
 };
 
 /** Max people in a single Ride (including the creator). */

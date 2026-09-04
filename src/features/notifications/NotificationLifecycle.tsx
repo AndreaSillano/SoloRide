@@ -8,6 +8,7 @@ import { AppState } from 'react-native';
 import { useAuth } from '@/auth/auth-context';
 import { purgeExpiredTemporaryPosts } from '@/features/posts/service';
 import { fetchRideSchedule, fetchUserRides } from '@/features/rides/api';
+import { SELECTED_RIDE_STORAGE_PREFIX } from '@/features/rides/selection';
 import { queryKeys } from '@/lib/queryKeys';
 import { supabase } from '@/lib/supabase';
 import { DATE_FORMAT, getWeekRange } from '@/utils/schedule';
@@ -19,6 +20,7 @@ import { queueCommentDeepLink } from './deep-link';
 import {
   isJoinRequestDecisionNotificationData,
   isJoinRequestNotificationData,
+  isRideChallengeNotificationData,
   isSocialNotificationData,
   registerExpoPushToken,
   unregisterExpoPushToken,
@@ -31,7 +33,6 @@ import {
 } from './service';
 
 const refreshListeners = new Set<() => void>();
-const SELECTED_RIDE_STORAGE_PREFIX = 'soloride:last-ride-id:';
 
 export function requestNotificationRefresh() {
   refreshListeners.forEach((listener) => listener());
@@ -51,7 +52,8 @@ function rideIdFromNotificationData(data: unknown): string | undefined {
     isSocialNotificationData(data) ||
     isSoloRideNotificationData(data) ||
     isJoinRequestNotificationData(data) ||
-    isJoinRequestDecisionNotificationData(data)
+    isJoinRequestDecisionNotificationData(data) ||
+    isRideChallengeNotificationData(data)
   ) {
     return data.rideId;
   }
@@ -83,6 +85,17 @@ function invalidateQueriesForNotification(queryClient: QueryClient, data: unknow
     void queryClient.invalidateQueries({ queryKey: ['ride-schedule', rideId] });
     void queryClient.invalidateQueries({ queryKey: ['posted-status', rideId] });
     void queryClient.invalidateQueries({ queryKey: ['week-posted-status', rideId] });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.activeRideChallenge(rideId) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.rideChallengeHistory(rideId) });
+  }
+
+  if (isRideChallengeNotificationData(data)) {
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.rideChallenge(data.rideChallengeId),
+    });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.challengePosts(data.rideChallengeId),
+    });
   }
 
   if (isSocialNotificationData(data)) {
@@ -140,6 +153,24 @@ function openRideSettingsPeople(rideId: string) {
     router.push({
       pathname: '/ride/[rideId]/settings',
       params: { rideId, tab: 'people' },
+    });
+  } catch {
+    openHome(rideId);
+  }
+}
+
+function openChallengeFromNotification(rideId: string, rideChallengeId: string) {
+  try {
+    router.replace({
+      pathname: '/',
+      params: {
+        selectRideId: rideId,
+        notificationOpenId: String(Date.now()),
+      },
+    });
+    router.push({
+      pathname: '/ride/[rideId]/challenge/[rideChallengeId]',
+      params: { rideId, rideChallengeId },
     });
   } catch {
     openHome(rideId);
@@ -218,6 +249,12 @@ function openFromNotificationData(
     } else {
       openHome();
     }
+    return;
+  }
+
+  if (isRideChallengeNotificationData(payload)) {
+    persistSelectedRide(userId, payload.rideId);
+    openChallengeFromNotification(payload.rideId, payload.rideChallengeId);
     return;
   }
 

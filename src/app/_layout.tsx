@@ -1,20 +1,25 @@
 import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useEffect } from 'react';
 
 import { useAuth } from '@/auth/auth-context';
 import { AppProviders } from '@/providers/AppProviders';
 import { colors } from '@/theme';
 
+SplashScreen.preventAutoHideAsync();
+
 function RootNavigator() {
   const { session, isLoading } = useAuth();
 
+  useEffect(() => {
+    if (!isLoading) {
+      void SplashScreen.hideAsync();
+    }
+  }, [isLoading]);
+
   if (isLoading) {
-    return (
-      <View style={styles.loading}>
-        <ActivityIndicator color={colors.primary} size="large" />
-      </View>
-    );
+    return null;
   }
 
   return (
@@ -42,12 +47,3 @@ export default function RootLayout() {
     </AppProviders>
   );
 }
-
-const styles = StyleSheet.create({
-  loading: {
-    alignItems: 'center',
-    backgroundColor: colors.background,
-    flex: 1,
-    justifyContent: 'center',
-  },
-});

@@ -137,6 +137,16 @@ export function getReactionCount(post: Pick<PostRecord, 'post_reactions'>) {
   return post.post_reactions?.length ?? 0;
 }
 
+/** Count of upvotes (score > 0) — used as “likes” for challenge leaderboards. */
+export function getPositiveReactionCount(post: Pick<PostRecord, 'post_reactions'>) {
+  return (post.post_reactions ?? []).reduce((total, reaction) => {
+    if (typeof reaction?.score === 'number' && isValidReactionScore(reaction.score) && reaction.score > 0) {
+      return total + 1;
+    }
+    return total;
+  }, 0);
+}
+
 /** Net reaction sentiment: sum of all scores on the post. */
 export function getReactionScoreSum(post: Pick<PostRecord, 'post_reactions'>) {
   return (post.post_reactions ?? []).reduce((total, reaction) => {
@@ -145,6 +155,20 @@ export function getReactionScoreSum(post: Pick<PostRecord, 'post_reactions'>) {
     }
     return total + reaction.score;
   }, 0);
+}
+
+/** Sort challenge entries: reaction score sum desc → positive count → newer first. */
+export function compareChallengeEntries(
+  a: Pick<PostRecord, 'post_reactions' | 'created_at' | 'id'>,
+  b: Pick<PostRecord, 'post_reactions' | 'created_at' | 'id'>,
+) {
+  const sumDiff = getReactionScoreSum(b) - getReactionScoreSum(a);
+  if (sumDiff !== 0) return sumDiff;
+  const likesDiff = getPositiveReactionCount(b) - getPositiveReactionCount(a);
+  if (likesDiff !== 0) return likesDiff;
+  const timeDiff = Date.parse(b.created_at) - Date.parse(a.created_at);
+  if (timeDiff !== 0) return timeDiff;
+  return b.id.localeCompare(a.id);
 }
 
 export function getOwnReactionScore(

@@ -19,6 +19,7 @@ export type Ride = {
   schedule_kind: ScheduleKind;
   month_day: number | null;
   weekday_ordinal: number | null;
+  challenges_enabled: boolean;
   is_archived: boolean;
   archived_at: string | null;
   created_at: string;
@@ -82,6 +83,7 @@ export type RideFormValues = {
   monthDay: number;
   weekdayOrdinal: number;
   strictSchedule: boolean;
+  challengesEnabled: boolean;
 };
 
 export type CreateRideInput = RideFormValues;

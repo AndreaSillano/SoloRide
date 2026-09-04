@@ -17,4 +17,9 @@ export const queryKeys = {
     ['posted-status', rideId, userId, scheduledDate] as const,
   weekPostedStatus: (rideId: string, userId: string, weekStart: string, weekEnd: string) =>
     ['week-posted-status', rideId, userId, weekStart, weekEnd] as const,
+  challengeCatalog: () => ['challenge-catalog'] as const,
+  activeRideChallenge: (rideId: string) => ['active-ride-challenge', rideId] as const,
+  rideChallengeHistory: (rideId: string) => ['ride-challenge-history', rideId] as const,
+  rideChallenge: (rideChallengeId: string) => ['ride-challenge', rideChallengeId] as const,
+  challengePosts: (rideChallengeId: string) => ['challenge-posts', rideChallengeId] as const,
 };

@@ -41,10 +41,15 @@ import {
 const POST_SELECT = `
   id, ride_id, user_id, image_path, audio_path, video_path, video_duration_ms,
   description, latitude, longitude,
-  location_name, scheduled_date, is_temporary, expires_at, created_at, updated_at,
+  location_name, scheduled_date, is_temporary, expires_at, ride_challenge_id,
+  created_at, updated_at,
   profile:profiles!posts_user_id_fkey(id, username, display_name, avatar_url),
   comments(count),
-  post_reactions(user_id, score, updated_at)
+  post_reactions(user_id, score, updated_at),
+  ride_challenge:ride_challenges!posts_ride_challenge_id_fkey(
+    id, ends_at, winner_user_id,
+    challenge:challenges!ride_challenges_challenge_id_fkey(id, title, description)
+  )
 `;
 
 /** Hide expired temporary posts until cleanup deletes them. */
@@ -298,6 +303,21 @@ export async function getRidePostsForDate(
   return parseFeedPosts(data ?? []);
 }
 
+/** Posts linked to a ride challenge instance (newest first). */
+export async function getChallengePosts(rideChallengeId: string): Promise<PostRecord[]> {
+  const validId = parseUuid(rideChallengeId, 'Challenge');
+  const { data, error } = await supabase
+    .from('posts')
+    .select(POST_SELECT)
+    .eq('ride_challenge_id', validId)
+    .or(activeFeedFilter())
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false });
+
+  if (error) throw mapDatabaseError(error, 'Challenge posts could not be loaded.');
+  return parseFeedPosts(data ?? []);
+}
+
 export async function getPost(postId: string): Promise<PostRecord> {
   const validPostId = parseUuid(postId, 'Post');
   const { data, error } = await supabase
@@ -516,6 +536,7 @@ export async function createPost(input: CreatePostInput): Promise<PostRecord[]> 
           scheduled_date: parsed.data.scheduledDate,
           is_temporary: isTemporary,
           expires_at: expiresAt,
+          ride_challenge_id: parsed.data.challengeByRideId[entry.rideId] ?? null,
         })),
       )
       .select(POST_SELECT);

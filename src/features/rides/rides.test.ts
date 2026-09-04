@@ -18,6 +18,7 @@ function makeRide(overrides: Partial<UserRide>): UserRide {
     schedule_kind: 'weekly',
     month_day: null,
     weekday_ordinal: null,
+    challenges_enabled: true,
     is_archived: false,
     archived_at: null,
     created_at: '2026-06-01T00:00:00Z',

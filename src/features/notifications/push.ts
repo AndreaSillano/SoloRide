@@ -17,6 +17,12 @@ export type SocialNotificationData = {
   isTemporary?: boolean;
 };
 
+export type RideChallengeNotificationData = {
+  kind: 'ride_challenge' | 'ride_challenge_finished';
+  rideId: string;
+  rideChallengeId: string;
+};
+
 export type JoinRequestNotificationData = {
   kind: 'join_request';
   rideId: string;
@@ -59,6 +65,18 @@ export function isSocialNotificationData(value: unknown): value is SocialNotific
       data.kind === 'social_mention') &&
     typeof data.rideId === 'string' &&
     typeof data.postId === 'string'
+  );
+}
+
+export function isRideChallengeNotificationData(
+  value: unknown,
+): value is RideChallengeNotificationData {
+  if (!value || typeof value !== 'object') return false;
+  const data = value as Record<string, unknown>;
+  return (
+    (data.kind === 'ride_challenge' || data.kind === 'ride_challenge_finished') &&
+    typeof data.rideId === 'string' &&
+    typeof data.rideChallengeId === 'string'
   );
 }
 

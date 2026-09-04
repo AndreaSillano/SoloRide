@@ -68,4 +68,11 @@ export const shadows = {
     shadowRadius: 16,
     elevation: 8,
   },
+  challenge: {
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.55,
+    shadowRadius: 22,
+    elevation: 12,
+  },
 } as const;

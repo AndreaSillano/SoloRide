@@ -76,6 +76,28 @@ export const postSchema = z.object({
   scheduled_date: scheduledDateSchema,
   is_temporary: z.boolean().default(false),
   expires_at: z.string().nullable().default(null),
+  ride_challenge_id: uuidSchema.nullish().transform((value) => value ?? null),
+  ride_challenge: z
+    .preprocess((value) => {
+      if (Array.isArray(value)) return value[0] ?? null;
+      return value;
+    }, z
+      .object({
+        id: uuidSchema,
+        ends_at: z.string(),
+        winner_user_id: uuidSchema.nullish().transform((value) => value ?? null),
+        challenge: z.preprocess((value) => {
+          if (Array.isArray(value)) return value[0] ?? null;
+          return value;
+        }, z
+          .object({
+            id: uuidSchema,
+            title: z.string(),
+            description: z.string().nullish(),
+          })
+          .nullish()),
+      })
+      .nullish()),
   created_at: z.string(),
   updated_at: z.string(),
   profile: embeddedProfileSchema,
@@ -117,6 +139,8 @@ export const createPostInputSchema = z
     locationName: nullableTrimmedString(200),
     scheduledDate: scheduledDateSchema,
     isTemporary: z.boolean().optional().default(false),
+    /** Map of rideId → active ride_challenge instance id when submitting as challenge. */
+    challengeByRideId: z.record(uuidSchema, uuidSchema).optional().default({}),
   })
   .superRefine((value, context) => {
     if ((value.latitude == null) !== (value.longitude == null)) {
@@ -172,6 +196,7 @@ export const createPostInputSchema = z
     latitude: value.latitude ?? null,
     longitude: value.longitude ?? null,
     isTemporary: value.isTemporary ?? false,
+    challengeByRideId: value.challengeByRideId ?? {},
   }));
 
 export const createCommentInputSchema = z.object({

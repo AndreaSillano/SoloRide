@@ -400,6 +400,25 @@ export function RideForm({
         value={value.notificationTime}
       />
       {timePickerOpen ? pickerPanel : null}
+
+      <View style={styles.scheduleMode}>
+        <View style={styles.scheduleModeText}>
+          <Text style={styles.label}>Challenges</Text>
+          <Body muted>
+            {value.challengesEnabled
+              ? 'Fun photo prompts open automatically for the group.'
+              : 'Challenge prompts stay off for this Ride.'}
+          </Body>
+        </View>
+        <NativeSwitch
+          disabled={disabled}
+          onValueChange={(challengesEnabled) => {
+            haptics.selection();
+            set('challengesEnabled', challengesEnabled);
+          }}
+          value={value.challengesEnabled}
+        />
+      </View>
     </View>
   );
 }

@@ -61,6 +61,7 @@ export const rideFormSchema = z
       })
       .default(1),
     strictSchedule: z.boolean().default(true),
+    challengesEnabled: z.boolean().default(true),
   })
   .superRefine((values, context) => {
     if (!values.neverEnds) {

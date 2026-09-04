@@ -30,7 +30,7 @@ import type {
 import { isScheduleKind } from '../../utils/schedule';
 
 const RIDE_COLUMNS =
-  'id,name,description,code,creator_id,start_date,end_date,notification_time,strict_schedule,schedule_kind,month_day,weekday_ordinal,is_archived,archived_at,created_at,updated_at';
+  'id,name,description,code,creator_id,start_date,end_date,notification_time,strict_schedule,schedule_kind,month_day,weekday_ordinal,challenges_enabled,is_archived,archived_at,created_at,updated_at';
 
 type UserRideRecord = {
   role: RideRole;
@@ -63,6 +63,7 @@ function normalizeRide(ride: Ride): Ride {
     month_day: ride.month_day ?? null,
     weekday_ordinal: ride.weekday_ordinal ?? null,
     strict_schedule: ride.strict_schedule ?? true,
+    challenges_enabled: ride.challenges_enabled ?? true,
   };
 }
 
@@ -106,6 +107,7 @@ function mutationParams(input: CreateRideInput) {
     p_month_day: values.scheduleKind === 'monthly_date' ? values.monthDay : null,
     p_weekday_ordinal:
       values.scheduleKind === 'monthly_weekday' ? values.weekdayOrdinal : null,
+    p_challenges_enabled: values.challengesEnabled,
   };
 }
 
