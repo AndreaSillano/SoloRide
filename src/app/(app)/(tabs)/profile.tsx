@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
@@ -16,12 +17,7 @@ import {
 
 import { useAuth, useCurrentUser } from '@/auth/auth-context';
 import { NativeSwitch } from '@/components/glass';
-import {
-  Avatar,
-  Button,
-  ErrorBanner,
-  ScrollScreen,
-} from '@/components/ui';
+import { Avatar, Button, ErrorBanner, ScrollScreen } from '@/components/ui';
 import {
   getNotificationsEnabled,
   requestNotificationRefresh,
@@ -38,7 +34,7 @@ import {
 import { ProfileDataError, useRemoveAvatar, useUpdateAvatar } from '@/features/profile';
 import { groupUserRides, useMyPendingJoinRequests, useUserRides } from '@/features/rides';
 import { haptics } from '@/lib/haptics';
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, shadows, spacing } from '@/theme';
 
 function OpenSettingsLink({ onOpen }: { onOpen?: () => void }) {
   return (
@@ -83,6 +79,7 @@ export default function ProfileScreen() {
 
   const groups = useMemo(() => groupUserRides(rides.data ?? []), [rides.data]);
   const pendingJoinCount = pendingJoins.data?.length ?? 0;
+  const rideCount = rides.data?.length ?? 0;
   const username = profile?.username ?? null;
   const avatarBusy = busy === 'avatar' || updateAvatar.isPending || removeAvatar.isPending;
   const cameraGranted = Boolean(cameraPermission?.granted);
@@ -110,8 +107,6 @@ export default function ProfileScreen() {
         previousPermission.current = next;
         setPermission(next);
 
-        // Fresh OS grant (including return from Settings) → turn Ride alerts on.
-        // Skip the first null→status read so an intentional in-app off stays off.
         if (
           next === 'granted' &&
           (awaitingNotificationSettings.current ||
@@ -124,8 +119,6 @@ export default function ProfileScreen() {
           return;
         }
 
-        // Only clear the in-app preference when OS permission is explicitly
-        // denied — not while it is still undetermined (e.g. mid sign-in prompts).
         if (next === 'denied') {
           const enabled = await getNotificationsEnabled(user.id);
           if (!enabled) return;
@@ -321,8 +314,6 @@ export default function ProfileScreen() {
     const previous = alertsEnabled;
     try {
       if (next) {
-        // iOS will not show the permission dialog again after a deny / Settings
-        // revoke — the user must re-enable Notifications there.
         if (permission === 'denied') {
           awaitingNotificationSettings.current = true;
           Alert.alert(
@@ -421,7 +412,7 @@ export default function ProfileScreen() {
   }, [groups, pendingJoinCount]);
 
   return (
-    <ScrollScreen>
+    <ScrollScreen contentStyle={styles.screen}>
       <View style={styles.identity}>
         <Pressable
           accessibilityLabel="Change profile photo"
@@ -432,18 +423,25 @@ export default function ProfileScreen() {
         >
           <Avatar
             profile={{ username: profile?.username, avatar_url: profile?.avatar_url }}
-            size={88}
+            size={72}
           />
           <View style={styles.avatarBadge}>
             {avatarBusy ? (
               <ActivityIndicator color={colors.white} size="small" />
             ) : (
-              <Ionicons color={colors.white} name="camera" size={14} />
+              <Ionicons color={colors.white} name="camera" size={12} />
             )}
           </View>
         </Pressable>
-        <Text style={styles.username}>{username ? `@${username}` : 'Your profile'}</Text>
-        <Text style={styles.tagline}>Private photo rides with your people</Text>
+        <View style={styles.identityCopy}>
+          <Text style={styles.username}>{username ? `@${username}` : 'Your profile'}</Text>
+          <Text style={styles.tagline}>Private photo rides with your people</Text>
+          <Text style={styles.rideStat}>
+            {rides.isPending
+              ? '…'
+              : `${rideCount} Ride${rideCount === 1 ? '' : 's'}`}
+          </Text>
+        </View>
       </View>
 
       <ErrorBanner message={profileError} />
@@ -453,48 +451,52 @@ export default function ProfileScreen() {
         </Button>
       ) : null}
 
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Your Rides</Text>
-        <Pressable
-          accessibilityHint="Opens a list of all your Rides"
-          accessibilityLabel={
-            pendingJoinCount > 0
-              ? `Your Rides, ${pendingJoinCount} pending join request${
-                  pendingJoinCount === 1 ? '' : 's'
-                }`
-              : 'Your Rides'
-          }
-          accessibilityRole="button"
-          onPress={openRidesList}
-          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+      <Pressable
+        accessibilityHint="Opens a list of all your Rides"
+        accessibilityLabel={
+          pendingJoinCount > 0
+            ? `Your Rides, ${pendingJoinCount} pending join request${
+                pendingJoinCount === 1 ? '' : 's'
+              }`
+            : 'Your Rides'
+        }
+        accessibilityRole="button"
+        onPress={openRidesList}
+        style={({ pressed }) => [styles.ridesCardWrap, pressed && styles.pressed]}
+      >
+        <LinearGradient
+          colors={['#FF7A33', '#FF4D1A']}
+          end={{ x: 1, y: 1 }}
+          start={{ x: 0, y: 0 }}
+          style={styles.ridesCard}
         >
-          <View style={styles.rowIcon}>
-            <Ionicons color={colors.primary} name="images-outline" size={20} />
-            {pendingJoinCount > 0 ? (
-              <View
-                accessibilityElementsHidden
-                importantForAccessibility="no-hide-descendants"
-                style={styles.rowDot}
-              />
-            ) : null}
+          <View style={styles.ridesCardTop}>
+            <View style={styles.ridesCardTitleRow}>
+              <View style={styles.ridesIconBubble}>
+                <Ionicons color={colors.white} name="images" size={18} />
+              </View>
+              <View style={styles.ridesCardCopy}>
+                <Text style={styles.ridesCardTitle}>Your Rides</Text>
+                <Text style={styles.ridesCardSubtitle}>
+                  {rides.isPending ? 'Checking your Rides…' : rideSummary}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.ridesChevronBubble}>
+              {pendingJoinCount > 0 ? (
+                <View style={styles.pendingBadge}>
+                  <Text style={styles.pendingBadgeText}>{pendingJoinCount}</Text>
+                </View>
+              ) : null}
+              <Ionicons color={colors.white} name="chevron-forward" size={16} />
+            </View>
           </View>
-          <View style={styles.rowBody}>
-            <Text style={styles.rowTitle}>
-              {rides.isPending
-                ? 'Loading…'
-                : `${rides.data?.length ?? 0} Ride${(rides.data?.length ?? 0) === 1 ? '' : 's'}`}
-            </Text>
-            <Text style={styles.rowSubtitle}>
-              {rides.isPending ? 'Checking your Rides…' : rideSummary}
-            </Text>
-          </View>
-          <Ionicons color={colors.muted} name="chevron-forward" size={18} />
-        </Pressable>
-      </View>
+        </LinearGradient>
+      </Pressable>
 
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>Permissions</Text>
-        <View style={styles.row}>
+        <View style={styles.card}>
           <View style={styles.rowIcon}>
             <Ionicons color={colors.primary} name="camera-outline" size={20} />
           </View>
@@ -518,7 +520,7 @@ export default function ProfileScreen() {
             <ActivityIndicator color={colors.primary} style={styles.toggleSpinner} />
           )}
         </View>
-        <View style={styles.row}>
+        <View style={styles.card}>
           <View style={styles.rowIcon}>
             <Ionicons color={colors.primary} name="location-outline" size={20} />
           </View>
@@ -538,7 +540,7 @@ export default function ProfileScreen() {
             value={locationGranted}
           />
         </View>
-        <View style={styles.row}>
+        <View style={styles.card}>
           <View style={styles.rowIcon}>
             <Ionicons color={colors.primary} name="notifications-outline" size={20} />
           </View>
@@ -577,13 +579,13 @@ export default function ProfileScreen() {
           accessibilityLabel="Privacy Policy"
           accessibilityRole="button"
           onPress={() => router.push('/privacy-policy')}
-          style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.card, pressed && styles.pressed]}
         >
           <View style={styles.rowIcon}>
-            <Ionicons color={colors.primary} name="document-text-outline" size={20} />
+            <Ionicons color={colors.primary} name="shield-checkmark-outline" size={20} />
           </View>
           <View style={styles.rowBody}>
-            <Text style={styles.rowTitle}>Privacy Policy</Text>
+            <Text style={styles.rowTitle}>Privacy</Text>
             <Text style={styles.rowSubtitle}>
               How posts, account data, and analytics are handled.
             </Text>
@@ -598,19 +600,40 @@ export default function ProfileScreen() {
 
       <ErrorBanner message={error} />
 
-      <Button loading={busy === 'logout'} variant="danger" onPress={() => void handleLogout()}>
-        Log out
-      </Button>
+      <Pressable
+        accessibilityLabel="Log out"
+        accessibilityRole="button"
+        disabled={busy === 'logout'}
+        onPress={() => void handleLogout()}
+        style={({ pressed }) => [
+          styles.logoutButton,
+          pressed && styles.pressed,
+          busy === 'logout' && styles.disabled,
+        ]}
+      >
+        {busy === 'logout' ? (
+          <ActivityIndicator color={colors.primary} />
+        ) : (
+          <>
+            <Ionicons color={colors.primary} name="log-out-outline" size={18} />
+            <Text style={styles.logoutText}>Log out</Text>
+          </>
+        )}
+      </Pressable>
     </ScrollScreen>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    gap: spacing.md,
+  },
   identity: {
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingBottom: spacing.sm,
-    paddingTop: spacing.sm,
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingBottom: spacing.xxs,
+    paddingTop: spacing.xs,
   },
   avatarButton: {
     position: 'relative',
@@ -621,24 +644,108 @@ const styles = StyleSheet.create({
     borderColor: colors.background,
     borderRadius: radius.pill,
     borderWidth: 2,
-    bottom: 0,
-    height: 30,
+    bottom: -1,
+    height: 26,
     justifyContent: 'center',
     position: 'absolute',
-    right: 0,
-    width: 30,
+    right: -1,
+    width: 26,
+  },
+  identityCopy: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0,
   },
   username: {
     color: colors.text,
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '800',
-    letterSpacing: -0.6,
+    letterSpacing: -0.5,
   },
   tagline: {
     color: colors.muted,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '500',
-    textAlign: 'center',
+    lineHeight: 18,
+  },
+  rideStat: {
+    color: colors.textSoft,
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  ridesCardWrap: {
+    borderRadius: radius.md,
+    ...shadows.glow,
+  },
+  ridesCard: {
+    borderRadius: radius.md,
+    gap: spacing.md,
+    overflow: 'hidden',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  ridesCardTop: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
+  },
+  ridesCardTitleRow: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minWidth: 0,
+  },
+  ridesIconBubble: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderRadius: radius.pill,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  ridesCardCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  ridesCardTitle: {
+    color: colors.white,
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  ridesCardSubtitle: {
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  ridesChevronBubble: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    gap: 4,
+    height: 32,
+    justifyContent: 'center',
+    minWidth: 32,
+    paddingHorizontal: 8,
+  },
+  pendingBadge: {
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderRadius: radius.pill,
+    justifyContent: 'center',
+    minWidth: 18,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  pendingBadgeText: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: '800',
   },
   section: { gap: spacing.xs },
   sectionLabel: {
@@ -648,16 +755,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     paddingHorizontal: spacing.xxs,
   },
-  row: {
+  card: {
     alignItems: 'center',
-    backgroundColor: colors.glassFill,
-    borderColor: colors.glassBorder,
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
+    ...shadows.card,
   },
   rowIcon: {
     alignItems: 'center',
@@ -665,22 +771,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.xs,
     height: 36,
     justifyContent: 'center',
-    position: 'relative',
     width: 36,
-  },
-  rowDot: {
-    backgroundColor: colors.highlight,
-    borderRadius: radius.pill,
-    elevation: 4,
-    height: 8,
-    position: 'absolute',
-    right: -2,
-    shadowColor: colors.highlight,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 5,
-    top: -2,
-    width: 8,
   },
   rowBody: { flex: 1, gap: 4 },
   rowTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
@@ -709,10 +800,25 @@ const styles = StyleSheet.create({
   toggleSpinner: { marginRight: spacing.xs },
   helpCopy: {
     color: colors.muted,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
-    lineHeight: 20,
+    lineHeight: 18,
     paddingHorizontal: spacing.xxs,
   },
-  pressed: { opacity: 0.8 },
+  logoutButton: {
+    alignItems: 'center',
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.md,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+  },
+  logoutText: {
+    color: colors.primary,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  pressed: { opacity: 0.86 },
+  disabled: { opacity: 0.55 },
 });

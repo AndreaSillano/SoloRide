@@ -81,12 +81,22 @@ function RideOption({
       <View
         style={[
           styles.rideStatusChip,
-          ride.canPublishPermanent ? styles.rideBadgeDue : styles.rideBadgeOptional,
+          ride.canPublishPermanent && ride.isRequiredToday
+            ? styles.rideBadgeDue
+            : styles.rideBadgeOptional,
         ]}
       >
         <Ionicons
-          color={ride.canPublishPermanent ? colors.accent : colors.muted}
-          name={ride.canPublishPermanent ? 'camera' : 'time-outline'}
+          color={
+            ride.canPublishPermanent && ride.isRequiredToday ? colors.accent : colors.muted
+          }
+          name={
+            ride.canPublishPermanent
+              ? ride.isRequiredToday
+                ? 'alert-circle'
+                : 'camera-outline'
+              : 'time-outline'
+          }
           size={16}
         />
       </View>

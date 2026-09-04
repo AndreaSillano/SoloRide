@@ -5,6 +5,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider, useAuth } from '@/auth/auth-context';
+import { ToastHost } from '@/components/toast-host';
 import { NotificationLifecycle } from '@/features/notifications/NotificationLifecycle';
 import { requestCoreAppPermissions } from '@/features/permissions';
 import { initAnalytics } from '@/lib/analytics';
@@ -85,6 +86,7 @@ export function AppProviders({ children }: PropsWithChildren) {
             <RequestPermissionsOnSignIn />
             <NotificationLifecycle />
             {children}
+            <ToastHost />
           </AuthProvider>
         </QueryClientProvider>
       </KeyboardProvider>

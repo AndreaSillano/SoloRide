@@ -17,7 +17,7 @@ export default function AppLayout() {
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="publish" options={{ title: 'New photo' }} />
-      <Stack.Screen name="your-rides" options={{ title: 'Your Rides' }} />
+      <Stack.Screen name="your-rides" options={{ title: '' }} />
       <Stack.Screen name="privacy-policy" options={{ title: 'Privacy' }} />
       <Stack.Screen
         name="create-ride"

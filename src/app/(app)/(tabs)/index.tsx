@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCurrentUser } from '@/auth/auth-context';
 import { ChallengeBanner } from '@/components/challenge-banner';
+import { ErrorScreen } from '@/components/error-screen';
 import { GlassIconButton, GlassSurface } from '@/components/glass';
 import { RideOverview } from '@/components/ride-overview';
 import { RideSelector } from '@/components/ride-selector';
@@ -280,17 +281,16 @@ export default function HomeScreen() {
       {rides.isPending || !isReady ? (
         <RideFeedSkeleton />
       ) : rides.isError ? (
-        <View style={styles.emptyState}>
-          <Heading>Couldn’t load Rides</Heading>
-          <Body muted>
-            {rides.error instanceof Error
+        <ErrorScreen
+          actionLabel="Try again"
+          message={
+            rides.error instanceof Error
               ? rides.error.message
-              : 'Your Rides could not load.'}
-          </Body>
-          <View style={styles.emptyActions}>
-            <Button onPress={() => void rides.refetch()}>Try again</Button>
-          </View>
-        </View>
+              : 'The trail went quiet. One more lap?'
+          }
+          onAction={() => rides.refetch()}
+          title="Rides took a wrong turn"
+        />
       ) : !hasRides ? (
         <View style={styles.emptyState}>
           <Heading>Your first Ride starts here</Heading>

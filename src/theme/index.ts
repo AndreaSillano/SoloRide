@@ -19,6 +19,9 @@ export const colors = {
   borderStrong: '#DDAF9E',
   danger: '#B72E43',
   dangerSurface: '#FFE7EA',
+  // Soft warm info chrome (aliases of muted / surfaceMuted — no blue drift).
+  info: '#8E6664',
+  infoSurface: '#FCEAE1',
   white: '#FFFFFF',
   shadow: '#77333B',
   glassFill: 'rgba(255, 246, 238, 0.72)',

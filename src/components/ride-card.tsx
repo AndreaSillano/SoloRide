@@ -29,7 +29,7 @@ function statusForRide(
   if (!posting.isRequiredToday) {
     return { name: 'camera-outline', color: colors.muted, label: 'Optional today' };
   }
-  return { name: 'camera', color: colors.accent, label: 'Photo due today' };
+  return { name: 'alert-circle', color: colors.accent, label: 'Photo due today' };
 }
 
 /** Shared posting/status copy for ride chips and the Home selector. */
@@ -38,6 +38,14 @@ export function rideStatusLabel(
   posting: ReturnType<typeof usePostingStatus>,
 ): string {
   return statusForRide(ride, posting).label;
+}
+
+/** True when today’s required photo has not been posted yet. */
+export function isRidePhotoDue(
+  ride: UserRide,
+  posting: ReturnType<typeof usePostingStatus>,
+): boolean {
+  return statusForRide(ride, posting).name === 'alert-circle';
 }
 
 export function RideCard({
@@ -55,22 +63,16 @@ export function RideCard({
 }) {
   const posting = usePostingStatus(ride.id, userId);
   const status = statusForRide(ride, posting);
-  const isOwner = ride.current_user_role === 'creator';
   const label = `${ride.name}, ${status.label}${selected ? ', selected' : ''}`;
 
   if (variant === 'tile') {
     const body = (
       <View style={styles.tileInner}>
-        {isOwner ? (
-          <View style={styles.crown}>
-            <Ionicons color={selected ? colors.white : colors.primary} name="sparkles" size={12} />
-          </View>
-        ) : null}
         <View
           style={[
             styles.tileStatus,
             selected && styles.tileStatusOnSelected,
-            status.name === 'camera' && !selected && styles.statusChipDue,
+            status.name === 'alert-circle' && !selected && styles.statusChipDue,
             status.name === 'checkmark-circle' && !selected && styles.statusChipDone,
           ]}
         >
@@ -133,13 +135,12 @@ export function RideCard({
       <Text ellipsizeMode="tail" numberOfLines={1} style={styles.title}>
         {ride.name}
       </Text>
-      {isOwner ? <Ionicons color={colors.primary} name="sparkles" size={14} /> : null}
       <View
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
         style={[
           styles.statusChip,
-          status.name === 'camera' && styles.statusChipDue,
+          status.name === 'alert-circle' && styles.statusChipDue,
           status.name === 'checkmark-circle' && styles.statusChipDone,
         ]}
       >
@@ -222,11 +223,6 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
     justifyContent: 'flex-end',
-  },
-  crown: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
   },
   tileStatus: {
     alignItems: 'center',

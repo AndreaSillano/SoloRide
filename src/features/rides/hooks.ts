@@ -20,6 +20,7 @@ import {
   fetchPostedTodayStatus,
   fetchRide,
   fetchRideJoinRequests,
+  fetchRideMemberSummaries,
   fetchRideMembers,
   fetchRideSchedule,
   fetchWeekPostStatus,
@@ -48,7 +49,10 @@ function useInvalidateRideQueries(userId?: string | null) {
     ];
 
     if (userId) {
-      invalidations.push(queryClient.invalidateQueries({ queryKey: queryKeys.rides(userId) }));
+      invalidations.push(
+        queryClient.invalidateQueries({ queryKey: queryKeys.rides(userId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.rideMemberSummaries(userId) }),
+      );
     }
     if (rideId) {
       invalidations.push(
@@ -69,6 +73,18 @@ export function useUserRides(userId?: string | null) {
     queryKey: queryKeys.rides(userId ?? 'signed-out'),
     queryFn: () => fetchUserRides(userId ?? ''),
     enabled: Boolean(userId),
+  });
+}
+
+export function useRideMemberSummaries(
+  userId?: string | null,
+  rideIds?: readonly string[],
+) {
+  const ids = rideIds ?? [];
+  return useQuery({
+    queryKey: [...queryKeys.rideMemberSummaries(userId ?? 'signed-out'), ...ids],
+    queryFn: () => fetchRideMemberSummaries(ids),
+    enabled: Boolean(userId && ids.length),
   });
 }
 

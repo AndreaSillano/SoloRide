@@ -19,9 +19,10 @@ import {
 
 import { useCurrentUser } from '@/auth/auth-context';
 import { CommentsModal } from '@/components/comments-modal';
+import { ErrorScreen } from '@/components/error-screen';
 import { ReactionsModal } from '@/components/reactions-modal';
 import { SheetCloseButton } from '@/components/sheet-close-button';
-import { Body, FeedPost, RideFeedSkeleton, StatePanel } from '@/components/ui';
+import { Body, FeedPost, RideFeedSkeleton } from '@/components/ui';
 import {
   getOwnReactionScore,
   useDeletePost,
@@ -33,6 +34,7 @@ import {
 } from '@/features/posts';
 import { usePostingStatus } from '@/features/rides';
 import { haptics } from '@/lib/haptics';
+import { toast } from '@/lib/toast';
 import { colors, spacing } from '@/theme';
 
 function monthKeyFromDate(isoDate: string) {
@@ -96,9 +98,7 @@ function DayFeedScreen({
               setPickerPostId((current) => (current === postId ? null : current));
             })
             .catch((error) => {
-              haptics.error();
-              Alert.alert(
-                'Couldn’t delete photo',
+              toast.error(
                 error instanceof Error ? error.message : 'The photo could not be deleted.',
               );
             })
@@ -116,9 +116,7 @@ function DayFeedScreen({
     if (score === 0) {
       if (!ownScore) return;
       void removeReaction.mutateAsync({ postId, rideId }).catch((error) => {
-        haptics.error();
-        Alert.alert(
-          'Couldn’t remove reaction',
+        toast.error(
           error instanceof Error ? error.message : 'The reaction could not be removed.',
         );
       });
@@ -127,9 +125,7 @@ function DayFeedScreen({
 
     if (ownScore === score) return;
     void upsertReaction.mutateAsync({ postId, rideId, score }).catch((error) => {
-      haptics.error();
-      Alert.alert(
-        'Couldn’t save reaction',
+      toast.error(
         error instanceof Error ? error.message : 'The reaction could not be saved.',
       );
     });
@@ -155,10 +151,10 @@ function DayFeedScreen({
           <RideFeedSkeleton count={2} />
         ) : dayPosts.isError ? (
           <View style={styles.feedMessage}>
-            <StatePanel
+            <ErrorScreen
               actionLabel="Retry"
-              message="Photos for this day could not load."
-              onAction={() => void dayPosts.refetch()}
+              message="That day’s scrapbook stuck shut. Pry it open again?"
+              onAction={() => dayPosts.refetch()}
             />
           </View>
         ) : dayPosts.data?.length ? (
@@ -286,10 +282,10 @@ export function RideHistoryCalendar({ rideId }: { rideId: string }) {
       />
 
       {postDates.isError ? (
-        <StatePanel
+        <ErrorScreen
           actionLabel="Retry"
-          message="Could not load days with photos."
-          onAction={() => void postDates.refetch()}
+          message="The calendar dots went on vacation."
+          onAction={() => postDates.refetch()}
         />
       ) : (
         <Body muted>Days with a blue dot have photos. Tap a day to open them.</Body>

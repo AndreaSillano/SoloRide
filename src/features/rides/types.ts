@@ -30,6 +30,11 @@ export type UserRide = Ride & {
   current_user_role: RideRole;
 };
 
+/** Lightweight member rollup for list cards. */
+export type RideMemberSummary = {
+  count: number;
+};
+
 export type RideScheduleDay = {
   ride_id: string;
   weekday: number;

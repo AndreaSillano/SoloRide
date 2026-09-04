@@ -7,6 +7,8 @@ import { useAuth } from '@/auth/auth-context';
 import { AppProviders } from '@/providers/AppProviders';
 import { colors } from '@/theme';
 
+export { AppErrorBoundary as ErrorBoundary } from '@/components/app-error-boundary';
+
 SplashScreen.preventAutoHideAsync();
 
 function RootNavigator() {

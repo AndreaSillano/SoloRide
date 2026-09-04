@@ -1,23 +1,41 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
+import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useCurrentUser } from '@/auth/auth-context';
-import { RideCard } from '@/components/ride-card';
+import { ErrorScreen } from '@/components/error-screen';
+import { RideListCard } from '@/components/ride-list-card';
 import { Body, CenteredBusy, ScrollScreen, StatePanel } from '@/components/ui';
 import {
   groupUserRides,
   useMyPendingJoinRequests,
+  useRideMemberSummaries,
   useUserRides,
   type MyPendingJoinRequest,
   type UserRide,
 } from '@/features/rides';
-import { colors, radius, spacing } from '@/theme';
+import { colors, radius, shadows, spacing } from '@/theme';
+
+function goHomeWithRide(rideId: string) {
+  router.dismissTo({
+    pathname: '/',
+    params: {
+      selectRideId: rideId,
+      notificationOpenId: String(Date.now()),
+    },
+  });
+}
 
 export default function YourRidesScreen() {
   const { user } = useCurrentUser();
   const rides = useUserRides(user?.id);
   const pending = useMyPendingJoinRequests(user?.id);
+  const rideIds = useMemo(
+    () => (rides.data ?? []).map((ride) => ride.id),
+    [rides.data],
+  );
+  const summaries = useRideMemberSummaries(user?.id, rideIds);
   const groups = groupUserRides(rides.data ?? []);
   const pendingRequests = pending.data ?? [];
 
@@ -32,7 +50,7 @@ export default function YourRidesScreen() {
   if (rides.isError) {
     return (
       <ScrollScreen>
-        <StatePanel
+        <ErrorScreen
           actionLabel="Try again"
           message={
             rides.error instanceof Error ? rides.error.message : 'Your Rides could not load.'
@@ -63,7 +81,12 @@ export default function YourRidesScreen() {
   }
 
   return (
-    <ScrollScreen>
+    <ScrollScreen contentStyle={styles.screen}>
+      <View style={styles.intro}>
+        <Text style={styles.introTitle}>Your Rides</Text>
+        <Text style={styles.introSubtitle}>Private spaces with your people</Text>
+      </View>
+
       {hasPending ? (
         <View style={styles.group}>
           <Text style={styles.groupLabel}>
@@ -78,14 +101,27 @@ export default function YourRidesScreen() {
           )}
         </View>
       ) : null}
+
       {groups.active.length ? (
-        <RideGroup label="Active" rides={groups.active} userId={user?.id} />
+        <RideGroup
+          label="Active"
+          rides={groups.active}
+          summaries={summaries.data}
+        />
       ) : null}
       {groups.upcoming.length ? (
-        <RideGroup label="Upcoming" rides={groups.upcoming} userId={user?.id} />
+        <RideGroup
+          label="Upcoming"
+          rides={groups.upcoming}
+          summaries={summaries.data}
+        />
       ) : null}
       {groups.archived.length ? (
-        <RideGroup label="Archived" rides={groups.archived} userId={user?.id} />
+        <RideGroup
+          label="Archived"
+          rides={groups.archived}
+          summaries={summaries.data}
+        />
       ) : null}
     </ScrollScreen>
   );
@@ -114,44 +150,63 @@ function PendingJoinCard({ request }: { request: MyPendingJoinRequest }) {
 function RideGroup({
   label,
   rides,
-  userId,
+  summaries,
 }: {
   label: string;
   rides: readonly UserRide[];
-  userId: string | null | undefined;
+  summaries: ReturnType<typeof useRideMemberSummaries>['data'];
 }) {
   return (
     <View style={styles.group}>
       <Text style={styles.groupLabel}>{label}</Text>
       {rides.map((ride) => (
-        <RideCard key={ride.id} ride={ride} userId={userId} />
+        <RideListCard
+          key={ride.id}
+          onPress={() => goHomeWithRide(ride.id)}
+          ride={ride}
+          summary={summaries?.[ride.id]}
+        />
       ))}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  group: { gap: spacing.xs },
-  groupLabel: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.6,
+  screen: { gap: spacing.md },
+  intro: {
+    gap: 4,
+    paddingBottom: spacing.xxs,
     paddingHorizontal: spacing.xxs,
-    paddingTop: spacing.xs,
-    textTransform: 'uppercase',
+  },
+  introTitle: {
+    color: colors.text,
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+  },
+  introSubtitle: {
+    color: colors.muted,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  group: { gap: spacing.sm },
+  groupLabel: {
+    color: colors.textSoft,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    paddingHorizontal: spacing.xxs,
   },
   pendingCard: {
     alignItems: 'center',
-    backgroundColor: colors.glassFill,
-    borderColor: colors.glassBorder,
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: spacing.sm,
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    ...shadows.card,
   },
   pendingBody: { flex: 1, gap: 2, minWidth: 0 },
   pendingTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },

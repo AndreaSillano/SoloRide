@@ -18,11 +18,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useCurrentUser } from '@/auth/auth-context';
 import { ChallengeHatIcon } from '@/components/challenge-hat-icon';
+import { ErrorScreen } from '@/components/error-screen';
 import {
   Body,
   PostImage,
   RideFeedSkeleton,
-  StatePanel,
 } from '@/components/ui';
 import {
   formatChallengeRemaining,
@@ -198,15 +198,15 @@ export default function RideChallengeScreen() {
     return (
       <SafeAreaView edges={['left', 'right', 'bottom']} style={styles.safe}>
         <View style={{ paddingTop: headerHeight + spacing.md }}>
-          <StatePanel
+          <ErrorScreen
             actionLabel="Try again"
             message={
               challenge.error instanceof Error
                 ? challenge.error.message
-                : 'This challenge could not load.'
+                : 'It stepped out for air. Bring it back?'
             }
-            onAction={() => void challenge.refetch()}
-            title="Couldn’t open challenge"
+            onAction={() => challenge.refetch()}
+            title="Challenge is out for a walk"
           />
         </View>
       </SafeAreaView>
@@ -295,15 +295,15 @@ export default function RideChallengeScreen() {
             {posts.isPending ? (
               <RideFeedSkeleton />
             ) : posts.isError ? (
-              <StatePanel
+              <ErrorScreen
                 actionLabel="Try again"
                 message={
                   posts.error instanceof Error
                     ? posts.error.message
-                    : 'Challenge posts could not load.'
+                    : 'Entries got stuck in traffic. One more try?'
                 }
-                onAction={() => void posts.refetch()}
-                title="Couldn’t load posts"
+                onAction={() => posts.refetch()}
+                title="Posts didn’t make it back"
               />
             ) : sortedPosts.length > 0 ? (
               <View style={styles.grid}>

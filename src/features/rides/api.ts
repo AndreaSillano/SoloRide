@@ -18,6 +18,7 @@ import type {
   Ride,
   RideJoinRequest,
   RideMember,
+  RideMemberSummary,
   RidePreview,
   RidePreviewDetails,
   RidePreviewStatus,
@@ -240,6 +241,37 @@ export async function fetchRideMembers(rideId: string): Promise<RideMember[]> {
     ...member,
     profile: member.profile ? firstOrSelf(member.profile) : null,
   }));
+}
+
+type MemberSummaryRecord = {
+  ride_id: string;
+};
+
+/** One round-trip: member counts for many Rides. */
+export async function fetchRideMemberSummaries(
+  rideIds: readonly string[],
+): Promise<Record<string, RideMemberSummary>> {
+  if (!rideIds.length) return {};
+
+  const { data, error } = await supabase
+    .from('ride_members')
+    .select('ride_id')
+    .in('ride_id', [...rideIds]);
+
+  if (error) throw mapRideError(error);
+
+  const summaries: Record<string, RideMemberSummary> = {};
+  for (const rideId of rideIds) {
+    summaries[rideId] = { count: 0 };
+  }
+
+  for (const row of (data ?? []) as unknown as MemberSummaryRecord[]) {
+    const summary = summaries[row.ride_id];
+    if (!summary) continue;
+    summary.count += 1;
+  }
+
+  return summaries;
 }
 
 export async function fetchRideJoinRequests(rideId: string): Promise<RideJoinRequest[]> {

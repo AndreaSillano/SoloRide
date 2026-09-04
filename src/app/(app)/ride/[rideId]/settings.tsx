@@ -21,6 +21,7 @@ import { SafeAreaView, useSafeAreaInsets, type Edge } from 'react-native-safe-ar
 import { useCurrentUser } from '@/auth/auth-context';
 import { ChallengeListRow } from '@/components/challenge-list-row';
 import { ChallengePickerModal } from '@/components/challenge-picker-modal';
+import { ErrorScreen } from '@/components/error-screen';
 import { RideForm } from '@/components/ride-form';
 import { GlassSurface } from '@/components/glass';
 import { RideHistoryCalendar } from '@/components/ride-history-calendar';
@@ -30,7 +31,6 @@ import {
   Button,
   CenteredBusy,
   ErrorBanner,
-  StatePanel,
 } from '@/components/ui';
 import { SegmentedControl } from '@expo/ui/community/segmented-control';
 import {
@@ -555,9 +555,9 @@ export default function RideSettingsScreen() {
   if (ride.isError || schedule.isError || !ride.data) {
     return (
       <SettingsShell header={null} refreshControl={refreshControl}>
-        <StatePanel
-          message="Ride settings could not load."
-          title="Settings unavailable"
+        <ErrorScreen
+          message="The control panel dozed off. Come back in a sec."
+          title="Settings are napping"
         />
       </SettingsShell>
     );
@@ -837,10 +837,10 @@ export default function RideSettingsScreen() {
               {joinRequests.isPending ? (
                 <Body muted>Loading requests…</Body>
               ) : joinRequests.isError ? (
-                <StatePanel
+                <ErrorScreen
                   actionLabel="Retry"
-                  message="Join requests could not load."
-                  onAction={() => void joinRequests.refetch()}
+                  message="The waiting list took a coffee break."
+                  onAction={() => joinRequests.refetch()}
                 />
               ) : (
                 pendingRequests.map((request, index) => {
@@ -890,10 +890,10 @@ export default function RideSettingsScreen() {
           {members.isPending ? (
             <Body muted>Loading members…</Body>
           ) : members.isError ? (
-            <StatePanel
+            <ErrorScreen
               actionLabel="Retry"
-              message="Members could not load."
-              onAction={() => void members.refetch()}
+              message="The crew list wandered off. Tap to find them."
+              onAction={() => members.refetch()}
             />
           ) : (
             <GlassSurface style={styles.peopleCard}>
@@ -980,10 +980,10 @@ export default function RideSettingsScreen() {
           {challengeHistory.isPending ? (
             <Body muted>Loading challenges…</Body>
           ) : challengeHistory.isError ? (
-            <StatePanel
+            <ErrorScreen
               actionLabel="Retry"
-              message="Challenge history could not load."
-              onAction={() => void challengeHistory.refetch()}
+              message="Past challenges are playing coy. Retry?"
+              onAction={() => challengeHistory.refetch()}
             />
           ) : (challengeHistory.data ?? []).length === 0 ? (
             <Body muted>No challenges have been opened on this Ride yet.</Body>

@@ -25,6 +25,7 @@ import {
   POST_AUDIO_MAX_DURATION_MS,
 } from '@/features/posts';
 import { haptics } from '@/lib/haptics';
+import { toast } from '@/lib/toast';
 import { colors, radius, spacing } from '@/theme';
 
 const CANCEL_SLIDE_PX = 64;
@@ -157,8 +158,7 @@ export function PublishAudioFooter({
       }
     } catch {
       setRecordingActive(false);
-      haptics.error();
-      Alert.alert('Recording failed', 'Could not start the voice note. Try again.');
+      toast.error('Could not start the voice note. Try again.');
     } finally {
       startingRef.current = false;
     }

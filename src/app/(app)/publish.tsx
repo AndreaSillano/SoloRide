@@ -3,7 +3,6 @@ import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
-  Alert,
   Platform,
   Pressable,
   StyleSheet,
@@ -48,6 +47,7 @@ import {
   usePersistedSelectedRideId,
 } from '@/features/rides';
 import { haptics } from '@/lib/haptics';
+import { toast } from '@/lib/toast';
 import { colors, radius, shadows, spacing } from '@/theme';
 
 /** Publish button + vertical padding when the keyboard is open. */
@@ -398,8 +398,7 @@ export default function PublishScreen() {
   const publish = async () => {
     if (!imageUri || !primaryRide || !canPublish || !selectedRides.length) return;
     if (hasVideo && !videoQuota.canPost) {
-      Alert.alert(
-        'Daily video limit',
+      toast.info(
         `You can only share ${POST_VIDEO_MAX_PER_DAY} videos per day. Try again tomorrow.`,
       );
       return;

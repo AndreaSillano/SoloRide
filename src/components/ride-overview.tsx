@@ -15,9 +15,11 @@ import {
 } from '@/features/posts';
 import { usePostingStatus, useRide, useRideMembers } from '@/features/rides';
 import { haptics } from '@/lib/haptics';
+import { toast } from '@/lib/toast';
 import { colors, spacing } from '@/theme';
 
 import { CommentsModal } from './comments-modal';
+import { ErrorScreen } from './error-screen';
 import { ReactionsModal } from './reactions-modal';
 import {
   Body,
@@ -26,7 +28,6 @@ import {
   FeedPost,
   RideFeedSkeleton,
   SectionTitle,
-  StatePanel,
 } from './ui';
 
 /** Keep re-aligning while images finish laying out after a deep link. */
@@ -138,9 +139,7 @@ export function RideOverview({
               setPickerPostId((current) => (current === postId ? null : current));
             })
             .catch((error) => {
-              haptics.error();
-              Alert.alert(
-                'Couldn’t delete photo',
+              toast.error(
                 error instanceof Error ? error.message : 'The photo could not be deleted.',
               );
             })
@@ -165,9 +164,7 @@ export function RideOverview({
     if (score === 0) {
       if (!ownScore) return;
       void removeReaction.mutateAsync({ postId, rideId }).catch((error) => {
-        haptics.error();
-        Alert.alert(
-          'Couldn’t remove reaction',
+        toast.error(
           error instanceof Error ? error.message : 'The reaction could not be removed.',
         );
       });
@@ -182,9 +179,7 @@ export function RideOverview({
         haptics.medium();
       })
       .catch((error) => {
-        haptics.error();
-        Alert.alert(
-          'Couldn’t save reaction',
+        toast.error(
           error instanceof Error ? error.message : 'The reaction could not be saved.',
         );
       });
@@ -195,11 +190,15 @@ export function RideOverview({
   }
   if (ride.isError || !ride.data) {
     return (
-      <StatePanel
+      <ErrorScreen
         actionLabel="Try again"
-        message={ride.error instanceof Error ? ride.error.message : 'This Ride could not load.'}
-        onAction={() => void ride.refetch()}
-        title="Couldn’t open Ride"
+        message={
+          ride.error instanceof Error
+            ? ride.error.message
+            : 'We knocked. Nobody home. Try again?'
+        }
+        onAction={() => ride.refetch()}
+        title="This Ride ghosted us"
       />
     );
   }
@@ -296,10 +295,10 @@ export function RideOverview({
           {members.isPending ? (
             <Body muted>Loading members…</Body>
           ) : members.isError ? (
-            <StatePanel
+            <ErrorScreen
               actionLabel="Retry"
-              message="Members could not load."
-              onAction={() => void members.refetch()}
+              message="The crew list wandered off. Tap to find them."
+              onAction={() => members.refetch()}
             />
           ) : (
             <Body muted>
@@ -317,11 +316,15 @@ export function RideOverview({
       {feed.isPending ? (
         <RideFeedSkeleton />
       ) : feed.isError ? (
-        <StatePanel
+        <ErrorScreen
           actionLabel="Try again"
-          message={feed.error instanceof Error ? feed.error.message : 'The feed could not load.'}
-          onAction={() => void feed.refetch()}
-          title="Couldn’t load photos"
+          message={
+            feed.error instanceof Error
+              ? feed.error.message
+              : 'The scrapbook jammed. Shake it off and retry.'
+          }
+          onAction={() => feed.refetch()}
+          title="Photos are playing hide and seek"
         />
       ) : feed.data.length ? (
         <View style={styles.feed}>
